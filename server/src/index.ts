@@ -37,7 +37,7 @@ const hub = new Hub(server);
 // Control endpoints need the admin key (query ?key=, x-admin-key header, or
 // the qk cookie set by /admin login). Read-only + stage-internal endpoints
 // (feed, layout, clip upload, agent-status, health) stay open.
-const PROTECTED = /^\/admin\/(directive|reset|restart|agent$|fake-send|fake-buyback|pause|resume|goto|anim|camera|fx|tts-test|selfie-take|selfie-last|chat$|chat-add|go-live|syslog|record$|say|queue)/;
+const PROTECTED = /^\/admin\/(directive|reset|restart|agent$|fake-send|fake-buyback|pause|resume|goto|anim|camera|fx|tts-test|selfie-take|selfie-last|chat$|chat-add|go-live|syslog|record$|say|queue|clips|clip-file)/;
 function hasAdminKey(req: express.Request): boolean {
   const c = String(req.headers.cookie ?? "");
   const cookieKey = c.match(/(?:^|;\s*)qk=([^;]+)/)?.[1];
@@ -217,6 +217,24 @@ app.get("/live", (_req, res) => {
 
 // ---------- static ----------
 app.use("/audio", express.static(cfg.audioDir, { maxAge: "1h" }));
+// filmed clips: list + download (admin) so films can be grabbed and posted by hand
+app.get("/admin/clips", (_req, res) => {
+  try {
+    const files = fs.readdirSync(cfg.clipsDir)
+      .filter((f) => f.endsWith(".mp4"))
+      .map((f) => ({ file: f, size: fs.statSync(path.join(cfg.clipsDir, f)).size, at: fs.statSync(path.join(cfg.clipsDir, f)).mtimeMs }))
+      .sort((a, b) => b.at - a.at);
+    res.json({ clips: files });
+  } catch {
+    res.json({ clips: [] });
+  }
+});
+app.get("/admin/clip-file/:name", (req, res) => {
+  const name = String(req.params.name).replace(/[^a-zA-Z0-9_.-]/g, "");
+  const p = path.join(cfg.clipsDir, name);
+  if (!name.endsWith(".mp4") || !fs.existsSync(p)) return res.status(404).json({ err: "not found" });
+  res.download(p);
+});
 // serve the client's public/ so a freshly-exported room.glb is live on refresh
 // (no client rebuild needed); dist static below still wins for built assets.
 app.use(express.static(path.resolve(cfg.root, "..", "client", "public")));

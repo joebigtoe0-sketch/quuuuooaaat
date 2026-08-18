@@ -71,6 +71,12 @@ export const ADMIN_HTML = `<!doctype html>
     <div id="queue" class="note" style="margin-top:8px">press refresh</div>
   </div>
 
+  <h2>filmed clips — download & post by hand</h2>
+  <div class="card">
+    <button onclick="loadClips()">↻ refresh</button>
+    <div id="clips" class="note" style="margin-top:8px">press refresh</div>
+  </div>
+
   <h2>system log — ops only, viewers never see this</h2>
   <div class="card">
     <button onclick="syslog()">↻ refresh</button>
@@ -127,6 +133,13 @@ async function loadQueue(){
 }
 async function rmQueue(queue,i){ await q('/admin/queue-remove?queue='+queue+'&i='+i,'POST'); loadQueue(); }
 async function rm(id){ await q('/admin/directive?remove='+encodeURIComponent(id)); refresh(); }
+async function loadClips(){
+  const r=await q('/admin/clips');
+  const rows=(r.clips||[]);
+  document.getElementById('clips').innerHTML = rows.length
+    ? rows.map(c=>'<div><a href="/admin/clip-file/'+c.file+'?key='+encodeURIComponent(document.getElementById('pw').value||'')+'" download>⬇ '+c.file+'</a> · '+(c.size/1e6).toFixed(2)+' MB</div>').join('')
+    : '(no clips yet — films save here when the stage/OBS page is connected with audio armed)';
+}
 async function clearQueue(queue){ await q('/admin/queue-remove?queue='+queue,'POST'); loadQueue(); }
 async function syslog(){
   const r=await q('/admin/syslog');
