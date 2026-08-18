@@ -943,13 +943,22 @@ export class Beats {
     ]);
     const mp4 = await clipP; // client had 60s to upload; usually done by now
     let posted = false;
+    let filmWhy = "";
     if (mp4) {
       const mediaId = await uploadVideo(mp4);
       if (mediaId) {
         const res = await postTweet(caption ?? topic, { mediaId });
         posted = res.ok && !res.dry;
+        if (!posted) filmWhy = res.dry ? "postTweet gated (not live)" : `postTweet failed: ${(res as any).why ?? "?"}`;
+      } else {
+        filmWhy = "X video upload failed (see the x warning above) — clip saved to data/clips";
       }
+    } else {
+      filmWhy = this.hub.watchers === 0
+        ? "no clip captured: NO stage page connected (OBS/browser must stay open on /stage?auto=1 with audio armed)"
+        : "no clip captured: recorder produced nothing (audio not armed on the stage page?)";
     }
+    if (filmWhy) log.warn("film", filmWhy);
     if (!posted && (caption || script)) {
       // no clip — the words can go out as a text post, but that rides the SAME
       // tweet budget (in the sim this leaked 4 extra posts past his target)
@@ -966,7 +975,7 @@ export class Beats {
     }
     if (posted) noteTweetPosted(); // a posted video occupies the timeline too
     bumpDaily("films");
-    memory.journal("film", `filmed "${topic}" ${mp4 ? (posted ? "(posted with video)" : "(clip saved, text posted)") : "(no clip — text only)"}`);
+    memory.journal("film", `filmed "${topic}" ${mp4 ? (posted ? "(posted with video)" : `(clip saved to data/clips, video NOT posted — ${filmWhy})`) : `(no clip — ${filmWhy})`}`);
     await this.sayVaried(posted ? "Cut. Posted. Content machine rolls on." : "Cut. That one's in the can.", "neutral");
     this.loco.stateName = "IDLE";
   }
