@@ -32,7 +32,7 @@ const SERVER_PORT = 8490; // dev: server; prod build is served same-origin
 const wsUrl =
   location.port === "5199"
     ? `ws://127.0.0.1:${SERVER_PORT}/ws`
-    : `ws://${location.host}/ws`;
+    : `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`;
 const httpBase = location.port === "5199" ? `http://127.0.0.1:${SERVER_PORT}` : "";
 
 const stageEl = document.getElementById("stage")!;
