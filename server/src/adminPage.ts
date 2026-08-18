@@ -126,6 +126,7 @@ async function loadQueue(){
     : '(empty — nothing queued)';
 }
 async function rmQueue(queue,i){ await q('/admin/queue-remove?queue='+queue+'&i='+i,'POST'); loadQueue(); }
+async function rm(id){ await q('/admin/directive?remove='+encodeURIComponent(id)); refresh(); }
 async function clearQueue(queue){ await q('/admin/queue-remove?queue='+queue,'POST'); loadQueue(); }
 async function syslog(){
   const r=await q('/admin/syslog');
