@@ -64,6 +64,13 @@ export const ADMIN_HTML = `<!doctype html>
     <span id="livemsg"></span>
   </div>
 
+  <h2>queue — what's waiting to run</h2>
+  <div class="card">
+    <button onclick="loadQueue()">↻ refresh</button>
+    <button onclick="clearQueue('agent')">clear agent queue</button>
+    <div id="queue" class="note" style="margin-top:8px">press refresh</div>
+  </div>
+
   <h2>system log — ops only, viewers never see this</h2>
   <div class="card">
     <button onclick="syslog()">↻ refresh</button>
@@ -111,6 +118,15 @@ async function goLive(){
   document.getElementById('livemsg').innerHTML=' <span class="ok">🔴 LIVE — wiped '+(r.wiped||[]).join(', ')+', rebooting…</span>';
   setTimeout(liveCheck, 8000);
 }
+async function loadQueue(){
+  const r=await q('/admin/queue');
+  const rows=(r.queue||[]);
+  document.getElementById('queue').innerHTML = rows.length
+    ? rows.map(j=>'<div>['+j.queue+'] '+j.summary.replace(/</g,'&lt;')+' <button onclick="rmQueue(\\''+j.queue+'\\','+j.i+')" style="padding:1px 8px">✕</button></div>').join('')
+    : '(empty — nothing queued)';
+}
+async function rmQueue(queue,i){ await q('/admin/queue-remove?queue='+queue+'&i='+i,'POST'); loadQueue(); }
+async function clearQueue(queue){ await q('/admin/queue-remove?queue='+queue,'POST'); loadQueue(); }
 async function syslog(){
   const r=await q('/admin/syslog');
   const color=k=>k.startsWith('error')?'#ff4d6d':k.startsWith('warn')?'#ffb454':'#5a7290';

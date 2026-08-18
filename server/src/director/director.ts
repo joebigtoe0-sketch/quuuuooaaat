@@ -93,6 +93,30 @@ export class Director {
     if (this.buybackQ.length === 0) this.buybackQ.push({ kind: "buyback", p, at: Date.now() });
   }
 
+  /** Admin: what's waiting to run — one line per queued job. */
+  queueSnapshot(): { queue: string; i: number; summary: string; at: number }[] {
+    const out: { queue: string; i: number; summary: string; at: number }[] = [];
+    this.inboxQ.forEach((j: any, i) => out.push({ queue: "inbox", i, at: j.at, summary: `coin ${String(j.ev?.mint ?? "?").slice(0, 10)}… from ${String(j.ev?.sender ?? "?").slice(0, 8)}` }));
+    this.buybackQ.forEach((j: any, i) => out.push({ queue: "buyback", i, at: j.at, summary: `buyback pending` }));
+    this.agentQ.forEach((j: any, i) => {
+      const a = j.qa?.action ?? {};
+      out.push({ queue: "agent", i, at: j.at, summary: `${a.do ?? "?"} ${JSON.stringify(a).slice(0, 90)}` });
+    });
+    return out;
+  }
+
+  /** Admin: drop one queued job (by queue name + current index) or a whole queue. */
+  removeQueued(queue: string, i?: number): number {
+    const q = queue === "inbox" ? this.inboxQ : queue === "buyback" ? this.buybackQ : queue === "agent" ? this.agentQ : null;
+    if (!q) return 0;
+    if (i === undefined || i < 0) {
+      const n = q.length;
+      q.length = 0;
+      return n;
+    }
+    return q.splice(i, 1).length;
+  }
+
   /** Externally-injected agent action (admin/testing) — same queue the planner feeds. */
   onAgentAction(qa: QueuedAction): void {
     if (this.agentQ.length < 6) this.agentQ.push({ kind: "agent", qa, at: Date.now() });

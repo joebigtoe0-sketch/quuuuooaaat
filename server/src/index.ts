@@ -37,7 +37,7 @@ const hub = new Hub(server);
 // Control endpoints need the admin key (query ?key=, x-admin-key header, or
 // the qk cookie set by /admin login). Read-only + stage-internal endpoints
 // (feed, layout, clip upload, agent-status, health) stay open.
-const PROTECTED = /^\/admin\/(directive|reset|restart|agent$|fake-send|fake-buyback|pause|resume|goto|anim|camera|fx|tts-test|selfie-take|selfie-last|chat$|chat-add|go-live|syslog|record$)/;
+const PROTECTED = /^\/admin\/(directive|reset|restart|agent$|fake-send|fake-buyback|pause|resume|goto|anim|camera|fx|tts-test|selfie-take|selfie-last|chat$|chat-add|go-live|syslog|record$|say|queue)/;
 function hasAdminKey(req: express.Request): boolean {
   const c = String(req.headers.cookie ?? "");
   const cookieKey = c.match(/(?:^|;\s*)qk=([^;]+)/)?.[1];
@@ -122,6 +122,18 @@ app.post("/admin/go-live", async (req, res) => {
   log.warn("admin", `🔴 GO LIVE — mint ${mint || cfg.ownMint || "NONE"}, dry-runs forced OFF, test data wiped (${wiped.join(", ") || "none"}), rebooting`);
   res.json({ live: true, ownMint: mint || cfg.ownMint, wiped, restarting: true, ...pre });
   setTimeout(relaunch, 400);
+});
+
+// ---------- queue inspection: see + drop whatever is waiting to run ----------
+app.get("/admin/queue", (_req, res) => res.json({ queue: director.queueSnapshot() }));
+app.post("/admin/queue-remove", (req, res) => {
+  const b: any = req.body ?? {};
+  const queue = String(b.queue ?? req.query.queue ?? "");
+  const iRaw = b.i ?? req.query.i;
+  const i = iRaw === undefined || iRaw === "" ? undefined : Number(iRaw);
+  const removed = director.removeQueued(queue, i);
+  log.info("admin", `queue-remove ${queue}${i !== undefined ? `[${i}]` : " (all)"} → ${removed} dropped`);
+  res.json({ removed, queue: director.queueSnapshot() });
 });
 
 // FULL RESET: wipe the agent's memory/positions/state, then relaunch
