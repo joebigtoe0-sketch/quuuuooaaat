@@ -34,17 +34,35 @@ async function buildWallet(): Promise<any> {
       }
     } catch {}
   }
-  const items: any[] = real.map((h: any) => ({
-    symbol: h.symbol, amount: h.amount, image: h.image,
-    valueUsd: priced.has(h.mint) ? priced.get(h.mint)! * h.amount : null, paper: false,
-  }));
+  // entry/PnL per token — only tokens he BOUGHT have a cost basis; gifted
+  // bags show value only. Basis = cost minus what partial exits already took.
+  const posByMint = new Map(openPositions().map((p: any) => [p.mint, p]));
+  const attachPnl = (it: any, p: any) => {
+    if (it.valueUsd == null) return;
+    const basisUsd = Math.max(0, p.costSol - (p.soldSol ?? 0)) * solUsd;
+    it.costUsd = basisUsd;
+    it.pnlUsd = it.valueUsd - basisUsd;
+    it.pnlPct = basisUsd > 0.01 ? (it.pnlUsd / basisUsd) * 100 : null;
+    it.entryUsd = it.amount > 0 && basisUsd > 0 ? basisUsd / it.amount : null;
+  };
+  const items: any[] = real.map((h: any) => {
+    const it: any = {
+      symbol: h.symbol, amount: h.amount, image: h.image,
+      valueUsd: priced.has(h.mint) ? priced.get(h.mint)! * h.amount : null, paper: false,
+    };
+    const p = posByMint.get(h.mint);
+    if (p) attachPnl(it, p);
+    return it;
+  });
   // paper positions exist only in the ledger — surface them with the ᴾ marker.
   // Live positions are real token accounts and already appear in the wallet list.
   if (cfg.tradeDryRun) {
     for (const p of openPositions()) {
       let v: number | null = null;
       try { v = (await estimateSellSolFor(new PublicKey(p.mint), BigInt(p.tokensRaw))) * solUsd; } catch {}
-      items.push({ symbol: p.symbol, amount: Number(p.tokensRaw) / 1e6, image: null, valueUsd: v, paper: true });
+      const it: any = { symbol: p.symbol, amount: Number(p.tokensRaw) / 1e6, image: null, valueUsd: v, paper: true };
+      attachPnl(it, p);
+      items.push(it);
     }
   }
   items.sort((a, b) => (b.valueUsd ?? -1) - (a.valueUsd ?? -1));

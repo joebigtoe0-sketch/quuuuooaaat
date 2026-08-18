@@ -80,9 +80,10 @@ async function livePreflight(): Promise<{ ready: boolean; checks: { name: string
   add("X posting keys", xReady(), xReady() ? `@${xHandle()}` : "X_CONSUMER_KEY/SECRET + X_ACCESS_TOKEN/SECRET empty — tweets stay drafts");
   add("X reading (twitterapi.io)", xReadReady(), xReadReady() ? "mentions + KOL scouting live" : "TWITTERAPI_IO_KEY empty — no mentions/replies/scout_x");
   add("pump.fun callouts (CC token)", !!cfg.ccRefreshToken, cfg.ccRefreshToken ? "token present" : "QUANT_CC_REFRESH_TOKEN empty — callouts stay dry");
-  add("own token", !!cfg.ownMint, cfg.ownMint ? cfg.ownMint.slice(0, 12) + "…" : "QUANT_OWN_MINT empty — buyback flywheel idle");
-  add("callout switch", !cfg.calloutDryRun, cfg.calloutDryRun ? "CALLOUT_DRY_RUN=true (posts are pretend)" : "LIVE");
-  add("trading switch", !cfg.tradeDryRun, cfg.tradeDryRun ? "TRADE_DRY_RUN=true (paper trading)" : "LIVE with real SOL");
+  add("own token", true, cfg.ownMint ? cfg.ownMint.slice(0, 12) + "…" : "paste the pre-generated CA in the GO LIVE form below");
+  add("callout switch", !cfg.calloutDryRun, cfg.calloutDryRun ? "dry now — auto-flips LIVE at GO LIVE" : "LIVE");
+  add("trading switch", !cfg.tradeDryRun, cfg.tradeDryRun ? "paper now — auto-flips LIVE at GO LIVE" : "LIVE with real SOL");
+  add("airdrop switch", !cfg.airdropDryRun, cfg.airdropDryRun ? "dry now — auto-flips LIVE at GO LIVE" : "LIVE on-chain drops");
   add("sim mode off", !cfg.simMode, cfg.simMode ? "SIM_MODE ACTIVE — remove from .env!" : "off");
   add("admin password changed", cfg.adminPassword !== "quant2026", cfg.adminPassword !== "quant2026" ? "custom" : "still the default — set ADMIN_PASSWORD");
   add("stage page connected", hub.watchers > 0, `${hub.watchers} watcher(s) — OBS/browser must stay open for films+selfies`);
@@ -96,6 +97,20 @@ app.get("/admin/go-live-check", async (_req, res) => res.json({ live: isLive(), 
 app.post("/admin/go-live", async (req, res) => {
   if (String((req.body as any)?.confirm ?? req.query.confirm ?? "") !== "GOLIVE")
     return res.status(400).json({ err: "pass confirm=GOLIVE" });
+  // the pre-generated $RIKU contract address — the ONE launch-day input.
+  // Stored in the LIVE marker; config picks it up on reboot and it flows to
+  // the buyback flywheel, own-mc tracking, airdrops, and the landing page.
+  const mint = String((req.body as any)?.mint ?? req.query.mint ?? "").trim();
+  if (mint) {
+    try {
+      const { PublicKey } = await import("@solana/web3.js");
+      new PublicKey(mint); // throws on anything that isn't a valid pubkey
+    } catch {
+      return res.status(400).json({ err: "that contract address is not a valid Solana pubkey" });
+    }
+  } else if (!cfg.ownMint && String(req.query.force ?? "") !== "1") {
+    return res.status(400).json({ err: "paste the pre-generated $RIKU contract address (or force=1 to launch without the flywheel)" });
+  }
   const pre = await livePreflight();
   if (!pre.ready && String(req.query.force ?? "") !== "1")
     return res.status(409).json({ err: "preflight has blockers — fix them or pass force=1", ...pre });
@@ -103,9 +118,9 @@ app.post("/admin/go-live", async (req, res) => {
   for (const f of ["agent_memory.json", "positions.json", "state.json"]) {
     try { fs.rmSync(path.join(cfg.dataDir, f)); wiped.push(f); } catch {}
   }
-  fs.writeFileSync(LIVE_FILE, JSON.stringify({ liveSince: new Date().toISOString() }, null, 1));
-  log.warn("admin", `🔴 GO LIVE — test data wiped (${wiped.join(", ") || "none"}), LIVE marker armed, rebooting fresh`);
-  res.json({ live: true, wiped, restarting: true, ...pre });
+  fs.writeFileSync(LIVE_FILE, JSON.stringify({ liveSince: new Date().toISOString(), ownMint: mint || cfg.ownMint }, null, 1));
+  log.warn("admin", `🔴 GO LIVE — mint ${mint || cfg.ownMint || "NONE"}, dry-runs forced OFF, test data wiped (${wiped.join(", ") || "none"}), rebooting`);
+  res.json({ live: true, ownMint: mint || cfg.ownMint, wiped, restarting: true, ...pre });
   setTimeout(relaunch, 400);
 });
 
@@ -169,8 +184,19 @@ startStatsCache();
 if (cfg.simMode) startMockChat();
 
 // ---------- pages ----------
-// landing at the root; the live stage app moved to /live (and /stage for OBS)
-app.get("/", (_req, res) => res.sendFile(path.resolve(cfg.root, "..", "client", "public", "landing.html")));
+// landing at the root; the live stage app moved to /live (and /stage for OBS).
+// Once live with a mint, the CA is injected into the page — the contract
+// button and every pump.fun link light up without touching the HTML.
+app.get("/", (_req, res) => {
+  const f = path.resolve(cfg.root, "..", "client", "public", "landing.html");
+  try {
+    let html = fs.readFileSync(f, "utf8");
+    if (isLive() && cfg.ownMint) html = html.replace("const CA = '';", `const CA = '${cfg.ownMint}';`);
+    res.type("html").send(html);
+  } catch {
+    res.sendFile(f);
+  }
+});
 app.get("/live", (_req, res) => {
   const f = path.resolve(cfg.root, "..", "client", "dist", "index.html");
   if (fs.existsSync(f)) res.sendFile(f);

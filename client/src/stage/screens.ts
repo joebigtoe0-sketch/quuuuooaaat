@@ -364,6 +364,10 @@ export class Screens {
       g.fillStyle = "#7d8aa5";
       g.font = "20px 'Consolas', monospace";
       g.fillText(fmtAmt(h.amount), X + 250, y + 3);
+      if (h.pnl != null) {
+        g.fillStyle = h.pnl >= 0 ? "#39ff88" : "#ff4d6d";
+        g.fillText(`${h.pnl >= 0 ? "+" : ""}${h.pnl.toFixed(0)}%`, X + 360, y + 3);
+      }
       y += 34;
     }
 

@@ -93,16 +93,27 @@ export function mountPanels(stageEl: HTMLElement, httpBase: string, toggleLog?: 
           return;
         }
         const rows = (w.items ?? [])
-          .map(
-            (h: any) =>
+          .map((h: any) => {
+            const price = (v: number) => (v >= 0.01 ? "$" + v.toFixed(3) : "$" + v.toPrecision(3));
+            const pnl =
+              h.pnlUsd == null
+                ? ""
+                : `<div style="margin-left:30px;font-size:11px;color:#5a7290">` +
+                  (h.entryUsd != null ? `entry ${price(h.entryUsd)} · ` : "") +
+                  `<span style="color:${h.pnlUsd >= 0 ? "#39ff88" : "#ff4d6d"}">${h.pnlUsd >= 0 ? "+" : "−"}$${Math.abs(h.pnlUsd).toFixed(2)}` +
+                  (h.pnlPct != null ? ` (${h.pnlPct >= 0 ? "+" : ""}${h.pnlPct.toFixed(0)}%)` : " (house money)") +
+                  `</span></div>`;
+            return (
               `<div class="prow">` +
               (h.image
                 ? `<img src="${h.image}" style="width:22px;height:22px;border-radius:50%;object-fit:cover">`
                 : `<div style="width:22px;height:22px;border-radius:50%;background:#1c2740"></div>`) +
               `<span style="color:${h.paper ? "#8fd0ff" : "#e8f0ff"};font-weight:bold">$${String(h.symbol).slice(0, 10)}${h.paper ? " ᴾ" : ""}</span>` +
               `<span style="color:#7d8aa5;margin-left:auto">${fmtAmt(h.amount)}</span>` +
-              `<span style="color:#39ff88;width:74px;text-align:right">${fmtUsd(h.valueUsd)}</span></div>`,
-          )
+              `<span style="color:#39ff88;width:74px;text-align:right">${fmtUsd(h.valueUsd)}</span></div>` +
+              pnl
+            );
+          })
           .join("");
         bodyEl.innerHTML =
           `<div class="prow" style="margin-bottom:10px">` +

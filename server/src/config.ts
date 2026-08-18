@@ -30,6 +30,17 @@ if (fs.existsSync(seedDir)) {
   }
 }
 
+// GO LIVE state, read once at boot. The marker (written by the GO LIVE button)
+// carries the pre-generated own-token mint and FORCES every dry-run switch off —
+// launch day needs zero env edits. FORCE_DRY_RUN=true is the emergency brake
+// that re-enables dry mode even while live.
+const liveFilePath = path.join(dataDir, "LIVE");
+const liveArmed = fs.existsSync(liveFilePath);
+const liveMeta: { ownMint?: string } = (() => {
+  try { return JSON.parse(fs.readFileSync(liveFilePath, "utf8")); } catch { return {}; }
+})();
+const forceDry = bool("FORCE_DRY_RUN", false);
+
 export const cfg = {
   root,
   dataDir,
@@ -49,7 +60,7 @@ export const cfg = {
     if (!v) return path.join(root, "data", "wallet.json");
     return path.isAbsolute(v) ? v : path.resolve(root, "..", v);
   })(),
-  ownMint: str("QUANT_OWN_MINT"),
+  ownMint: str("QUANT_OWN_MINT") || String(liveMeta.ownMint ?? ""),
 
   heliusKey: str("HELIUS_API_KEY"),
   rpcUrl:
@@ -59,7 +70,7 @@ export const cfg = {
       : "https://api.mainnet-beta.solana.com"),
 
   ccRefreshToken: str("QUANT_CC_REFRESH_TOKEN"),
-  calloutDryRun: bool("CALLOUT_DRY_RUN", true),
+  calloutDryRun: liveArmed ? forceDry : bool("CALLOUT_DRY_RUN", true),
   maxCalloutsPerDay: num("MAX_CALLOUTS_PER_DAY", 10),
 
   // TTS_PROVIDER: openai (best, reuses LLM key) | gtts (free, no key) | edge | none
@@ -94,7 +105,7 @@ export const cfg = {
   // ---------- agent v2 ----------
   agentEnabled: bool("AGENT_ENABLED", true),
   planMin: num("AGENT_PLAN_MIN", 12),
-  tradeDryRun: bool("TRADE_DRY_RUN", true),
+  tradeDryRun: liveArmed ? forceDry : bool("TRADE_DRY_RUN", true),
   paperStartSol: num("PAPER_START_SOL", 1.0), // paper-trading starting bankroll
   adminPassword: str("ADMIN_PASSWORD", "quant2026"), // /admin panel + control endpoints
   maxTradeSol: num("MAX_TRADE_SOL", 0.1),
@@ -102,7 +113,7 @@ export const cfg = {
   maxOpenPositions: num("MAX_OPEN_POSITIONS", 9999), // no practical cap — the daily SOL caps are the real rail
   tradeReserveSol: num("TRADE_RESERVE_SOL", 0.3), // SOL kept for trading, buybacks don't sweep it
   // airdrops: distribution of his own held tokens to holders (never sells)
-  airdropDryRun: bool("AIRDROP_DRY_RUN", true),
+  airdropDryRun: liveArmed ? forceDry : bool("AIRDROP_DRY_RUN", true),
   maxAirdropPctPerDay: num("MAX_AIRDROP_PCT_PER_DAY", 5),
   // posting rhythm: 10-30 originals per day, spaced; replies are exempt
   maxTweetsPerDay: num("MAX_TWEETS_PER_DAY", 30),
@@ -117,7 +128,7 @@ export const cfg = {
   // compresses time by SIM_SPEED. Nothing leaves the machine.
   // Once the LIVE marker exists (GO LIVE button), sim mode is HARD-DISABLED —
   // a leftover SIM_MODE=true in .env can never fake-post a live agent.
-  simMode: bool("SIM_MODE", false) && !fs.existsSync(path.join(root, "data", "LIVE")),
+  simMode: bool("SIM_MODE", false) && !liveArmed,
   simSpeed: Math.max(1, num("SIM_SPEED", 10)),
   simOwnSupplyPct: num("SIM_OWN_SUPPLY_PCT", 2),
 };

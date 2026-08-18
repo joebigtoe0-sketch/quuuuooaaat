@@ -207,19 +207,39 @@ export class Director {
   async refreshTreasury(): Promise<void> {
     try {
       const firstBuyback = store.buybacks()[0]?.at ?? Date.now();
-      // the vault shows EVERYTHING: real wallet holdings + paper positions
-      const real = await walletHoldings();
+      // the vault shows EVERYTHING he holds. Paper positions are appended only
+      // in dry mode — live buys are real token accounts already in the wallet.
+      const { estimateSellSolFor } = await import("../chain/pump.js");
+      const { PublicKey } = await import("@solana/web3.js");
+      const pnlFor = async (p: { mint: string; tokensRaw: string; costSol: number; soldSol?: number }) => {
+        try {
+          const nowSol = await estimateSellSolFor(new PublicKey(p.mint), BigInt(p.tokensRaw));
+          const basis = Math.max(0, p.costSol - (p.soldSol ?? 0));
+          return basis > 0.001 ? ((nowSol - basis) / basis) * 100 : undefined;
+        } catch {
+          return undefined;
+        }
+      };
+      const posByMint = new Map(openPositions().map((p) => [p.mint, p]));
+      const real: { symbol: string; amount: number; paper?: boolean; image?: string; pnl?: number }[] = [];
+      for (const h of await walletHoldings()) {
+        const p = posByMint.get(h.mint);
+        real.push({ symbol: h.symbol, amount: h.amount, image: h.image, pnl: p ? await pnlFor(p) : undefined });
+      }
       const { tokenDisplay } = await import("../chain/wallet.js");
-      const paper: { symbol: string; amount: number; paper: boolean; image?: string }[] = [];
-      for (const p of openPositions()) {
-        const looksLikeMint = p.mint.startsWith(p.symbol);
-        const d = await tokenDisplay(p.mint).catch(() => null);
-        paper.push({
-          symbol: looksLikeMint && d ? d.symbol : p.symbol,
-          amount: Number(p.tokensRaw) / 1e6,
-          paper: true,
-          image: d?.image,
-        });
+      const paper: { symbol: string; amount: number; paper: boolean; image?: string; pnl?: number }[] = [];
+      if (cfg.tradeDryRun) {
+        for (const p of openPositions()) {
+          const looksLikeMint = p.mint.startsWith(p.symbol);
+          const d = await tokenDisplay(p.mint).catch(() => null);
+          paper.push({
+            symbol: looksLikeMint && d ? d.symbol : p.symbol,
+            amount: Number(p.tokensRaw) / 1e6,
+            paper: true,
+            image: d?.image,
+            pnl: await pnlFor(p),
+          });
+        }
       }
       this.treasury = {
         sol: await solBalance(),

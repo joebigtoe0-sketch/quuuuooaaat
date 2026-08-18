@@ -576,11 +576,26 @@ export class Beats {
       `Generosity hour. ${amount.toLocaleString()} of MY tokens, raining on the loyal. ${why.slice(0, 100)} You're welcome — write that down.`,
       "excited",
     );
-    // real distribution path lands later; the decision + ceremony are real now
-    store.kvSet(dayKey, String(droppedToday + amount));
-    if (cfg.simMode) store.kvSet("sim:bbTokens", String(Math.max(0, Number(store.kvGet("sim:bbTokens") ?? 0) - amount)));
-    this.hub.cue({ t: "fx", kind: "confetti" });
-    memory.journal("airdrop", `${cfg.airdropDryRun && !cfg.simMode ? "[dry] " : ""}airdropped ${amount.toLocaleString()} $RIKU to holders — ${why.slice(0, 120)}`);
+    if (!cfg.simMode && !cfg.airdropDryRun) {
+      // REAL on-chain distribution to the top holders, weighted by bag
+      const { executeAirdrop } = await import("../chain/airdrop.js");
+      const r = await executeAirdrop(amount).catch((e) => ({ ok: false, sent: 0, recipients: 0, sigs: [] as string[], why: String(e).slice(0, 120) }));
+      if (!r.ok) {
+        memory.journal("airdrop", `airdrop FAILED on-chain (${r.why ?? "unknown"}) — nothing left the wallet`);
+        await this.sayVaried("Scratch that — the chain didn't cooperate. Your tokens are safe with me a little longer.", "disgusted");
+        this.hub.cue({ t: "camera", preset: "wide" });
+        this.loco.stateName = "IDLE";
+        return;
+      }
+      store.kvSet(dayKey, String(droppedToday + r.sent));
+      this.hub.cue({ t: "fx", kind: "confetti" });
+      memory.journal("airdrop", `airdropped ${r.sent.toLocaleString()} $RIKU on-chain to ${r.recipients} holders (${r.sigs.length} tx) — ${why.slice(0, 120)}`);
+    } else {
+      store.kvSet(dayKey, String(droppedToday + amount));
+      if (cfg.simMode) store.kvSet("sim:bbTokens", String(Math.max(0, Number(store.kvGet("sim:bbTokens") ?? 0) - amount)));
+      this.hub.cue({ t: "fx", kind: "confetti" });
+      memory.journal("airdrop", `${cfg.airdropDryRun && !cfg.simMode ? "[dry] " : ""}airdropped ${amount.toLocaleString()} $RIKU to holders — ${why.slice(0, 120)}`);
+    }
     this.dir.noteAction("AIRDROP", "RIKU");
     this.hub.cue({ t: "camera", preset: "wide" });
     this.loco.stateName = "IDLE";

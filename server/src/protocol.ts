@@ -40,7 +40,7 @@ export interface TreasuryState {
   ownTokens: number; // UI amount of own token held
   buybacks: { sol: number; sig: string; at: number }[];
   neverSoldDays: number;
-  holdings: { symbol: string; amount: number; paper?: boolean; image?: string }[]; // full wallet vault
+  holdings: { symbol: string; amount: number; paper?: boolean; image?: string; pnl?: number }[]; // full wallet vault (pnl = % vs entry, bought bags only)
 }
 
 /** Action ticker on the bigscreen: what the desk actually DID. */
