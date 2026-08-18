@@ -269,7 +269,7 @@ export class Screens {
 
     // ---- action ticker: what the desk DID ----
     const AK: Record<string, string> = {
-      CALL: "#39ff88", BUY: "#7fffd4", SELL: "#ffb454", RECEIVED: "#89ddff", BUYBACK: "#ffd700",
+      CALL: "#39ff88", BUY: "#7fffd4", SELL: "#ffb454", RECEIVED: "#89ddff", BUYBACK: "#ffd700", BURN: "#ff5c33",
     };
     y = Math.max(y + 14, 350);
     g.fillStyle = "#5a7290";

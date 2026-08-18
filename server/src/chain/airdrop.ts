@@ -3,6 +3,7 @@ import {
   getAssociatedTokenAddressSync,
   createAssociatedTokenAccountIdempotentInstruction,
   createTransferInstruction,
+  createBurnInstruction,
 } from "@solana/spl-token";
 import { getConnection, sendIxs } from "./solana.js";
 import { ensureWallet } from "./wallet.js";
@@ -73,4 +74,27 @@ export async function executeAirdrop(
   out.ok = out.recipients > 0;
   if (!out.ok) out.why = "every transfer batch failed";
   return out;
+}
+
+/** Real on-chain burn of his own held tokens — supply goes down, forever.
+ *  One SPL Burn instruction from his ATA. Pump tokens are 6 decimals. */
+export async function executeBurn(
+  amountUi: number,
+): Promise<{ ok: boolean; burned: number; sig?: string; why?: string }> {
+  if (!cfg.ownMint) return { ok: false, burned: 0, why: "no own mint set" };
+  if (amountUi < 1) return { ok: false, burned: 0, why: "nothing to burn" };
+  const payer = ensureWallet();
+  const mint = new PublicKey(cfg.ownMint);
+  const srcAta = getAssociatedTokenAddressSync(mint, payer.publicKey);
+  try {
+    const sig = await sendIxs(
+      [createBurnInstruction(srcAta, mint, payer.publicKey, BigInt(Math.floor(amountUi)) * 1_000_000n)],
+      payer,
+      150_000,
+    );
+    return { ok: true, burned: Math.floor(amountUi), sig };
+  } catch (e) {
+    log.warn("burn", `burn failed: ${String(e).slice(0, 120)}`);
+    return { ok: false, burned: 0, why: String(e).slice(0, 120) };
+  }
 }

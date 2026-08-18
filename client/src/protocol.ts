@@ -39,7 +39,7 @@ export interface TreasuryState {
 
 /** Action ticker on the bigscreen: what the desk actually DID. */
 export interface ActionEvent {
-  kind: "CALL" | "BUY" | "SELL" | "RECEIVED" | "BUYBACK" | "AIRDROP";
+  kind: "CALL" | "BUY" | "SELL" | "RECEIVED" | "BUYBACK" | "AIRDROP" | "BURN";
   symbol: string;
   at: number;
 }

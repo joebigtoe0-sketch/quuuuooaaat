@@ -617,6 +617,52 @@ export class Beats {
     this.loco.stateName = "IDLE";
   }
 
+  /** BURN ceremony: a slice of his own supply goes to the incinerator, forever.
+   *  Same rails shape as airdrops: % -of-held daily cap, dry/sim aware. */
+  async burnBeat(tokens: number, why: string): Promise<void> {
+    const { ownTokenBalanceUi } = await import("../chain/buyback.js");
+    const held = cfg.simMode
+      ? cfg.simOwnSupplyPct * 1e7 + Number(store.kvGet("sim:bbTokens") ?? 0)
+      : await ownTokenBalanceUi().catch(() => 0);
+    const dayKey = `burn:${new Date().toISOString().slice(0, 10)}`;
+    const burnedToday = Number(store.kvGet(dayKey) ?? 0);
+    const dayCap = held * (cfg.maxAirdropPctPerDay / 100);
+    const amount = Math.floor(Math.min(tokens, Math.max(0, dayCap - burnedToday)));
+    if (amount < 1 || held < 1) {
+      memory.journal("burn", `wanted to burn ${Math.round(tokens)} tokens but the rails said no (held ${Math.round(held)}, day cap ${Math.round(dayCap)}, burned today ${Math.round(burnedToday)})`);
+      return;
+    }
+    this.loco.stateName = "BURN";
+    await this.loco.walkTo("vault");
+    this.hub.cue({ t: "camera", preset: "vault" });
+    this.hub.cue({ t: "anim", clip: "fist_pump" });
+    await this.sayVaried(
+      `Incinerator time. ${amount.toLocaleString()} $RIKU — gone. Forever. Supply only goes down, that's the doctrine. ${why.slice(0, 100)}`,
+      "excited",
+    );
+    if (!cfg.simMode && !cfg.airdropDryRun) {
+      const { executeBurn } = await import("../chain/airdrop.js");
+      const r = await executeBurn(amount).catch((e) => ({ ok: false, burned: 0, why: String(e).slice(0, 120) } as { ok: boolean; burned: number; sig?: string; why?: string }));
+      if (!r.ok) {
+        memory.journal("burn", `burn FAILED on-chain (${r.why ?? "unknown"}) — supply unchanged`);
+        await this.sayVaried("The incinerator jammed. Chain said no. We'll burn twice as hard next time.", "disgusted");
+        this.hub.cue({ t: "camera", preset: "wide" });
+        this.loco.stateName = "IDLE";
+        return;
+      }
+      store.kvSet(dayKey, String(burnedToday + r.burned));
+      memory.journal("burn", `burned ${r.burned.toLocaleString()} $RIKU on-chain forever (tx ${r.sig?.slice(0, 12)}…) — ${why.slice(0, 120)}`);
+    } else {
+      store.kvSet(dayKey, String(burnedToday + amount));
+      if (cfg.simMode) store.kvSet("sim:bbTokens", String(Math.max(0, Number(store.kvGet("sim:bbTokens") ?? 0) - amount)));
+      memory.journal("burn", `${cfg.airdropDryRun && !cfg.simMode ? "[dry] " : ""}burned ${amount.toLocaleString()} $RIKU — ${why.slice(0, 120)}`);
+    }
+    this.hub.cue({ t: "fx", kind: "stamp_rekt" });
+    this.dir.noteAction("BURN", "RIKU");
+    this.hub.cue({ t: "camera", preset: "wide" });
+    this.loco.stateName = "IDLE";
+  }
+
   // ------------------------------------------------------------------
   async commentaryBeat(): Promise<void> {
     this.loco.stateName = "COMMENTARY";
@@ -687,6 +733,10 @@ export class Beats {
       case "airdrop": {
         const a = action as { tokens: number; why: string };
         return this.airdropBeat(a.tokens, a.why);
+      }
+      case "burn": {
+        const a = action as { tokens: number; why: string };
+        return this.burnBeat(a.tokens, a.why);
       }
       case "strategy_create": {
         const act = action as { name: string; thesis: string; code: string; buyBar: number; sizeSol: number };

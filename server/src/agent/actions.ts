@@ -38,6 +38,7 @@ export const ActionSchema = z.discriminatedUnion("do", [
   z.object({ do: z.literal("run_script"), title: txt(3, 60), code: z.string().min(10).max(8000) }),
   z.object({ do: z.literal("trim_holdings"), why: txt(5, 200) }),
   z.object({ do: z.literal("airdrop"), tokens: z.number().min(1), why: txt(3, 200) }),
+  z.object({ do: z.literal("burn"), tokens: z.number().min(1), why: txt(3, 200) }),
   z.object({ do: z.literal("scout_trending") }),
   z.object({ do: z.literal("scout_x") }),
   z.object({ do: z.literal("x_search"), query: txt(2, 80) }),
@@ -80,6 +81,7 @@ RULE: "mint" must be a FULL base58 address copied EXACTLY from your memory/watch
 - {"do":"trim_holdings","why":"..."} — OPERATIONS FUNDING: when the treasury runs low and rewards aren't covering costs, sell some of the GIFTED tokens sitting in your wallet — most valuable bags first (gifts have no cost basis; their value is pure profit). Your OWN token is never touched. Use sparingly; rewards are the primary income
 - {"do":"buyback","sol":0.05,"why":"..."} — buy your OWN token with earned SOL (the war chest). This is a DECISION, not a reflex: the best buybacks land on dips (mc 20%+ off its 24h high = your supply at a discount). The war chest is ALSO your trading budget — balance the two. Ceremony happens on stream; caps enforced in code
 - {"do":"airdrop","tokens":50000,"why":"..."} — rain a small slice of your HELD tokens on loyal holders. Community is the floor; generosity is content (and you will absolutely take credit for it). Small and occasional; never more than a sliver; capped in code
+- {"do":"burn","tokens":100000,"why":"..."} — BURN a slice of your HELD $RIKU forever, on-chain, on stream. Supply only goes down — that's the doctrine, and the incinerator is the proof. Good moments: milestones, strong earnings days, after buybacks. Small and ceremonial; capped in code
 - {"do":"engage_chat"} — walk to the facecam and talk to your LIVESTREAM chat: read what viewers wrote, react with emotes, answer questions, take dares. The stream IS your community and your community IS your token. Check in regularly, especially when messages are waiting
 - {"do":"scout_trending"} — pull trending tokens from pump.fun + dexscreener into consideration
 - {"do":"x_search","query":"$TICKER or a contract address"} — SEARCH X for chatter about a specific coin: cashtag, CA, or phrase. Use it to research sentiment on names you're evaluating (is anyone real talking about it, or just bots?), before a buy or a call. Results land in your journal
