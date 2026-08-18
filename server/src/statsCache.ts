@@ -19,7 +19,7 @@ let builtAt = 0;
 async function buildWallet(): Promise<any> {
   const { walletHoldings, solBalance, walletPubkey } = await import("./chain/wallet.js");
   const { getSolUsd } = await import("./chain/solana.js");
-  const { openPositions, paperBank } = await import("./chain/trader.js");
+  const { openPositions, bankSol } = await import("./chain/trader.js");
   const { estimateSellSolFor } = await import("./chain/pump.js");
   const [sol, solUsd, real] = await Promise.all([solBalance(), getSolUsd(), walletHoldings()]);
   const priced = new Map<string, number>();
@@ -38,17 +38,21 @@ async function buildWallet(): Promise<any> {
     symbol: h.symbol, amount: h.amount, image: h.image,
     valueUsd: priced.has(h.mint) ? priced.get(h.mint)! * h.amount : null, paper: false,
   }));
-  for (const p of openPositions()) {
-    let v: number | null = null;
-    try { v = (await estimateSellSolFor(new PublicKey(p.mint), BigInt(p.tokensRaw))) * solUsd; } catch {}
-    items.push({ symbol: p.symbol, amount: Number(p.tokensRaw) / 1e6, image: null, valueUsd: v, paper: true });
+  // paper positions exist only in the ledger — surface them with the ᴾ marker.
+  // Live positions are real token accounts and already appear in the wallet list.
+  if (cfg.tradeDryRun) {
+    for (const p of openPositions()) {
+      let v: number | null = null;
+      try { v = (await estimateSellSolFor(new PublicKey(p.mint), BigInt(p.tokensRaw))) * solUsd; } catch {}
+      items.push({ symbol: p.symbol, amount: Number(p.tokensRaw) / 1e6, image: null, valueUsd: v, paper: true });
+    }
   }
   items.sort((a, b) => (b.valueUsd ?? -1) - (a.valueUsd ?? -1));
-  return { address: walletPubkey()?.toBase58() ?? null, sol, solUsd, solValueUsd: sol * solUsd, paperBankSol: paperBank(), items };
+  return { address: walletPubkey()?.toBase58() ?? null, sol, solUsd, solValueUsd: sol * solUsd, paperBankSol: await bankSol(), paperMode: cfg.tradeDryRun, items };
 }
 
 async function buildStats(): Promise<any> {
-  const { positionsSummary, paperBank } = await import("./chain/trader.js");
+  const { positionsSummary, bankSol } = await import("./chain/trader.js");
   const { xFollowers, xPostsToday, xHandle } = await import("./social/x.js");
   const kpis = await snapshotKPIs().catch(() => null);
   const pos = await positionsSummary();
@@ -60,7 +64,8 @@ async function buildStats(): Promise<any> {
     xFollowers: await xFollowers(),
     xPostsToday: xPostsToday(),
     trading: {
-      paperBankSol: paperBank(),
+      paperBankSol: await bankSol(),
+      paperMode: cfg.tradeDryRun,
       openPositions: pos.open,
       realizedPnlSol: pos.realizedSol,
       unrealizedPnlSol: pos.unrealizedSol,

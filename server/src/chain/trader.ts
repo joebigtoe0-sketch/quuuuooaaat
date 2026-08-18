@@ -54,6 +54,13 @@ export function paperBank(): number {
 function paperAdjust(delta: number): void {
   store.kvSet("paper:bank", String(Math.max(0, paperBank() + delta)));
 }
+/** The spendable trading bankroll: the paper ledger while TRADE_DRY_RUN, the
+ * real war chest (balance − float − reserve) once trading is live. */
+export async function bankSol(): Promise<number> {
+  if (cfg.tradeDryRun) return paperBank();
+  const { unallocatedSol } = await import("./buyback.js");
+  return unallocatedSol().catch(() => 0);
+}
 
 export function openPositions(): Position[] {
   return positions.filter((p) => !p.closed);

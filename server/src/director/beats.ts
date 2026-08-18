@@ -336,8 +336,8 @@ export class Beats {
     if (a.buyReject || effScore < bar) return;
     if (cfg.ownMint && a.mint === cfg.ownMint) return;
     if (openPositions().some((p) => p.mint === a.mint)) return;
-    const { paperBank } = await import("../chain/trader.js");
-    const bank = paperBank();
+    const { bankSol } = await import("../chain/trader.js");
+    const bank = await bankSol();
     if (bank < 0.02) return;
     // BANKROLL PRESSURE: the thinner the stack, the higher the bar. Measured
     // in "bullets" — how many standard positions the bankroll still covers.

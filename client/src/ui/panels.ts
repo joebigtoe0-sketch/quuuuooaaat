@@ -110,7 +110,7 @@ export function mountPanels(stageEl: HTMLElement, httpBase: string, toggleLog?: 
           `<span style="font-weight:bold;font-size:15px">SOL</span>` +
           `<span style="color:#7d8aa5;margin-left:auto">${Number(w.sol).toFixed(3)}</span>` +
           `<span style="color:#39ff88;width:74px;text-align:right">${fmtUsd(w.solValueUsd)}</span></div>` +
-          `<div style="color:#5a7290;margin:2px 0 8px;font-size:12px">paper bankroll: ${Number(w.paperBankSol).toFixed(3)} SOL &nbsp;·&nbsp; ᴾ = paper position</div>` +
+          `<div style="color:#5a7290;margin:2px 0 8px;font-size:12px">${w.paperMode === false ? `bankroll: ${Number(w.paperBankSol).toFixed(3)} SOL` : `paper bankroll: ${Number(w.paperBankSol).toFixed(3)} SOL &nbsp;·&nbsp; ᴾ = paper position`}</div>` +
           rows +
           `<div style="color:#3d4a63;margin-top:12px;font-size:10.5px;overflow-wrap:anywhere">${w.address ?? ""}</div>`;
       } else {
@@ -127,7 +127,7 @@ export function mountPanels(stageEl: HTMLElement, httpBase: string, toggleLog?: 
           ["posts today", String(s.xPostsToday ?? 0)],
           ["tweets / films today", `${s.tweetsToday ?? 0} / ${s.filmsToday ?? 0}`],
           ["own token mc", s.ownTokenMcUsd ? fmtUsd(s.ownTokenMcUsd) : "not launched"],
-          ["paper bankroll", `${Number(s.trading?.paperBankSol ?? 0).toFixed(3)} SOL`],
+          [s.trading?.paperMode === false ? "bankroll" : "paper bankroll", `${Number(s.trading?.paperBankSol ?? 0).toFixed(3)} SOL`],
           ["open positions", String(s.trading?.openPositions ?? 0)],
           ["realized PnL", pnl(Number(s.trading?.realizedPnlSol ?? 0))],
           ["unrealized PnL", pnl(Number(s.trading?.unrealizedPnlSol ?? 0))],

@@ -5,7 +5,7 @@ import { solBalance } from "../chain/wallet.js";
 import { getTokenState } from "../chain/pump.js";
 import { getSolUsd } from "../chain/solana.js";
 import { ownTokenBalanceUi, unallocatedSol, ownMcStats } from "../chain/buyback.js";
-import { positionsSummary, paperBank } from "../chain/trader.js";
+import { positionsSummary, paperBank, bankSol } from "../chain/trader.js";
 import { imagesLeftToday } from "../media/imagegen.js";
 
 /**
@@ -75,7 +75,7 @@ export async function snapshotKPIs(): Promise<KPIs> {
     openPositions: pos.open,
     realizedPnlSol: pos.realizedSol,
     unrealizedPnlSol: pos.unrealizedSol,
-    paperBankSol: paperBank(),
+    paperBankSol: await bankSol(),
     solUsd,
   };
 }
@@ -91,7 +91,7 @@ export function kpiText(k: KPIs): string {
     `treasury ${k.treasurySol.toFixed(3)} SOL | WAR CHEST (unallocated earnings) ${k.warChestSol.toFixed(3)} SOL | $RIKU held ${Math.round(k.ownTokensHeld).toLocaleString()} | ` +
     `bought back ${k.buybackSolTotal.toFixed(3)} SOL total | ` +
     `today: ${k.calloutsToday} callouts, ${k.tweetsToday}/${cfg.maxTweetsPerDay} tweets (daily min target ${cfg.minTweetsPerDay}, spaced ${cfg.minTweetGapMin}+ min), ${k.filmsToday} films, memes left ${imagesLeftToday()} | ` +
-    `trading: paper bankroll ${k.paperBankSol.toFixed(3)} SOL (started ${cfg.paperStartSol.toFixed(1)}), ${k.openPositions} open, ` +
+    `trading: ${cfg.tradeDryRun ? `paper bankroll ${k.paperBankSol.toFixed(3)} SOL (started ${cfg.paperStartSol.toFixed(1)})` : `bankroll ${k.paperBankSol.toFixed(3)} SOL (real, from the war chest)`}, ${k.openPositions} open, ` +
     `realized ${k.realizedPnlSol >= 0 ? "+" : ""}${k.realizedPnlSol.toFixed(3)} SOL, ` +
     `unrealized ${k.unrealizedPnlSol >= 0 ? "+" : ""}${k.unrealizedPnlSol.toFixed(3)} SOL`
   );
