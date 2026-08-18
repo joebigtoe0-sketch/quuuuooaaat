@@ -1,0 +1,12 @@
+node_modules
+**/node_modules
+dist
+**/dist
+.git
+.env
+.env.*
+*.log
+server/data
+sidekick/raw
+sidekick/catalog
+sidekick/previews
