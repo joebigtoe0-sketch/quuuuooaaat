@@ -403,6 +403,43 @@ app.get("/admin/recstat", (req, res) => {
 
 /** Producer capture: record N seconds of the stage canvas into an mp4
  *  (drives the same recorder the film beat uses). */
+/** Make him SPEAK an exact line on stage (mood optional) — and with record=<id>,
+ *  film it: synthesizes first, starts the recorder, delivers the line, stops,
+ *  returns the mp4 path. Position him first via /admin/goto + /admin/camera. */
+app.all("/admin/say", async (req, res) => {
+  // prefer the JSON body — long text through a query string gets shell-mangled
+  const b: any = req.body ?? {};
+  const text = String(b.text ?? req.query.text ?? "").trim();
+  if (text.length < 2) return res.status(400).json({ err: "pass text in a JSON body or ?text=" });
+  const moodRaw = String(b.mood ?? req.query.mood ?? "");
+  const mood = (["neutral", "excited", "disgusted", "thinking"] as const).includes(moodRaw as any)
+    ? (moodRaw as "neutral" | "excited" | "disgusted" | "thinking")
+    : "neutral";
+  const recId = String(b.record ?? req.query.record ?? "").replace(/[^a-zA-Z0-9_-]/g, "");
+  try {
+    const syn = await tts.synthesize(text, "adminsay-" + Date.now());
+    const durMs = syn?.durMs ?? Math.max(1500, text.split(/\s+/).length * 340);
+    let clipP: Promise<string | null> | null = null;
+    if (recId) {
+      const { expectClip } = await import("./media/film.js");
+      clipP = expectClip(recId, durMs + 60_000);
+      hub.cue({ t: "record", on: true, id: recId });
+      await new Promise((r) => setTimeout(r, 900));
+    }
+    hub.cue({ t: "mood", mood });
+    hub.cue({ t: "speak", audioUrl: syn?.audioUrl ?? null, subtitle: text, durMs, words: syn?.words ?? [] });
+    await new Promise((r) => setTimeout(r, durMs + 1200));
+    if (recId && clipP) {
+      hub.cue({ t: "record", on: false, id: recId });
+      const mp4 = await clipP;
+      return res.json({ ok: true, durMs, recorded: !!mp4, mp4 });
+    }
+    res.json({ ok: true, durMs, audio: !!syn?.audioUrl });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e).slice(0, 200) });
+  }
+});
+
 app.get("/admin/record", async (req, res) => {
   const secs = Math.min(20, Math.max(2, Number(req.query.secs ?? 6)));
   const id = String(req.query.id ?? `cap_${Date.now()}`).replace(/[^a-zA-Z0-9_-]/g, "");
