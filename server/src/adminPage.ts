@@ -50,6 +50,18 @@ export const ADMIN_HTML = `<!doctype html>
     <div class="note" id="chatinfo"></div>
   </div>
 
+  <h2>🖥️ make him run a script on the bigscreen NOW</h2>
+  <div class="card">
+    <div class="note">He walks to the bigscreen and RUNS this JS live (sandbox: no network/files, 3s).
+    Data available: <code>data.positions</code>, <code>data.watchlist</code>, <code>data.research</code>, <code>data.mcHistory</code>.
+    Use <code>print(...)</code> and <code>table(rows)</code> to render on screen.</div>
+    <input id="scripttitle" placeholder="title (e.g. MY OPEN POSITIONS)" style="width:340px">
+    <textarea id="scriptcode" style="width:100%;height:120px" placeholder="print('my open bags: ' + data.positions.length);&#10;for (const p of data.positions) print('  $' + p.symbol + '  cost ' + p.costSol.toFixed(3) + ' SOL');"></textarea>
+    <button class="go" onclick="runScript()">▶ run it on stream</button>
+    <span id="scriptmsg"></span>
+    <div style="margin-top:10px"><button onclick="loadSample()">load a sample (position report)</button></div>
+  </div>
+
   <h2>corkboard — his on-stream goals</h2>
   <div class="card">
     <div class="note">one goal per line (max 7). overwrites his board immediately.</div>
@@ -141,6 +153,22 @@ async function loadQueue(){
 }
 async function rmQueue(queue,i){ await q('/admin/queue-remove?queue='+queue+'&i='+i,'POST'); loadQueue(); }
 async function rm(id){ await q('/admin/directive?remove='+encodeURIComponent(id)); refresh(); }
+async function runScript(){
+  const title=(document.getElementById('scripttitle').value||'LIVE ANALYSIS').slice(0,60);
+  const code=document.getElementById('scriptcode').value.trim();
+  if(code.length<10){document.getElementById('scriptmsg').innerHTML=' <span class="err">write at least a line of code</span>';return;}
+  const r=await q('/admin/agent','POST',{do:'run_script',title,code});
+  document.getElementById('scriptmsg').innerHTML=r.err?' <span class="err">'+r.err+'</span>':' <span class="ok">queued — he\\'ll run it on the bigscreen shortly</span>';
+}
+function loadSample(){
+  document.getElementById('scripttitle').value='POSITION REPORT';
+  document.getElementById('scriptcode').value=
+    "print('open positions: ' + data.positions.length);\\n"+
+    "let green = 0;\\n"+
+    "for (const p of data.positions) { print('  $' + p.symbol + '  cost ' + p.costSol.toFixed(3) + ' SOL'); }\\n"+
+    "print('coins researched recently: ' + data.research.length);\\n"+
+    "print('own mc history points: ' + data.mcHistory.length);";
+}
 async function setBoard(){
   const lines=document.getElementById('boardtext').value.split('\n').map(l=>l.trim()).filter(Boolean).slice(0,7);
   if(!lines.length){document.getElementById('boardmsg').innerHTML=' <span class="err">write at least one goal</span>';return;}
