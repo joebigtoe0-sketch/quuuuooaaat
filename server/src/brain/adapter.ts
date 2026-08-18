@@ -58,6 +58,12 @@ const spendKey = () => `spend:${new Date().toISOString().slice(0, 10)}`;
 export const spendToday = () => Number(store.kvGet(spendKey()) ?? 0);
 export const budgetExhausted = () => spendToday() >= DAILY_USD;
 
+// When the primary model is overloaded (529/503/429), retry once on a fallback
+// so the show keeps a real brain while opus capacity is saturated.
+const FALLBACK_MODEL =
+  process.env.LLM_MODEL_FALLBACK ?? (/^claude-/i.test(MODEL) ? "claude-sonnet-5" : "");
+let fallbackLogAt = 0;
+
 export async function callFreeform(
   system: string,
   user: string,
@@ -65,6 +71,25 @@ export async function callFreeform(
   model: string = MODEL,
 ): Promise<string | null> {
   if (!hasApiKey() || budgetExhausted()) return null;
+  const first = await attemptOnce(system, user, maxTokens, model);
+  if (first.text !== null || !first.overloaded) return first.text;
+  if (FALLBACK_MODEL && FALLBACK_MODEL !== model) {
+    if (Date.now() - fallbackLogAt > 600_000) {
+      fallbackLogAt = Date.now();
+      const { log } = await import("../log.js");
+      log.warn("brain", `${model} overloaded — using ${FALLBACK_MODEL} until it recovers`);
+    }
+    return (await attemptOnce(system, user, maxTokens, FALLBACK_MODEL)).text;
+  }
+  return null;
+}
+
+async function attemptOnce(
+  system: string,
+  user: string,
+  maxTokens: number,
+  model: string,
+): Promise<{ text: string | null; overloaded: boolean }> {
   const controller = new AbortController();
   // reasoning models can think for a while — give real headroom
   const timer = setTimeout(() => controller.abort(), 75000);
@@ -83,10 +108,12 @@ export async function callFreeform(
     });
     if (!res.ok) {
       let why = `http ${res.status}`;
+      let overloaded = res.status === 529 || res.status === 503 || res.status === 429;
       try {
         const body = await res.text();
         if (/credit balance/i.test(body)) why = "ANTHROPIC CREDITS EXHAUSTED — top up the account or the brain stays on canned lines";
         else why = `http ${res.status}: ${body.slice(0, 120)}`;
+        if (/overloaded/i.test(body)) overloaded = true;
       } catch {}
       lastCallError = { note: why, at: Date.now() };
       // surface loudly (throttled) — this also lands in the on-stage terminal
@@ -95,7 +122,7 @@ export async function callFreeform(
         const { log } = await import("../log.js");
         log.warn("brain", why);
       }
-      return null;
+      return { text: null, overloaded };
     }
     const data = (await res.json()) as {
       choices?: Array<{ message?: { content?: string } }>;
@@ -104,10 +131,10 @@ export async function callFreeform(
     const inTok = data.usage?.prompt_tokens ?? 0;
     const outTok = data.usage?.completion_tokens ?? 0;
     store.kvSet(spendKey(), String(spendToday() + (inTok * PRICE_IN + outTok * PRICE_OUT) / 1e6));
-    return data.choices?.[0]?.message?.content?.trim() ?? null;
+    return { text: data.choices?.[0]?.message?.content?.trim() ?? null, overloaded: false };
   } catch (e) {
     lastCallError = { note: String(e).slice(0, 120), at: Date.now() };
-    return null;
+    return { text: null, overloaded: false };
   } finally {
     clearTimeout(timer);
   }
