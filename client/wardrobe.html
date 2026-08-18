@@ -1,0 +1,57 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>QUANT · WARDROBE</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body { margin: 0; background: #070b12; color: #dfe8fa; font: 13px 'Consolas', monospace; display: flex; height: 100vh; overflow: hidden; }
+    #view { flex: 1; position: relative; }
+    #panel { width: 380px; overflow-y: auto; background: #0a101c; border-left: 1px solid #12324a; padding: 14px; box-sizing: border-box; }
+    h1 { color: #2affd4; font-size: 15px; letter-spacing: 3px; margin: 0 0 12px; }
+    h2 { color: #7d8aa5; font-size: 11px; letter-spacing: 2px; text-transform: uppercase; margin: 14px 0 4px; }
+    select { width: 100%; background: #0b1220; border: 1px solid #24466a; border-radius: 6px; color: #dfeeff; padding: 6px; font: 12px 'Consolas', monospace; margin: 2px 0; }
+    button { background: #16324c; color: #dfeeff; border: 1px solid #24466a; border-radius: 8px; padding: 10px 14px; font: 13px 'Consolas', monospace; cursor: pointer; margin: 10px 6px 0 0; }
+    button:hover { background: #1e4a6a; } .go { background: #14402a; }
+    .note { color: #5a7290; font-size: 11px; margin: 4px 0; }
+    #status { margin-top: 10px; min-height: 18px; }
+    .ok { color: #39ff88; } .err { color: #ff4d6d; }
+  </style>
+</head>
+<body>
+  <div id="view"></div>
+  <div id="panel">
+    <h1>◢ QUANT · WARDROBE</h1>
+    <div class="note">Mix parts from every owned Sidekick pack. Save & Apply rebuilds the live character (takes ~1 min), then refresh the stage.</div>
+    <h2>body</h2>
+    <div id="body">
+      <div class="note">Heavy</div><input id="b-heavy" type="range" min="0" max="1" step="0.05" value="0" style="width:100%">
+      <div class="note">Skinny</div><input id="b-skinny" type="range" min="0" max="1" step="0.05" value="0" style="width:100%">
+      <div class="note">Buff</div><input id="b-buff" type="range" min="0" max="1" step="0.05" value="0" style="width:100%">
+      <div class="note">Feminine</div><input id="b-feminine" type="range" min="0" max="1" step="0.05" value="0" style="width:100%">
+    </div>
+    <h2>pose &amp; shoot</h2>
+    <div class="note">Play any emote, set the face, freeze at the right frame, save the shot.</div>
+    <select id="pose-emote"><option value="">— rest pose —</option></select>
+    <select id="pose-expr"></select>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">
+      <button id="pose-freeze">⏸ freeze</button>
+      <button class="go" id="pose-snap">📸 save PNG</button>
+      <button class="go" id="pose-snap-t">📸 transparent</button>
+    </div>
+    <h2>paint</h2>
+    <div class="note">🎨 Click any color ON the character (shirt, hair, skin…) → pick a new one. Applies everywhere that color is used.</div>
+    <label class="note" style="display:block;margin:4px 0"><input type="checkbox" id="paint-similar" checked> also shift similar shades (keeps shading ramps)</label>
+    <div id="paint-edits"></div>
+    <button id="paint-reset">⟲ reset colors</button>
+    <input type="color" id="paint-color" style="position:fixed;left:0;top:0;width:1px;height:1px;opacity:0;pointer-events:none">
+    <div id="slots"></div>
+    <h2>textures</h2>
+    <div id="textures"></div>
+    <button class="go" id="save">💾 SAVE & APPLY</button>
+    <button id="reload">↻ reload preview</button>
+    <div id="status"></div>
+  </div>
+  <script type="module" src="/src/wardrobe/main.ts"></script>
+</body>
+</html>

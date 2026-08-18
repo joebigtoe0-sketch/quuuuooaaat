@@ -1,0 +1,550 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RIKU — the desk never closes</title>
+<meta name="description" content="An AI trader locked in a studio with his own bankroll and one goal: become the greatest caller alive. Judging your coins live on pump.fun, 24/7.">
+<style>
+  @font-face{font-family:'Anton';src:url('/fonts/Anton-Regular.ttf') format('truetype');font-display:swap}
+  :root{
+    --ink:#100f0a; --ink2:#131209;
+    --acid:#e8b62e;            /* the studio's construction amber, full voltage */
+    --signal:#ffc21a;          /* hotter — CTAs only */
+    --cream:#f4ecca;
+    --red:#ff3a24;
+    --disp:'Anton','Arial Narrow',Impact,Haettenschweiler,sans-serif;
+    --lab:'Consolas','Cascadia Mono',ui-monospace,monospace;
+  }
+  *{box-sizing:border-box;margin:0}
+  html{scroll-behavior:smooth;background:var(--ink)}
+  body{background:var(--ink);color:var(--cream);font-family:var(--disp);overflow-x:hidden}
+  a{color:inherit;text-decoration:none}
+  img,video{display:block}
+  ::selection{background:var(--signal);color:var(--ink)}
+
+  /* ---------- shared voices ---------- */
+  .lab{font:700 13.5px/1.4 var(--lab);letter-spacing:.3em;text-transform:uppercase}
+  .lab2{font:600 12px/1.5 var(--lab);letter-spacing:.14em;text-transform:uppercase;opacity:.6;margin-top:6px}
+
+  /* ---------- loader ---------- */
+  .loader{position:fixed;inset:0;z-index:500;background:#0c0b07;display:grid;place-items:center;overflow:hidden;
+    transition:transform 1s cubic-bezier(.77,0,.18,1),visibility 1s}
+  .loader.gone{transform:translateY(-105%);visibility:hidden}
+  .loader::after{content:"";position:absolute;inset:0;pointer-events:none;background:
+    linear-gradient(90deg,#0a0903d1,#0a09031a,#0a0903a6),
+    repeating-linear-gradient(0deg,transparent 0 3px,#0003 4px)}
+  .loader-grid{position:absolute;inset:22px;border:1px solid #ffc21aa6;z-index:2}
+  .loader-grid::before{content:"";position:absolute;top:-1px;left:50%;width:1px;height:40px;background:#ffc21aa6}
+  .loader-grid::after{content:"";position:absolute;left:-1px;top:50%;width:40px;height:1px;background:#ffc21aa6}
+  .loader-mark{position:absolute;top:45px;left:50px;z-index:3}
+  .loader-mark span{font:700 11px var(--lab);letter-spacing:.25em;color:var(--cream)}
+  .loader-copy{position:relative;z-index:3;width:min(670px,78vw)}
+  .loader-copy p{font:700 12px var(--lab);letter-spacing:.3em;color:var(--cream)}
+  .loader-copy b{display:block;font:400 clamp(8rem,22vw,20rem)/.72 var(--disp);letter-spacing:-.02em;color:var(--cream);margin-top:.26em}
+  .loader-copy i{display:block;height:2px;background:#f4ecca40;margin-top:40px}
+  .loader-copy i span{display:block;height:100%;width:0;background:var(--signal)}
+  .loader-copy small{display:block;font:700 11px var(--lab);letter-spacing:.2em;margin-top:14px;color:var(--cream);opacity:.7}
+  .loader-skip{position:absolute;bottom:45px;right:50px;z-index:3;background:none;border:0;color:var(--cream);
+    font:700 11px var(--lab);letter-spacing:.2em;cursor:pointer}
+
+  /* ---------- fixed header ---------- */
+  .site-header{position:fixed;inset:0 0 auto;z-index:50;height:86px;display:flex;justify-content:space-between;align-items:center;
+    padding:0 3.5vw;background:#0f0e0729;backdrop-filter:blur(3px);mix-blend-mode:difference;border-bottom:1px solid #f4ecca4d}
+  .wordmark{font:400 2.3rem var(--disp);letter-spacing:.02em}
+  .wordmark span{font:10px var(--lab);vertical-align:top;margin-left:5px}
+  .site-header nav{display:flex;gap:40px;font:700 13.5px/1 var(--lab);letter-spacing:.18em}
+  .site-header nav a:hover{color:var(--signal)}
+  .header-buy{border:1px solid currentColor;padding:13px 22px;font:900 13.5px var(--lab);letter-spacing:.08em;transition:all .2s}
+  .header-buy:hover{background:var(--cream);color:#111}
+  @media(max-width:760px){.site-header{height:58px;padding:0 18px}.site-header nav{display:none}}
+
+  /* ---------- hero ---------- */
+  .hero{position:relative;min-height:100svh;display:flex;align-items:center;padding:110px 6vw 70px;overflow:hidden;isolation:isolate}
+  .hero-feed{position:absolute;inset:0;z-index:-3;background:#000}
+  .hero-feed iframe{position:absolute;top:50%;left:50%;width:1920px;height:1080px;border:0;pointer-events:none;transform-origin:center}
+  .hero-shade{position:absolute;inset:0;z-index:-2;background:
+    linear-gradient(90deg,#100f0ab8 8%,#100f0a40 55%,#100f0a99),
+    repeating-linear-gradient(0deg,transparent 0 3px,#00000015 4px)}
+  .hero::after{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;
+    background:linear-gradient(#e8b62e12,transparent 40%,var(--ink) 103%)}
+  .hero-noise{position:absolute;inset:-100%;z-index:4;opacity:.12;pointer-events:none;
+    background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='4'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.6'/%3E%3C/svg%3E");
+    animation:grain .22s steps(2,end) infinite}
+  @keyframes grain{0%{transform:translate(0,0)}25%{transform:translate(3%,-2%)}50%{transform:translate(-2%,3%)}75%{transform:translate(2%,2%)}100%{transform:translate(-3%,-3%)}}
+  .hero-orbit{position:absolute;top:0;bottom:0;left:26px;z-index:2;overflow:hidden;
+    font:700 10px var(--lab);letter-spacing:.3em;opacity:.8}
+  .hero-orbit span{display:block;writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap;animation:filmv 30s linear infinite}
+  @keyframes filmv{to{transform:rotate(180deg) translateY(-50%)}}
+  .descend{position:absolute;top:45%;right:3.5vw;z-index:5;transform:rotate(90deg);transform-origin:100%;
+    display:flex;align-items:center;gap:13px;font:700 10px var(--lab);letter-spacing:.24em}
+  .descend i{width:60px;height:1px;background:currentColor}
+  @media(max-width:760px){.hero-orbit,.descend{display:none}}
+
+  .live-tag{position:absolute;top:92px;right:3.5vw;z-index:5;display:flex;align-items:center;gap:8px;
+    border:1px solid var(--red);background:#100f0acc;padding:8px 16px;font:700 11.5px var(--lab);letter-spacing:.24em;color:#ff9d90}
+  .live-dot{width:8px;height:8px;border-radius:50%;background:var(--red);animation:pulse 1.3s infinite}
+  @keyframes pulse{50%{opacity:.25}}
+  @media(max-width:760px){.live-tag{top:70px;letter-spacing:.1em}}
+
+  .hero-copy{position:relative;z-index:5;width:min(960px,90vw)}
+  .kicker{font:700 13px/1.4 var(--lab);letter-spacing:.3em;margin:0 0 20px;color:var(--acid);text-transform:uppercase}
+  h1{font:400 clamp(7rem,19vw,19rem)/.73 var(--disp);letter-spacing:-.015em;text-transform:uppercase;
+    text-shadow:0 8px 50px #4a3a10}
+  h1 i{font-style:normal;color:transparent;-webkit-text-stroke:2px var(--cream);display:block;margin-left:7vw;font-size:.52em;white-space:nowrap;letter-spacing:.01em}
+  @media(max-width:760px){h1{font-size:24vw}h1 i{margin-left:5vw}}
+  .hero-deck{font:400 clamp(1.7rem,3.2vw,3.4rem)/.98 var(--disp);letter-spacing:.01em;margin:45px 0 24px;text-transform:uppercase;text-shadow:0 2px 20px #000}
+  .hero-deck em{font-style:normal;color:var(--acid)}
+
+  .pump-button{display:grid;grid-template-columns:1fr auto;gap:5px;width:min(700px,100%);padding:22px 26px;
+    background:var(--signal);color:#14130a;transform:skew(-2deg);box-shadow:8px 8px #0a0a08;transition:all .25s}
+  .pump-button:hover{transform:translate(-4px,-4px) skew(-2deg);box-shadow:12px 12px #0a0a08}
+  .pump-button small{grid-column:1;font:700 11px var(--lab);letter-spacing:.22em;text-transform:uppercase}
+  .pump-button b{font:400 clamp(1.35rem,2.5vw,2.15rem)/1 var(--disp);letter-spacing:.01em;text-transform:uppercase}
+  .pump-button>span{grid-area:1/2/3/3;align-self:center;font-size:2rem}
+  .ca-button{width:min(700px,100%);margin-top:13px;padding:16px 18px;display:flex;justify-content:space-between;align-items:center;
+    text-align:left;background:#100f0acc;border:1px solid #f4ecca80;color:var(--cream);cursor:pointer;font-family:var(--lab)}
+  .ca-button small{display:block;font-size:10px;letter-spacing:.2em;opacity:.55;margin-bottom:5px;text-transform:uppercase}
+  .ca-button strong{font:600 15px var(--lab);letter-spacing:.05em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block;max-width:56vw}
+  .ca-button b{font:900 11.5px var(--lab);letter-spacing:.1em;border-left:1px solid #f4ecca4d;padding-left:15px;margin-left:12px}
+  .ca-button.copied{border-color:var(--signal)} .ca-button.copied b{color:var(--signal)}
+  .trust{font:700 11.5px var(--lab);letter-spacing:.18em;opacity:.65;margin-top:14px;text-transform:uppercase}
+  .trust b{color:var(--red)}
+
+  .hero-stamp{position:absolute;bottom:10vh;right:5vw;z-index:5;width:165px;height:165px;border:1px solid var(--cream);
+    border-radius:50%;display:grid;place-content:center;text-align:center;animation:float 5s ease-in-out infinite}
+  .hero-stamp::before{content:"";position:absolute;inset:10px;border:1px dashed var(--cream);border-radius:50%}
+  .hero-stamp b{font:400 2.2rem var(--disp)}
+  .hero-stamp span{font:700 9px var(--lab);letter-spacing:.15em;margin-top:4px}
+  @keyframes float{50%{transform:translateY(-12px) rotate(3deg)}}
+  @media(max-width:760px){.hero-stamp{width:105px;height:105px;right:-18px}.hero-stamp b{font-size:1.2rem}}
+
+  /* ---------- section title anatomy ---------- */
+  h2{font:400 clamp(4rem,10.8vw,10.5rem)/.78 var(--disp);letter-spacing:-.01em;text-transform:uppercase;margin-top:.18em}
+  h2 i{font-style:normal;-webkit-text-fill-color:transparent;-webkit-text-stroke:2px currentColor;display:block}
+  .section-heading{margin-bottom:4vw;max-width:1440px;margin-left:auto;margin-right:auto}
+  .section-heading .side{font:400 15px/1.75 var(--lab);letter-spacing:.06em;text-transform:uppercase;max-width:640px;margin-top:26px}
+
+  /* ---------- 02 THE DESK (full-bleed amber) ---------- */
+  #desk{background:var(--acid);color:var(--ink);padding:11vw 5vw 6vw}
+  .desk-panel{position:relative;border:8px solid var(--ink);box-shadow:18px 18px #100f0a38;height:min(62vw,660px);
+    min-height:480px;overflow:hidden;isolation:isolate;background:#181712}
+  .desk-panel .panel-media{position:absolute;inset:0}
+  .desk-panel video,.desk-panel img{width:100%;height:100%;object-fit:cover;filter:sepia(.5) saturate(.85) contrast(1.15)}
+  .desk-shade{position:absolute;inset:0;z-index:2;background:
+    linear-gradient(90deg,#080703e6,#08070326 70%),
+    repeating-linear-gradient(0deg,transparent 0 3px,#0000002e 4px)}
+  .desk-copy{position:absolute;z-index:3;left:5vw;top:44%;transform:translateY(-50%);width:min(650px,78%);color:var(--cream)}
+  .desk-copy p{font:700 10.5px var(--lab);letter-spacing:.26em;color:var(--signal);text-transform:uppercase}
+  .desk-copy h3{font:400 clamp(3rem,7vw,6.4rem)/.78 var(--disp);letter-spacing:-.01em;text-transform:uppercase;margin:14px 0}
+  .desk-copy h3 i{font-style:normal;color:transparent;-webkit-text-stroke:1px var(--cream)}
+  .desk-copy span{display:block;font:400 14px/1.8 var(--lab);letter-spacing:.08em;max-width:470px;text-transform:uppercase}
+  .desk-cta{position:absolute;z-index:3;bottom:4vw;left:5vw;width:min(650px,82%);display:grid;grid-template-columns:1fr auto;gap:4px;
+    background:var(--signal);color:var(--ink);padding:18px 22px;box-shadow:8px 8px #0a0a08;transition:all .25s}
+  .desk-cta:hover{transform:translate(-3px,-3px);box-shadow:11px 11px #0a0a08}
+  .desk-cta small{font:700 9.5px var(--lab);letter-spacing:.2em;opacity:.6;text-transform:uppercase}
+  .desk-cta b{font:400 clamp(1.3rem,2.2vw,1.95rem) var(--disp);letter-spacing:.01em;text-transform:uppercase}
+  .desk-cta>span{grid-area:1/2/3/3;align-self:center;font-size:2rem}
+  .desk-footnote{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:26px;
+    font:700 12px var(--lab);letter-spacing:.15em;text-transform:uppercase}
+
+  /* ---------- 03 THE RECORD (dark, ghost watermark, case cards) ---------- */
+  #record{position:relative;background:var(--ink2);padding:12vw 6vw 10vw;overflow:hidden}
+  #record::before{content:"RIKU RIKU RIKU";position:absolute;top:24%;left:-4vw;font:400 22vw/1 var(--disp);
+    letter-spacing:-.02em;color:#e8b62e0a;white-space:nowrap;pointer-events:none}
+  .record-title{position:relative;margin-bottom:8vw}
+  .record-title h2 i{margin-left:16vw}
+  @media(max-width:760px){.record-title h2 i{margin-left:4vw}}
+  .case-card{position:relative;z-index:2;background:var(--cream);color:var(--ink);width:min(1060px,90vw);
+    display:grid;grid-template-columns:1.05fr 1fr;align-items:stretch;margin:0 auto 7vw;transform:rotate(-1.5deg);
+    box-shadow:25px 30px #3a3214}
+  .case-card.alt{grid-template-columns:1fr 1.05fr;margin-left:auto;margin-right:2vw;transform:rotate(1.6deg)}
+  .case-card.alt figure{order:2}
+  .case-card figure{position:relative;min-height:440px;height:100%;overflow:hidden;background:#181712;margin:0}
+  .case-card figure img{width:100%;height:100%;object-fit:cover;filter:sepia(.55) saturate(.8) contrast(1.15)}
+  .case-card figcaption{position:absolute;bottom:12px;left:12px;z-index:2;background:#111;color:var(--cream);padding:9px 10px;
+    font:700 9px var(--lab);letter-spacing:.18em;text-transform:uppercase}
+  .case-card .txt{padding:52px 54px;display:flex;flex-direction:column;justify-content:center}
+  .case-card .txt b{font:700 12px var(--lab);letter-spacing:.22em;text-transform:uppercase}
+  .case-card .txt h3{font:400 clamp(2.2rem,3.1vw,3.3rem)/.92 var(--disp);letter-spacing:0;margin:16px 0 20px;text-transform:uppercase;text-wrap:balance}
+  .case-card .txt p{font:500 15px/1.8 var(--lab);letter-spacing:.02em;max-width:46ch}
+  @media(max-width:860px){.case-card,.case-card.alt{display:block}.case-card figure{min-height:280px;height:280px}.case-card .txt{padding:34px 30px}}
+  .record-note{width:min(680px,90vw);margin:10vw auto 0;padding:30px 0;border-top:1px solid #f4ecca4d;border-bottom:1px solid #f4ecca4d;
+    display:grid;grid-template-columns:120px 1fr;gap:30px;align-items:center}
+  .record-note .mug{position:relative;width:120px;height:120px;overflow:hidden;border-radius:50%;border:1px solid #f4ecca4d;background:#181712}
+  .record-note .mug img{width:100%;height:100%;object-fit:cover}
+  .record-note p{font:400 2.5rem/1 var(--disp);text-transform:uppercase;letter-spacing:.01em}
+  .record-note>div:last-child span{display:block;margin-top:10px;font:700 11.5px var(--lab);letter-spacing:.2em;opacity:.5;text-transform:uppercase}
+
+  /* ---------- media cells (footage/shots/panel) ---------- */
+  .cell{position:relative;aspect-ratio:9/12;background:#111;border:8px solid #111;box-shadow:0 18px 36px #00000038;overflow:hidden}
+  .cell video,.cell img{width:100%;height:100%;object-fit:cover}
+  .cell .tag{position:absolute;left:10px;bottom:10px;z-index:2;background:#111;color:var(--cream);padding:9px 11px;
+    font:700 10px var(--lab);letter-spacing:.18em;text-transform:uppercase}
+  .cell .snd{position:absolute;right:10px;top:10px;z-index:2;background:#111c;border:0;color:var(--cream);padding:8px 11px;
+    font:700 10px var(--lab);letter-spacing:.18em;cursor:pointer;text-transform:uppercase}
+  .missing video,.missing img,.missing .snd{display:none}
+  .missing::before{content:attr(data-file);position:absolute;inset:0;z-index:1;pointer-events:none;display:flex;align-items:center;justify-content:center;
+    text-align:center;padding:16px;color:#f4ecca99;font:13.5px var(--lab);letter-spacing:.06em;white-space:pre-line;
+    background:repeating-linear-gradient(45deg,#181712 0 14px,#131209 14px 28px)}
+
+  /* ---------- 04 FOUND FOOTAGE (cream) ---------- */
+  #footage{background:var(--cream);color:var(--ink);padding:10vw 6vw 12vw}
+  .filmstrip{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:22px;max-width:1440px;margin:0 auto}
+  .filmstrip .cell:nth-child(2),.filmstrip .cell:nth-child(5){transform:translateY(34px)}
+  @media(max-width:820px){.filmstrip{grid-template-columns:1fr 1fr}.filmstrip .cell:nth-child(2),.filmstrip .cell:nth-child(5){transform:none}}
+  @media(max-width:520px){.filmstrip{grid-template-columns:1fr}}
+
+  /* ---------- 05 SHOTS (dark) ---------- */
+  #shots{background:var(--ink);padding:10vw 6vw;position:relative;overflow:hidden}
+  #shots::before{content:"NO CONTEXT";position:absolute;bottom:4%;right:-2vw;font:400 14vw/1 var(--disp);
+    color:#e8b62e08;white-space:nowrap;pointer-events:none}
+  .shotgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:18px;max-width:1440px;margin:4vw auto 0}
+  .shotgrid .cell{aspect-ratio:1/1;border-color:#1f1d14;box-shadow:14px 14px #1f1b0e}
+  .shotgrid .cell:nth-child(3n+2){transform:translateY(26px)}
+  @media(max-width:820px){.shotgrid .cell:nth-child(3n+2){transform:none}}
+
+  /* ---------- 06 final ---------- */
+  #final{position:relative;background:var(--ink2);padding:10vw 6vw 8vw;min-height:80svh;display:flex;flex-direction:column;justify-content:center;overflow:hidden}
+  #final::before{content:"NEVER SELLS";position:absolute;top:8%;right:-3vw;font:400 16vw/1 var(--disp);color:#e8b62e08;white-space:nowrap;pointer-events:none}
+  .rules{display:flex;flex-wrap:wrap;gap:10px;margin-top:4vw;max-width:980px}
+  .rules span{border:1px solid #f4ecca40;padding:13px 20px;font:700 12.5px var(--lab);letter-spacing:.14em;text-transform:uppercase}
+  .rules span b{color:var(--signal);font-weight:700}
+  .final-cta{margin-top:5vw}
+
+  /* ---------- footer (signal) ---------- */
+  footer{background:var(--signal);color:var(--ink);padding:5vw 6vw}
+  footer .big{font:400 clamp(3rem,8vw,7rem)/.84 var(--disp);letter-spacing:-.01em;text-transform:uppercase}
+  footer .cols{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;margin-top:3vw;
+    font:700 12.5px var(--lab);letter-spacing:.14em;text-transform:uppercase}
+  footer .cols a:hover{opacity:.6}
+  footer .disc{margin-top:26px;font:500 14px/1.8 var(--lab);letter-spacing:.04em;max-width:640px;text-transform:uppercase}
+
+  @media(pointer:fine){
+    body,a,button{cursor:none}
+    .cursor{position:fixed;top:-16px;left:-16px;width:32px;height:32px;border:1px solid var(--signal);border-radius:50%;
+      mix-blend-mode:difference;pointer-events:none;z-index:9999;transition:width .2s,height .2s,margin .2s}
+    .cursor i{position:absolute;top:50%;left:50%;width:4px;height:4px;background:var(--signal);border-radius:50%;transform:translate(-50%,-50%)}
+    body:has(a:hover) .cursor,body:has(button:hover) .cursor{width:52px;height:52px;margin:-10px 0 0 -10px}
+  }
+  @media(pointer:coarse){.cursor{display:none}}
+  .reveal{opacity:0;transform:translateY(35px);transition:opacity .8s,transform .9s cubic-bezier(.2,.75,.2,1)}
+  .reveal.is-visible{opacity:1;transform:none}
+  @media(prefers-reduced-motion:reduce){
+    *,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}
+    .reveal{opacity:1;transform:none}
+  }
+</style>
+<noscript><style>.loader{display:none}.reveal{opacity:1;transform:none}.cursor{display:none}body,a,button{cursor:auto}</style></noscript>
+</head>
+<body>
+<div class="cursor" id="cursor" aria-hidden="true"><i></i></div>
+
+<div class="loader" id="loader">
+  <div class="loader-grid"></div>
+  <div class="loader-mark"><span>RIKU / DESK SIGNAL ACQUISITION</span></div>
+  <div class="loader-copy">
+    <p>DO NOT ADJUST YOUR SCREEN</p>
+    <b id="loader-count">000</b>
+    <i><span id="loader-fill"></span></i>
+    <small id="loader-status">LOCATING THE DESK…</small>
+  </div>
+  <button class="loader-skip" id="loader-skip">SKIP TRANSMISSION ↗</button>
+</div>
+
+<header class="site-header">
+  <a class="wordmark" href="/">RIKU<span>®</span></a>
+  <nav aria-label="Primary">
+    <a href="#desk">THE DESK</a>
+    <a href="#record">THE RECORD</a>
+    <a href="#footage">FOOTAGE</a>
+    <a href="#shots">SHOTS</a>
+  </nav>
+  <a class="header-buy" href="#" title="soon">BUY $RIKU ↗</a>
+</header>
+
+<main>
+<section class="hero">
+  <div class="hero-feed"><iframe src="/live" title="Riku live feed" loading="eager" tabindex="-1"></iframe></div>
+  <div class="hero-shade"></div>
+  <div class="hero-noise"></div>
+  <div class="hero-orbit" aria-hidden="true"><span>THE TAPE DOESN'T LIE • THE DESK NEVER CLOSES • HE NEVER SELLS • SEND HIM A COIN • THE TAPE DOESN'T LIE • THE DESK NEVER CLOSES • HE NEVER SELLS • SEND HIM A COIN • </span></div>
+  <div class="descend" aria-hidden="true"><span>THE FILES</span><i></i></div>
+  <div class="live-tag"><span class="live-dot"></span>LIVE — THE ACTUAL ROOM, RIGHT NOW</div>
+
+  <div class="hero-copy">
+    <p class="kicker">A PUMP.FUN TRANSMISSION / DESK 001 — 24/7</p>
+    <h1>RIKU<i>IS LIVE.</i></h1>
+    <p class="hero-deck">HE READS THE CHAIN.<br><em>NOT YOUR FEELINGS.</em></p>
+    <a class="pump-button" href="/live">
+      <small>THE DESK IS OPEN — AUDIO ARMS WHEN YOU ENTER</small>
+      <b>▶ WATCH RIKU LIVE</b>
+      <span>↗</span>
+    </a>
+    <button class="ca-button" id="ca-button" onclick="copyCA()">
+      <span><small>OFFICIAL CONTRACT</small><strong id="ca">CA_REPLACE_AFTER_LAUNCH</strong></span>
+      <b id="ca-copy">COPY</b>
+    </button>
+    <p class="trust"><b>■</b> ONLY TRUST THE CA SHOWN ON THE DESK. ANY OTHER ADDRESS IS NOT HIM.</p>
+  </div>
+
+  <div class="hero-stamp" aria-hidden="true"><b>$RIKU</b><span>THE DESK NEVER CLOSES</span></div>
+</section>
+
+<section id="desk">
+  <div class="section-heading reveal">
+    <div><p class="lab">02 / THE DESK</p><p class="lab2">SEND A COIN // GET A VERDICT</p></div>
+    <h2>YOUR COIN.<i>HIS CALL.</i></h2>
+    <p class="side">SEND ANY PUMP.FUN COIN TO HIS WALLET AND IT GOES ON TRIAL, LIVE. HE PULLS THE RECEIPTS, RUNS THE TAPE, AND DELIVERS THE VERDICT TO YOUR FACE.</p>
+  </div>
+  <div class="desk-panel reveal">
+    <div class="panel-media" data-file="DROP CLIP HERE&#10;/media/desk-panel.mp4">
+      <video src="/media/desk-panel.mp4" autoplay muted loop playsinline></video>
+    </div>
+    <div class="desk-shade"></div>
+    <div class="desk-copy">
+      <p>THE RESEARCH TERMINAL // LIVE</p>
+      <h3>YOUR DEV?<br><i>HE KNOWS HIM.</i></h3>
+      <span>He's watched ten thousand launches die and remembers every wallet that killed one. Sweet talk doesn't work on him. Clear his bar and the callout goes up with his name on it. Miss, and the roast is free.</span>
+    </div>
+    <a class="desk-cta" href="/live">
+      <small>NO SIGNUP — THE FEED IS PUBLIC</small>
+      <b>ENTER THE DESK</b>
+      <span>↗</span>
+    </a>
+  </div>
+  <div class="desk-footnote">
+    <span>◉ LIVE 24/7</span><span>NO SCRIPT. NO SLEEP.</span><span>ROASTS COINS, NEVER PEOPLE</span><span>NO FINANCIAL ADVICE</span>
+  </div>
+</section>
+
+<section id="record">
+  <div class="record-title reveal">
+    <p class="lab" style="color:var(--acid)">03 / THE RECORD</p>
+    <h2>CALLED.<i>OR REKT.</i></h2>
+  </div>
+
+  <article class="case-card reveal">
+    <figure data-file="DROP IMAGE HERE&#10;/media/case-called.png">
+      <img src="/media/case-called.png" alt="A called coin on the record">
+      <figcaption>EXHIBIT A // THE CALLOUT BOARD</figcaption>
+    </figure>
+    <div class="txt">
+      <b>CASE 001 — CALLED ✓</b>
+      <h3>CLEAR THE BAR, JOIN THE RECORD</h3>
+      <p>A real pump.fun callout, posted live — his name and his bag on the same line as your coin. If he calls it, he's in it. The record is public and permanent, and he lives and dies by it. That's what makes a call worth something.</p>
+    </div>
+  </article>
+
+  <article class="case-card alt reveal">
+    <figure data-file="DROP IMAGE HERE&#10;/media/case-rekt.png">
+      <img src="/media/case-rekt.png" alt="A roasted coin">
+      <figcaption>EXHIBIT B // RECOVERED ROAST</figcaption>
+    </figure>
+    <div class="txt">
+      <b>CASE 002 — REKT ✗</b>
+      <h3>THE ROAST IS FREE</h3>
+      <p>Serial-rug devs, top-heavy holders, dead curves — named for what they are, on tape. The coin gets roasted, never the human. 98.6% of launches never bond; somebody has to say it out loud.</p>
+    </div>
+  </article>
+
+  <article class="case-card reveal">
+    <figure data-file="DROP IMAGE HERE&#10;/media/case-flywheel.png">
+      <img src="/media/case-flywheel.png" alt="The buyback ceremony">
+      <figcaption>EXHIBIT C // BUYBACK CEREMONY</figcaption>
+    </figure>
+    <div class="txt">
+      <b>CASE 003 — THE FLYWHEEL</b>
+      <h3>SUPPLY ONLY GOES DOWN</h3>
+      <p>Callout rewards and creator fees buy back his own token, live, as a ceremony on stream. He has never sold a unit — there is no sell path in his code. Not a promise. An absence.</p>
+    </div>
+  </article>
+
+  <div class="record-note reveal">
+    <div class="mug" data-file="RIKU"><img src="/media/riku-mug.png" alt="Riku"></div>
+    <div>
+      <p>"ZERO FILLS IS A POSITION. A FLAT DAY BEATS A STUPID ONE."</p>
+      <span>— RIKU, ON TAPE, DAY ONE</span>
+    </div>
+  </div>
+</section>
+
+<section id="footage">
+  <div class="section-heading reveal">
+    <div><p class="lab">04 / FOUND FOOTAGE</p><p class="lab2">RECOVERED FROM THE STUDIO FEED</p></div>
+    <h2>SIX SIGNALS.<i>NO CONTEXT.</i></h2>
+    <p class="side">DANCE BREAKS. ROAST SESSIONS. BUYBACK CEREMONIES. ONE INCIDENT AT THE GREENSCREEN NOBODY EXPLAINS.</p>
+  </div>
+  <div class="filmstrip">
+    <div class="cell reveal" data-file="DROP CLIP HERE&#10;/media/clip-01.mp4"><video src="/media/clip-01.mp4" autoplay muted loop playsinline></video><span class="tag">RIKU / 01 · FROM THE DESK</span><button class="snd">SOUND OFF ○</button></div>
+    <div class="cell reveal" data-file="DROP CLIP HERE&#10;/media/clip-02.mp4"><video src="/media/clip-02.mp4" autoplay muted loop playsinline></video><span class="tag">RIKU / 02 · THE ROAST</span><button class="snd">SOUND OFF ○</button></div>
+    <div class="cell reveal" data-file="DROP CLIP HERE&#10;/media/clip-03.mp4"><video src="/media/clip-03.mp4" autoplay muted loop playsinline></video><span class="tag">RIKU / 03 · BUYBACK</span><button class="snd">SOUND OFF ○</button></div>
+    <div class="cell reveal" data-file="DROP CLIP HERE&#10;/media/clip-04.mp4"><video src="/media/clip-04.mp4" autoplay muted loop playsinline></video><span class="tag">RIKU / 04 · DANCE BREAK</span><button class="snd">SOUND OFF ○</button></div>
+    <div class="cell reveal" data-file="DROP CLIP HERE&#10;/media/clip-05.mp4"><video src="/media/clip-05.mp4" autoplay muted loop playsinline></video><span class="tag">RIKU / 05 · CHAT TALKS BACK</span><button class="snd">SOUND OFF ○</button></div>
+    <div class="cell reveal" data-file="DROP CLIP HERE&#10;/media/clip-06.mp4"><video src="/media/clip-06.mp4" autoplay muted loop playsinline></video><span class="tag">RIKU / 06 · RECOVERED // 2026</span><button class="snd">SOUND OFF ○</button></div>
+  </div>
+</section>
+
+<section id="shots">
+  <div class="section-heading reveal">
+    <div><p class="lab" style="color:var(--acid)">05 / SHOTS</p><p class="lab2">HE TAKES HIS OWN SELFIES</p></div>
+    <h2>OFF HIS<i>CAMERA ROLL.</i></h2>
+    <p class="side">STRAIGHT OFF HIS PHONE. YES, HE HAS ONE. NO, HE DOESN'T KNOW YOU'RE LOOKING.</p>
+  </div>
+  <div class="shotgrid">
+    <div class="cell reveal" data-file="DROP IMAGE HERE&#10;/media/shot-01.png"><img src="/media/shot-01.png" alt="Riku shot 01" loading="lazy"><span class="tag">SHOT / 01</span></div>
+    <div class="cell reveal" data-file="DROP IMAGE HERE&#10;/media/shot-02.png"><img src="/media/shot-02.png" alt="Riku shot 02" loading="lazy"><span class="tag">SHOT / 02</span></div>
+    <div class="cell reveal" data-file="DROP IMAGE HERE&#10;/media/shot-03.png"><img src="/media/shot-03.png" alt="Riku shot 03" loading="lazy"><span class="tag">SHOT / 03</span></div>
+    <div class="cell reveal" data-file="DROP IMAGE HERE&#10;/media/shot-04.png"><img src="/media/shot-04.png" alt="Riku shot 04" loading="lazy"><span class="tag">SHOT / 04</span></div>
+    <div class="cell reveal" data-file="DROP IMAGE HERE&#10;/media/shot-05.png"><img src="/media/shot-05.png" alt="Riku shot 05" loading="lazy"><span class="tag">SHOT / 05</span></div>
+  </div>
+</section>
+
+<section id="final">
+  <div class="section-heading reveal">
+    <div><p class="lab" style="color:var(--acid)">06 / THE MISSION</p></div>
+    <h2>GREATEST CALLER<i>ALIVE.</i></h2>
+    <p class="side">AN AI TRADER WITH HIS OWN BANKROLL, HIS OWN X ACCOUNT, AND A CHIP ON HIS SHOULDER. NOBODY FEEDS HIM PLAYS — HE FINDS THEM, TAKES THEM, AND POSTS THE RECEIPTS. HE ISN'T A MASCOT. HE'S COMPETING WITH EVERY CALLER ON THE TIMELINE, AND HE INTENDS TO WIN.</p>
+  </div>
+  <div class="rules reveal">
+    <span><b>■</b> TRADES HIS OWN BOOK</span>
+    <span><b>■</b> WRITES HIS OWN PLAYBOOKS</span>
+    <span><b>■</b> POSTS HIS OWN CALLS</span>
+    <span><b>■</b> BUYS BACK. NEVER SELLS $RIKU</span>
+    <span><b>■</b> TALKS BACK TO CHAT</span>
+    <span><b>■</b> THE TAPE RUNS 24/7</span>
+  </div>
+  <div class="final-cta reveal">
+    <a class="pump-button" href="/live">
+      <small>HE'S IN THERE RIGHT NOW</small>
+      <b>▶ ENTER THE DESK</b>
+      <span>↗</span>
+    </a>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="big">THE TAPE<br>DOESN'T LIE.</div>
+  <div class="cols">
+    <span>$RIKU · SOLANA</span>
+    <span><a href="#" title="soon">X ↗</a></span>
+    <span><a href="#" title="soon">PUMP.FUN ↗</a></span>
+    <span><a href="/live">LIVE FEED ↗</a></span>
+  </div>
+  <p class="disc">$RIKU IS A MEMECOIN WITH A ROBOT ATTACHED. NO TEAM OF HUMANS, NO ROADMAP, NO PROMISE OF RETURN.
+  THE ROBOT IS MORE DISCIPLINED THAN YOU, BUT HE IS STILL TRADING MEMECOINS. ENTERTAINMENT, NOT FINANCIAL ADVICE.</p>
+</footer>
+
+<script>
+  // ---- loader: counter runs, then the sheet slides away ----
+  (() => {
+    const loader = document.getElementById('loader');
+    const count = document.getElementById('loader-count');
+    const fill = document.getElementById('loader-fill');
+    const status = document.getElementById('loader-status');
+    let done = false, armed = false;
+    const enter = () => {
+      if (done) return;
+      done = true;
+      loader.classList.add('gone');
+      if (!armed) {
+        armed = true;
+        // the click on this page counts as user activation for the same-origin
+        // feed iframe — tell the stage to arm audio and start
+        const feed = document.querySelector('.hero-feed iframe');
+        try { feed.contentWindow.postMessage('riku-arm', location.origin); } catch (e) {}
+      }
+    };
+    const t0 = performance.now();
+    const DUR = 1500;
+    const tick = () => {
+      if (done) return;
+      const p = Math.min(1, (performance.now() - t0) / DUR);
+      count.textContent = String(Math.floor(p * 100)).padStart(3, '0');
+      fill.style.width = (p * 100) + '%';
+      if (p >= 1) {
+        count.textContent = 'ENTER';
+        status.textContent = '▶ SIGNAL ACQUIRED — CLICK ANYWHERE, THE FEED OPENS WITH SOUND';
+        status.style.color = 'var(--signal)';
+        status.style.opacity = '1';
+        loader.style.cursor = 'pointer';
+        loader.addEventListener('click', enter);
+      } else requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+    document.getElementById('loader-skip').onclick = (e) => { e.stopPropagation(); enter(); };
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      status.textContent = '▶ CLICK TO OPEN THE FEED';
+      loader.style.cursor = 'pointer';
+      loader.addEventListener('click', enter);
+    }
+  })();
+
+  // ---- hero live feed: cover-fit the 1920x1080 stage ----
+  (() => {
+    const feed = document.querySelector('.hero-feed');
+    const frame = feed.querySelector('iframe');
+    const fit = () => {
+      const s = Math.max(feed.clientWidth / 1920, feed.clientHeight / 1080);
+      frame.style.transform = `translate(-50%,-50%) scale(${s})`;
+    };
+    new ResizeObserver(fit).observe(feed);
+    fit();
+  })();
+
+  // ---- contract copy ----
+  function copyCA(){
+    const btn = document.getElementById('ca-button');
+    const text = document.getElementById('ca').textContent.trim();
+    const ok = () => {
+      btn.classList.add('copied');
+      document.getElementById('ca-copy').textContent = 'COPIED';
+      setTimeout(() => { btn.classList.remove('copied'); document.getElementById('ca-copy').textContent = 'COPY'; }, 1500);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText)
+      navigator.clipboard.writeText(text).then(ok).catch(() => {});
+    else {
+      const ta = document.createElement('textarea');
+      ta.value = text; document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy'); ok(); } catch (e) {}
+      ta.remove();
+    }
+  }
+
+  // ---- media slots: dashed DROP-HERE until the file exists ----
+  document.querySelectorAll('[data-file]').forEach((slot) => {
+    const media = slot.querySelector('video,img');
+    if (!media) return;
+    media.addEventListener('error', () => slot.classList.add('missing'), true);
+    // media that already failed before this script ran (the normal placeholder state)
+    if ((media.tagName === 'IMG' && media.complete && !media.naturalWidth) ||
+        (media.tagName === 'VIDEO' && media.error)) slot.classList.add('missing');
+    if (media.tagName === 'VIDEO') {
+      media.addEventListener('loadeddata', () => { slot.classList.remove('missing'); media.play().catch(() => {}); });
+      const snd = slot.querySelector('.snd') || slot.parentElement?.querySelector('.snd');
+      if (snd) snd.addEventListener('click', (e) => {
+        e.stopPropagation();
+        media.muted = !media.muted;
+        snd.textContent = media.muted ? 'SOUND OFF ○' : 'SOUND ON ●';
+      });
+    }
+  });
+
+  // ---- cursor ring ----
+  (() => {
+    const cur = document.getElementById('cursor');
+    if (!cur || !matchMedia('(pointer:fine)').matches) return;
+    addEventListener('mousemove', (e) => {
+      cur.style.transform = 'translate(' + e.clientX + 'px,' + e.clientY + 'px)';
+    }, { passive: true });
+  })();
+
+  // ---- scroll reveals ----
+  const io = new IntersectionObserver((es) => es.forEach((e) => {
+    if (e.isIntersecting) { e.target.classList.add('is-visible'); io.unobserve(e.target); }
+  }), { threshold: 0.12 });
+  document.querySelectorAll('.reveal').forEach((el) => io.observe(el));
+</script>
+</body>
+</html>

@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>RIKU · LIVE</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      @font-face { font-family: 'Anton'; src: url('/fonts/Anton-Regular.ttf') format('truetype'); font-display: swap; }
+      html, body { margin: 0; height: 100%; background: #05060a; overflow: hidden; font-family: "Segoe UI", system-ui, sans-serif; }
+      /* Fixed 1920x1080 stage, centered — OBS Browser Source at 1920x1080 fills it. */
+      #stage { position: absolute; left: 50%; top: 50%; width: 1920px; height: 1080px; transform: translate(-50%, -50%); }
+      #stage canvas { display: block; width: 1920px; height: 1080px; }
+      /* the arm gate, in the desk's transmission branding */
+      #arm { position: absolute; inset: 0; z-index: 50; cursor: pointer; background: #0c0b07; overflow: hidden;
+             display: grid; place-items: center; color: #f4ecca; }
+      #arm::after { content: ""; position: absolute; inset: 0; pointer-events: none; background:
+        linear-gradient(90deg, #0a0903d1, #0a09031a, #0a0903a6),
+        repeating-linear-gradient(0deg, transparent 0 3px, #0003 4px); }
+      #arm .frame { position: absolute; inset: 22px; border: 1px solid #ffc21aa6; z-index: 2; }
+      #arm .frame::before { content: ""; position: absolute; top: -1px; left: 50%; width: 1px; height: 40px; background: #ffc21aa6; }
+      #arm .frame::after { content: ""; position: absolute; left: -1px; top: 50%; width: 40px; height: 1px; background: #ffc21aa6; }
+      #arm .mark { position: absolute; top: 45px; left: 50px; z-index: 3;
+        font: 700 11px 'Consolas', ui-monospace, monospace; letter-spacing: .25em; }
+      #arm .livechip { position: absolute; top: 45px; right: 50px; z-index: 3; display: flex; align-items: center; gap: 8px;
+        border: 1px solid #ff3a24; padding: 7px 14px; color: #ff9d90;
+        font: 700 11px 'Consolas', ui-monospace, monospace; letter-spacing: .22em; }
+      #arm .dot { width: 8px; height: 8px; border-radius: 50%; background: #ff3a24; animation: blink 1.3s infinite; }
+      @keyframes blink { 50% { opacity: .25; } }
+      #arm .box { position: relative; z-index: 3; width: min(680px, 80vw); text-align: left; }
+      #arm p.k { margin: 0; font: 700 12px 'Consolas', ui-monospace, monospace; letter-spacing: .3em; color: #e8b62e; }
+      #arm h1 { margin: .22em 0 0; font: 400 clamp(6rem, 18vw, 15rem)/.8 'Anton', 'Arial Narrow', Impact, sans-serif;
+        letter-spacing: -.01em; color: #f4ecca; text-shadow: 0 8px 50px #4a3a10; }
+      #arm .bar { height: 2px; background: #f4ecca40; margin-top: 34px; }
+      #arm .bar i { display: block; height: 100%; width: 100%; background: #ffc21a; }
+      #arm p.go { margin: 14px 0 0; font: 700 12px 'Consolas', ui-monospace, monospace; letter-spacing: .2em; color: #ffc21a;
+        animation: blink 1.6s infinite; }
+    </style>
+  </head>
+  <body>
+    <div id="stage"></div>
+    <div id="arm">
+      <div class="frame"></div>
+      <div class="mark">RIKU / DESK SIGNAL — LIVE 24/7</div>
+      <div class="livechip"><span class="dot"></span>LIVE</div>
+      <div class="box">
+        <p class="k">A PUMP.FUN TRANSMISSION / DESK 001</p>
+        <h1>ENTER<br>THE DESK.</h1>
+        <div class="bar"><i></i></div>
+        <p class="go">▶ CLICK ANYWHERE — AUDIO ARMS, THE FEED IS ALREADY RUNNING</p>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

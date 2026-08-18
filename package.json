@@ -1,0 +1,19 @@
+{
+  "name": "quant",
+  "private": true,
+  "version": "0.1.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "description": "QUANT — the AI caller. Livestreamed pump.fun character: receives coins, researches them on-stream, calls out the ones it likes, buys back its own token with the earnings.",
+  "workspaces": [
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "server": "npm run dev -w server",
+    "client": "npm run dev -w client",
+    "build": "npm run build -w client",
+    "start": "npm run start -w server"
+  }
+}

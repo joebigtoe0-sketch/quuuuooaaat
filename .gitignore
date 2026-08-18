@@ -1,0 +1,21 @@
+# --- secrets: NEVER commit ---
+.env
+.env.*
+!.env.example
+
+# --- runtime state (all of it lives in server/data; on Railway this is the volume) ---
+# wallet.json, LIVE marker, journals, positions, strategies, TTS audio, clips, sim runs
+server/data/
+
+# --- deps / build output ---
+node_modules/
+dist/
+*.log
+
+# --- local-only asset pipeline (huge; GLB exports ARE committed in client/public/chars) ---
+sidekick/raw/
+sidekick/catalog/
+sidekick/previews/
+
+# --- editor / local misc ---
+pekrrlerlerler2.code-workspace

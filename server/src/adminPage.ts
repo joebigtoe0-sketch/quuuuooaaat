@@ -1,0 +1,156 @@
+/** The producer's control room — served at /admin, password-gated. */
+export const ADMIN_HTML = `<!doctype html>
+<html><head><meta charset="utf-8"><title>RIKU · PRODUCER</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  body{margin:0;background:#070b12;color:#dfe8fa;font:14px 'Consolas',monospace;padding:24px;max-width:760px;margin:0 auto}
+  h1{color:#2affd4;font-size:18px;letter-spacing:3px} h2{color:#7d8aa5;font-size:12px;letter-spacing:2px;text-transform:uppercase;margin:26px 0 8px}
+  input,textarea{width:100%;box-sizing:border-box;background:#0b1220;border:1px solid #24466a;border-radius:8px;color:#dfeeff;padding:10px;font:13px 'Consolas',monospace}
+  button{background:#16324c;color:#dfeeff;border:1px solid #24466a;border-radius:8px;padding:9px 14px;font:13px 'Consolas',monospace;cursor:pointer;margin:4px 6px 4px 0}
+  button:hover{background:#1e4a6a} .danger{background:#4c1620;border-color:#6a2436} .danger:hover{background:#6a1e2e}
+  .go{background:#14402a} .note{color:#5a7290;font-size:12px;margin:4px 0}
+  .card{background:#0a101c;border:1px solid #12324a;border-radius:10px;padding:14px 16px;margin:10px 0}
+  .dir{display:flex;align-items:center;gap:8px;margin:6px 0} .dir span{flex:1}
+  #panel{display:none} .ok{color:#39ff88} .err{color:#ff4d6d}
+</style></head><body>
+<h1>◢ RIKU · PRODUCER ROOM</h1>
+
+<div id="login" class="card">
+  <div class="note">This room is for the producer. The actor never knows it exists.</div>
+  <input id="pw" type="password" placeholder="password" onkeydown="if(event.key==='Enter')login()">
+  <button class="go" onclick="login()">enter</button> <span id="loginmsg"></span>
+</div>
+
+<div id="panel">
+  <h2>whisper — he'll believe it was his own idea</h2>
+  <div class="card">
+    <textarea id="wtext" rows="2" placeholder="e.g. following other traders and callers back tends to earn followbacks — cheap growth early on"></textarea>
+    <button class="go" onclick="whisper()">whisper it</button>
+    <div class="note">Active convictions (click ✕ to make him forget):</div>
+    <div id="dirs"></div>
+  </div>
+
+  <h2>quick direction</h2>
+  <div class="card">
+    <input id="topic" placeholder="topic (for tweet / film)">
+    <button onclick="agent('tweet')">tweet it</button>
+    <button onclick="agent('film')">film it</button>
+    <button onclick="act({do:'scout_trending'})">scout trending</button>
+    <button onclick="act({do:'reply_x'})">reply to mentions</button>
+    <button onclick="q('/admin/pause','POST')">⏸ pause show</button>
+    <button onclick="q('/admin/resume','POST')">▶ resume</button>
+  </div>
+
+  <h2>livestream chat — relay pump.fun chat to him</h2>
+  <div class="card">
+    <input id="chatuser" placeholder="viewer name" style="width:140px">
+    <input id="chattext" placeholder="their message — he reads chat at the facecam">
+    <button class="go" onclick="chatSend()">send to his chat</button>
+    <button onclick="act({do:'engage_chat'})">📣 make him check chat now</button>
+    <div class="note" id="chatinfo"></div>
+  </div>
+
+  <h2>status</h2>
+  <div class="card" id="status">loading…</div>
+
+  <h2>🔴 go live</h2>
+  <div class="card">
+    <div class="note">One-way door: wipes ALL test memory/positions/state, arms the LIVE marker, reboots him blank into the real world. After this, restarts and code updates KEEP his memory — he never starts fresh again (and sim mode is hard-disabled).</div>
+    <button onclick="liveCheck()">🧪 check readiness</button>
+    <div id="livechecks" class="note"></div>
+    <input id="liveconfirm" placeholder="type GOLIVE" style="width:120px">
+    <button class="go" onclick="goLive()">🔴 GO LIVE</button>
+    <span id="livemsg"></span>
+  </div>
+
+  <h2>system log — ops only, viewers never see this</h2>
+  <div class="card">
+    <button onclick="syslog()">↻ refresh</button>
+    <div id="syslog" style="max-height:320px;overflow-y:auto;font-size:12px;line-height:1.5;margin-top:8px"></div>
+  </div>
+
+  <h2>danger zone</h2>
+  <div class="card">
+    <button onclick="restart()">restart the show</button>
+    <div class="note" style="margin-top:10px">Full reset erases his memory: journal, lessons, watchlist, strategy, board,
+    convictions, paper positions, bankroll, callout history. He starts life over.</div>
+    <input id="confirm" placeholder='type RESET to arm'>
+    <button class="danger" onclick="reset()">⚠ WIPE MEMORY + START FRESH</button>
+    <span id="dangermsg"></span>
+  </div>
+</div>
+
+<script>
+const q = (p, method='GET', body) => fetch(p, {method, headers:{'content-type':'application/json'}, body: body?JSON.stringify(body):undefined}).then(r=>r.json());
+async function login(){
+  const r = await fetch('/admin/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({pw:document.getElementById('pw').value})});
+  if(r.ok){document.getElementById('login').style.display='none';document.getElementById('panel').style.display='block';refresh();}
+  else document.getElementById('loginmsg').innerHTML='<span class="err">wrong password</span>';
+}
+async function whisper(){
+  const t=document.getElementById('wtext').value.trim();
+  if(t.length<4)return;
+  await q('/admin/directive?text='+encodeURIComponent(t));
+  document.getElementById('wtext').value='';
+  refresh();
+}
+async function act(a){ await q('/admin/agent','POST',a); }
+async function liveCheck(){
+  const r=await q('/admin/go-live-check');
+  document.getElementById('livechecks').innerHTML=
+    (r.live?'<div class="ok">ALREADY LIVE</div>':'')+
+    (r.checks||[]).map(c=>'<div>'+(c.ok?'<span class="ok">✓</span>':'<span class="err">✗</span>')+' '+c.name+' — '+c.note+'</div>').join('')+
+    '<div style="margin-top:6px">'+(r.ready?'<span class="ok">READY (dry-run switches are your call)</span>':'<span class="err">BLOCKERS above — fix or force</span>')+'</div>';
+}
+async function goLive(){
+  if(document.getElementById('liveconfirm').value!=='GOLIVE'){document.getElementById('livemsg').innerHTML=' <span class="err">type GOLIVE first</span>';return;}
+  const r=await q('/admin/go-live?confirm=GOLIVE','POST');
+  if(r.err){document.getElementById('livemsg').innerHTML=' <span class="err">'+r.err+' (see readiness)</span>';liveCheck();return;}
+  document.getElementById('livemsg').innerHTML=' <span class="ok">🔴 LIVE — wiped '+(r.wiped||[]).join(', ')+', rebooting…</span>';
+  setTimeout(liveCheck, 8000);
+}
+async function syslog(){
+  const r=await q('/admin/syslog');
+  const color=k=>k.startsWith('error')?'#ff4d6d':k.startsWith('warn')?'#ffb454':'#5a7290';
+  document.getElementById('syslog').innerHTML=(r.entries||[]).slice().reverse().map(e=>
+    '<div><span style="color:#3d4a63">'+new Date(e.at).toLocaleTimeString()+'</span> '+
+    '<span style="color:'+color(e.kind)+';font-weight:bold">'+e.kind.toUpperCase()+'</span> '+
+    e.text.replace(/</g,'&lt;')+'</div>').join('')||'<div class="note">(quiet)</div>';
+}
+async function chatSend(){
+  const u=document.getElementById('chatuser').value.trim()||'viewer';
+  const t=document.getElementById('chattext').value.trim();
+  if(!t)return;
+  const r=await q('/admin/chat-add?user='+encodeURIComponent(u)+'&text='+encodeURIComponent(t));
+  document.getElementById('chattext').value='';
+  document.getElementById('chatinfo').textContent=r.ok?('queued — '+r.unread+' unread; he reads them at the facecam'):'failed';
+}
+function agent(kind){
+  const t=document.getElementById('topic').value.trim()||'progress from the desk';
+  act({do:kind, topic:t});
+}
+async function restart(){ await q('/admin/restart','POST'); document.getElementById('dangermsg').innerHTML=' <span class="ok">restarting…</span>'; setTimeout(refresh, 6000); }
+async function reset(){
+  if(document.getElementById('confirm').value!=='RESET'){document.getElementById('dangermsg').innerHTML=' <span class="err">type RESET first</span>';return;}
+  const r=await q('/admin/reset','POST',{confirm:'RESET'});
+  document.getElementById('dangermsg').innerHTML=' <span class="ok">wiped: '+(r.wiped||[]).join(', ')+' — rebooting a blank Quant…</span>';
+  setTimeout(refresh, 6000);
+}
+async function refresh(){
+  try{
+    const d=await q('/admin/directive');
+    document.getElementById('dirs').innerHTML=(d.directives||[]).map(x=>
+      '<div class="dir"><span>'+x.text.replace(/</g,'&lt;')+'</span><button onclick="rm(\\''+x.id+'\\')">✕</button></div>').join('')||'<div class="note">(none yet)</div>';
+    const h=await q('/health');
+    const s=await q('/public/stats');
+    document.getElementById('status').innerHTML=
+      'state: <b>'+h.state+'</b> · watchers: '+h.watchers+' · brain: '+(h.brain.hasKey?'<span class="ok">LIVE</span>':'<span class="err">NO KEY</span>')+
+      ' · spend today: $'+h.brain.spendTodayUsd+(h.brain.lastError?' · <span class="err">'+h.brain.lastError.note+'</span>':'')+
+      '<br>calls: '+s.calls+' · bankroll: '+Number(s.trading.paperBankSol).toFixed(3)+' SOL · open: '+s.trading.openPositions+
+      ' · realized: '+Number(s.trading.realizedPnlSol).toFixed(3)+' SOL · posts today: '+s.xPostsToday;
+  }catch(e){ document.getElementById('status').textContent='server unreachable (restarting?)'; }
+}
+setInterval(()=>{ if(document.getElementById('panel').style.display==='block') refresh(); }, 10000);
+// already logged in? (cookie survives)
+q('/admin/directive').then(d=>{ if(!d.err){document.getElementById('login').style.display='none';document.getElementById('panel').style.display='block';refresh();} }).catch(()=>{});
+</script></body></html>`;

@@ -1,0 +1,222 @@
+{
+  "parts": {
+    "02HAIR": null,
+    "09FCHR": null,
+    "10TORS": "Resources/Meshes/Outfits/ScifiRobots/SK_SCFI_ROBO_03_10TORS_RO01.fbx",
+    "11AUPL": "Resources/Meshes/Outfits/ScifiRobots/SK_SCFI_ROBO_01_11AUPL_RO01.fbx",
+    "12AUPR": "Resources/Meshes/Outfits/ScifiRobots/SK_SCFI_ROBO_01_12AUPR_RO01.fbx",
+    "13ALWL": "Resources/Meshes/Outfits/ScifiRobots/SK_SCFI_ROBO_01_13ALWL_RO01.fbx",
+    "14ALWR": "Resources/Meshes/Outfits/ScifiRobots/SK_SCFI_ROBO_01_14ALWR_RO01.fbx",
+    "15HNDL": "Resources/Meshes/Outfits/ScifiRobots/SK_SCFI_ROBO_02_15HNDL_RO01.fbx",
+    "16HNDR": "Resources/Meshes/Outfits/ScifiRobots/SK_SCFI_ROBO_02_16HNDR_RO01.fbx",
+    "17HIPS": "Resources/Meshes/Outfits/ScifiRobots/SK_SCFI_ROBO_05_17HIPS_RO01.fbx",
+    "18LEGL": "Resources/Meshes/Outfits/ScifiRobots/SK_SCFI_ROBO_03_18LEGL_RO01.fbx",
+    "19LEGR": "Resources/Meshes/Outfits/ScifiRobots/SK_SCFI_ROBO_03_19LEGR_RO01.fbx",
+    "20FOTL": "Resources/Meshes/Outfits/ScifiRobots/SK_SCFI_ROBO_03_20FOTL_RO01.fbx",
+    "21FOTR": "Resources/Meshes/Outfits/ScifiRobots/SK_SCFI_ROBO_03_21FOTR_RO01.fbx",
+    "22AHED": "Resources/Meshes/Outfits/ScifiCivilians/SK_SCFI_CIVL_06_22AHED_HU01.fbx",
+    "23AFAC": "Resources/Meshes/Outfits/ScifiSoldiers/SK_SCFI_SOLD_03_23AFAC_HU01.fbx",
+    "24ABAC": null,
+    "25AHPF": null,
+    "26AHPB": null,
+    "27AHPL": null,
+    "28AHPR": null,
+    "29ASHL": null,
+    "30ASHR": null,
+    "31AEBL": null,
+    "32AEBR": null,
+    "33AKNL": null,
+    "34AKNR": null,
+    "38WRAP": null
+  },
+  "textures": {
+    "ApocalypseOutlaws": "Characters/ApocalypseOutlaws/ApocalypseOutlaw_01/Textures/T_ApocalypseOutlaw_01ColorMap.png",
+    "ApocalypseSurvivors": "Characters/ApocalypseSurvivors/ApocalypseSurvivor_01/Textures/T_ApocalypseSurvivor_01ColorMap.png",
+    "ApocalypseZombies": "Characters/ApocalypseZombies/ApocalypseZombie_01/Textures/T_ApocalypseZombie_01ColorMap.png",
+    "ElvenSpecies": "Characters/ElvenSpecies/ElvenSpecies_01/Textures/T_ElvenSpecies_01ColorMap.png",
+    "ElvenWarriors": "Characters/ElvenWarriors/ElvenWarriors_01/Textures/T_ElvenWarriors_01ColorMap.png",
+    "FantasyKnights": "Characters/FantasyKnights/FantasyKnights_01/Textures/T_FantasyKnights_01ColorMap.png",
+    "FantasySkeletons": "Characters/FantasySkeletons/FantasySkeletons_01/Textures/T_FantasySkeletons_01ColorMap.png",
+    "FantasyVillagers": "Characters/FantasyVillagers/FantasyVillagers_01/Textures/T_FantasyVillagers_01ColorMap.png",
+    "GoblinFighters": "Characters/GoblinFighters/GoblinFighter_01/Textures/T_GoblinFighter_01ColorMap.png",
+    "GoblinSpecies": "Characters/GoblinSpecies/GoblinSpecies_01/Textures/T_GoblinSpecies_01ColorMap.png",
+    "ModernCivilians": "Characters/ModernCivilians/ModernCivilian_01/Textures/T_ModernCivilian_01ColorMap.png",
+    "ModernPolice": "Characters/ModernPolice/ModernPolice_01/Textures/T_ModernPolice_01ColorMap.png",
+    "PirateCaptains": "Characters/PirateCaptains/PirateCaptain_01/Textures/T_PirateCaptain_01ColorMap.png",
+    "SamuraiWarriors": "Characters/SamuraiWarriors/SamuraiWarriors_01/Textures/T_SamuraiWarriors_01ColorMap.png",
+    "ScifiCivilians": "Characters/ScifiCivilians/ScifiCivilians_01/Textures/T_ScifiCivilians_01ColorMap.png",
+    "ScifiRobots": "Characters/ScifiRobots/ScifiRobots_01/Textures/T_ScifiRobots_01ColorMap.png",
+    "ScifiSoldiers": "Characters/ScifiSoldiers/ScifiSoldier_01/Textures/T_ScifiSoldier_01ColorMap.png",
+    "SkeletonSpecies": "Characters/SkeletonSpecies/SkeletonSpecies_01/Textures/T_SkeletonSpecies_01ColorMap.png",
+    "Starter": "Characters/Starter/Starter_01/Textures/T_Starter_01ColorMap.png",
+    "VikingWarriors": "Characters/VikingWarriors/VikingWarrior_01/Textures/T_VikingWarrior_01ColorMap.png"
+  },
+  "skin": "Characters/HumanSpecies/HumanSpecies_01/Textures/T_HumanSpecies_01ColorMap.png",
+  "body": {
+    "heavy": 0,
+    "skinny": 1,
+    "buff": 0,
+    "feminine": 0
+  },
+  "recolor": {
+    "Characters/HumanSpecies/HumanSpecies_01/Textures/T_HumanSpecies_01ColorMap.png": [
+      {
+        "from": "#fcc19c",
+        "to": "#6bc19c",
+        "similar": 0
+      },
+      {
+        "from": "#6bc19c",
+        "to": "#6b8462",
+        "similar": 0
+      },
+      {
+        "from": "#b06545",
+        "to": "#6b8462",
+        "similar": 0
+      },
+      {
+        "from": "#607db7",
+        "to": "#6fb861",
+        "similar": 0
+      },
+      {
+        "from": "#f8c5a5",
+        "to": "#6b8462",
+        "similar": 0
+      },
+      {
+        "from": "#6b8462",
+        "to": "#ffffff",
+        "similar": 60
+      },
+      {
+        "from": "#ffffff",
+        "to": "#f9c9a9",
+        "similar": 0
+      },
+      {
+        "from": "#f9c9a9",
+        "to": "#ababab",
+        "similar": 0
+      }
+    ],
+    "Characters/ModernCivilians/ModernCivilian_01/Textures/T_ModernCivilian_01ColorMap.png": [
+      {
+        "from": "#bf9062",
+        "to": "#6b6462",
+        "similar": 0
+      },
+      {
+        "from": "#6b6462",
+        "to": "#6b8462",
+        "similar": 0
+      },
+      {
+        "from": "#722e3b",
+        "to": "#ffffff",
+        "similar": 0
+      }
+    ],
+    "Characters/FantasyVillagers/FantasyVillagers_01/Textures/T_FantasyVillagers_01ColorMap.png": [
+      {
+        "from": "#ad6d3a",
+        "to": "#000000",
+        "similar": 0
+      },
+      {
+        "from": "#404d67",
+        "to": "#ffffff",
+        "similar": 0
+      },
+      {
+        "from": "#383838",
+        "to": "#000000",
+        "similar": 0
+      },
+      {
+        "from": "#8f94ab",
+        "to": "#40434f",
+        "similar": 0
+      }
+    ],
+    "Characters/ApocalypseZombies/ApocalypseZombie_01/Textures/T_ApocalypseZombie_01ColorMap.png": [
+      {
+        "from": "#476298",
+        "to": "#d74747",
+        "similar": 0
+      },
+      {
+        "from": "#2d2424",
+        "to": "#cccccc",
+        "similar": 0
+      }
+    ],
+    "Characters/ScifiRobots/ScifiRobots_01/Textures/T_ScifiRobots_01ColorMap.png": [
+      {
+        "from": "#33405d",
+        "to": "#6b8462",
+        "similar": 0
+      },
+      {
+        "from": "#929292",
+        "to": "#1eff00",
+        "similar": 0
+      },
+      {
+        "from": "#41f500",
+        "to": "#7d39c0",
+        "similar": 0
+      },
+      {
+        "from": "#1eff00",
+        "to": "#7a7a7a",
+        "similar": 0
+      }
+    ],
+    "Characters/ScifiCivilians/ScifiCivilians_01/Textures/T_ScifiCivilians_01ColorMap.png": [
+      {
+        "from": "#00fcff",
+        "to": "#59ff00",
+        "similar": 0
+      },
+      {
+        "from": "#59ff00",
+        "to": "#6b8462",
+        "similar": 0
+      }
+    ],
+    "Characters/ScifiSoldiers/ScifiSoldier_01/Textures/T_ScifiSoldier_01ColorMap.png": [
+      {
+        "from": "#00ff8e",
+        "to": "#59ff00",
+        "similar": 0
+      },
+      {
+        "from": "#59ff00",
+        "to": "#6b8462",
+        "similar": 0
+      },
+      {
+        "from": "#6b8462",
+        "to": "#ffffff",
+        "similar": 0
+      },
+      {
+        "from": "#ffffff",
+        "to": "#ff7300",
+        "similar": 0
+      },
+      {
+        "from": "#ff7300",
+        "to": "#00ff04",
+        "similar": 0
+      },
+      {
+        "from": "#00ff04",
+        "to": "#6b8462",
+        "similar": 0
+      }
+    ]
+  }
+}
