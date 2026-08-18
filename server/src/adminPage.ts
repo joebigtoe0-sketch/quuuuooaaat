@@ -170,7 +170,7 @@ function loadSample(){
     "print('own mc history points: ' + data.mcHistory.length);";
 }
 async function setBoard(){
-  const lines=document.getElementById('boardtext').value.split('\n').map(l=>l.trim()).filter(Boolean).slice(0,7);
+  const lines=document.getElementById('boardtext').value.split('\\n').map(l=>l.trim()).filter(Boolean).slice(0,7);
   if(!lines.length){document.getElementById('boardmsg').innerHTML=' <span class="err">write at least one goal</span>';return;}
   await q('/admin/agent','POST',{do:'board',lines});
   document.getElementById('boardmsg').innerHTML=' <span class="ok">board updated — he\\'ll show it next time he\\'s at the board</span>';

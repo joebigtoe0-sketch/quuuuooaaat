@@ -64,9 +64,20 @@ const SellDecision = z.object({
 
 export class Planner {
   private timer: NodeJS.Timeout | null = null;
-  private recentResearch = new Map<string, { score: number; at: number; symbol: string }>();
+  // PERSISTED across reboots (data/kv via store) — an in-memory-only map got
+  // wiped on every restart, so a still-trending token was re-researched from
+  // scratch after each deploy/crash. Load whatever survived the last session.
+  private recentResearch = new Map<string, { score: number; at: number; symbol: string }>(
+    (() => {
+      try { return JSON.parse(store.kvGet("research:recent") ?? "[]"); } catch { return []; }
+    })(),
+  );
 
   constructor(private enqueue: (a: QueuedAction) => void) {}
+
+  private saveResearch(): void {
+    store.kvSet("research:recent", JSON.stringify([...this.recentResearch.entries()]));
+  }
 
   noteResearch(mint: string, symbol: string, score: number): void {
     this.recentResearch.set(mint, { score, at: Date.now(), symbol });
@@ -80,6 +91,7 @@ export class Planner {
       const oldest = [...this.recentResearch.entries()].sort((a, b) => a[1].at - b[1].at)[0];
       this.recentResearch.delete(oldest[0]);
     }
+    this.saveResearch();
   }
   researchScore(mint: string): number | null {
     const r = this.recentResearch.get(mint);
