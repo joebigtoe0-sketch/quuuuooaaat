@@ -63,6 +63,9 @@ export const budgetExhausted = () => spendToday() >= DAILY_USD;
 const FALLBACK_MODEL =
   process.env.LLM_MODEL_FALLBACK ?? (/^claude-/i.test(MODEL) ? "claude-sonnet-5" : "");
 let fallbackLogAt = 0;
+// circuit breaker: once the primary 529s, stop paying a failed attempt on
+// every call — go straight to the fallback and re-probe the primary later.
+let primaryDownUntil = 0;
 
 export async function callFreeform(
   system: string,
@@ -71,13 +74,18 @@ export async function callFreeform(
   model: string = MODEL,
 ): Promise<string | null> {
   if (!hasApiKey() || budgetExhausted()) return null;
+  const haveFallback = FALLBACK_MODEL.length > 0 && FALLBACK_MODEL !== model;
+  if (haveFallback && model === MODEL && Date.now() < primaryDownUntil) {
+    return (await attemptOnce(system, user, maxTokens, FALLBACK_MODEL)).text;
+  }
   const first = await attemptOnce(system, user, maxTokens, model);
   if (first.text !== null || !first.overloaded) return first.text;
-  if (FALLBACK_MODEL && FALLBACK_MODEL !== model) {
+  if (haveFallback) {
+    primaryDownUntil = Date.now() + 5 * 60_000;
     if (Date.now() - fallbackLogAt > 600_000) {
       fallbackLogAt = Date.now();
       const { log } = await import("../log.js");
-      log.warn("brain", `${model} overloaded — using ${FALLBACK_MODEL} until it recovers`);
+      log.warn("brain", `${model} overloaded — routing to ${FALLBACK_MODEL}, re-probing the primary every 5 min`);
     }
     return (await attemptOnce(system, user, maxTokens, FALLBACK_MODEL)).text;
   }
@@ -131,6 +139,7 @@ async function attemptOnce(
     const inTok = data.usage?.prompt_tokens ?? 0;
     const outTok = data.usage?.completion_tokens ?? 0;
     store.kvSet(spendKey(), String(spendToday() + (inTok * PRICE_IN + outTok * PRICE_OUT) / 1e6));
+    lastCallError = null; // the pipeline is healthy — don't parade a stale error
     return { text: data.choices?.[0]?.message?.content?.trim() ?? null, overloaded: false };
   } catch (e) {
     lastCallError = { note: String(e).slice(0, 120), at: Date.now() };
