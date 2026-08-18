@@ -118,6 +118,22 @@ export class Beats {
     sender: string | null,
     conveyorPick: boolean,
   ): Promise<Analysis | null> {
+    // HIS OWN COIN is never researched, never graded, never roasted. Someone
+    // sending him $RIKU (or the launch allocation landing) gets the doctrine.
+    if (cfg.ownMint && mint === cfg.ownMint) {
+      this.loco.stateName = "INBOX";
+      await this.loco.walkTo("vault");
+      this.hub.cue({ t: "camera", preset: "vault" });
+      this.hub.cue({ t: "anim", clip: "heart_hands" });
+      await this.sayVaried(
+        "Hold on — that's not a submission, that's MY coin. $RIKU. The house token. Here's the doctrine, write it down: most of my supply goes back to you — airdrops and burns, over time. Creator rewards and callout rewards? Buybacks. It only flows one way. I have never sold a unit and there is no sell path in my code. That's not a promise, that's architecture.",
+        "excited",
+      );
+      memory.journal("own", `received $RIKU (my own coin) — recited the doctrine instead of researching it`);
+      this.hub.cue({ t: "camera", preset: "wide" });
+      this.loco.stateName = "IDLE";
+      return null;
+    }
     this.loco.stateName = conveyorPick ? "CONVEYOR" : "INBOX";
     log.info("beat", `research ${mint.slice(0, 8)}… (${conveyorPick ? "conveyor" : "inbox"})`);
 
