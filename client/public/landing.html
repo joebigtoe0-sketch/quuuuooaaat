@@ -270,7 +270,7 @@
     <a href="#footage">FOOTAGE</a>
     <a href="#shots">SHOTS</a>
   </nav>
-  <a class="header-buy" href="#" title="soon">BUY $RIKU ↗</a>
+  <a class="header-buy" data-pump href="#" title="soon">BUY $RIKU ↗</a>
 </header>
 
 <main>
@@ -438,8 +438,8 @@
   <div class="big">THE TAPE<br>DOESN'T LIE.</div>
   <div class="cols">
     <span>$RIKU · SOLANA</span>
-    <span><a href="#" title="soon">X ↗</a></span>
-    <span><a href="#" title="soon">PUMP.FUN ↗</a></span>
+    <span><a href="https://x.com/QuantRiku" target="_blank" rel="noopener">X ↗</a></span>
+    <span><a data-pump href="#" title="soon">PUMP.FUN ↗</a></span>
     <span><a href="/live">LIVE FEED ↗</a></span>
   </div>
   <p class="disc">$RIKU IS A MEMECOIN WITH A ROBOT ATTACHED. NO TEAM OF HUMANS, NO ROADMAP, NO PROMISE OF RETURN.
@@ -447,6 +447,20 @@
 </footer>
 
 <script>
+  // ---- LAUNCH DAY: paste the contract address here — that's the only edit.
+  // Fills the OFFICIAL CONTRACT button and points every pump.fun link
+  // (BUY $RIKU header + footer) at https://pump.fun/coin/<CA>.
+  const CA = '';
+  if (CA) {
+    document.getElementById('ca').textContent = CA;
+    document.querySelectorAll('a[data-pump]').forEach((a) => {
+      a.href = 'https://pump.fun/coin/' + CA;
+      a.target = '_blank';
+      a.rel = 'noopener';
+      a.removeAttribute('title');
+    });
+  }
+
   // ---- loader: counter runs, then the sheet slides away ----
   (() => {
     const loader = document.getElementById('loader');
