@@ -115,7 +115,7 @@ app.post("/admin/go-live", async (req, res) => {
   if (!pre.ready && String(req.query.force ?? "") !== "1")
     return res.status(409).json({ err: "preflight has blockers — fix them or pass force=1", ...pre });
   const wiped: string[] = [];
-  for (const f of ["agent_memory.json", "positions.json", "state.json"]) {
+  for (const f of ["agent_memory.json", "positions.json", "state.json", "strategies.json"]) {
     try { fs.rmSync(path.join(cfg.dataDir, f)); wiped.push(f); } catch {}
   }
   fs.writeFileSync(LIVE_FILE, JSON.stringify({ liveSince: new Date().toISOString(), ownMint: mint || cfg.ownMint }, null, 1));
@@ -129,7 +129,7 @@ app.post("/admin/reset", (req, res) => {
   if (String((req.body as any)?.confirm ?? req.query.confirm ?? "") !== "RESET")
     return res.status(400).json({ err: 'pass confirm=RESET' });
   const wiped: string[] = [];
-  for (const f of ["agent_memory.json", "positions.json", "state.json"]) {
+  for (const f of ["agent_memory.json", "positions.json", "state.json", "strategies.json"]) {
     try {
       fs.rmSync(path.join(cfg.dataDir, f));
       wiped.push(f);
