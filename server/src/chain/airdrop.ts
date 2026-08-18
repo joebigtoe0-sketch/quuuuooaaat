@@ -4,11 +4,20 @@ import {
   createAssociatedTokenAccountIdempotentInstruction,
   createTransferInstruction,
   createBurnInstruction,
+  TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
 import { getConnection, sendIxs } from "./solana.js";
 import { ensureWallet } from "./wallet.js";
 import { cfg } from "../config.js";
 import { log } from "../log.js";
+
+/** $RIKU is a Token-2022 mint; other tokens are classic SPL. Every ATA / transfer
+ *  / burn ix must target the mint's ACTUAL owner program or it's "incorrect
+ *  program id". Resolve it once and thread it through. */
+async function mintProgram(mint: PublicKey): Promise<PublicKey> {
+  const info = await getConnection().getAccountInfo(mint);
+  return info?.owner ?? TOKEN_PROGRAM_ID;
+}
 
 /**
  * Real on-chain airdrop: split `amountUi` of his own token among the current
@@ -27,6 +36,7 @@ export async function executeAirdrop(
   const conn = getConnection();
   const payer = ensureWallet();
   const mint = new PublicKey(cfg.ownMint);
+  const tokenProgram = await mintProgram(mint);
 
   // top token accounts for the mint (up to 20), then resolve their owners
   const largest = await conn.getTokenLargestAccounts(mint, "confirmed");
@@ -52,14 +62,14 @@ export async function executeAirdrop(
     .filter((s) => s.tokens >= 1000);
   if (!shares.length) return { ...out, why: "all shares under the 1k-token dust floor" };
 
-  const srcAta = getAssociatedTokenAddressSync(mint, payer.publicKey);
+  const srcAta = getAssociatedTokenAddressSync(mint, payer.publicKey, false, tokenProgram);
   for (let i = 0; i < shares.length; i += 5) {
     const batch = shares.slice(i, i + 5);
     const ixs = batch.flatMap((s) => {
-      const dstAta = getAssociatedTokenAddressSync(mint, s.owner);
+      const dstAta = getAssociatedTokenAddressSync(mint, s.owner, false, tokenProgram);
       return [
-        createAssociatedTokenAccountIdempotentInstruction(payer.publicKey, dstAta, s.owner, mint),
-        createTransferInstruction(srcAta, dstAta, payer.publicKey, BigInt(s.tokens) * 1_000_000n),
+        createAssociatedTokenAccountIdempotentInstruction(payer.publicKey, dstAta, s.owner, mint, tokenProgram),
+        createTransferInstruction(srcAta, dstAta, payer.publicKey, BigInt(s.tokens) * 1_000_000n, [], tokenProgram),
       ];
     });
     try {
@@ -85,10 +95,11 @@ export async function executeBurn(
   if (amountUi < 1) return { ok: false, burned: 0, why: "nothing to burn" };
   const payer = ensureWallet();
   const mint = new PublicKey(cfg.ownMint);
-  const srcAta = getAssociatedTokenAddressSync(mint, payer.publicKey);
+  const tokenProgram = await mintProgram(mint);
+  const srcAta = getAssociatedTokenAddressSync(mint, payer.publicKey, false, tokenProgram);
   try {
     const sig = await sendIxs(
-      [createBurnInstruction(srcAta, mint, payer.publicKey, BigInt(Math.floor(amountUi)) * 1_000_000n)],
+      [createBurnInstruction(srcAta, mint, payer.publicKey, BigInt(Math.floor(amountUi)) * 1_000_000n, [], tokenProgram)],
       payer,
       150_000,
     );
