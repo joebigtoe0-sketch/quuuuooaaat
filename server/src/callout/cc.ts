@@ -22,7 +22,9 @@ let cached: { token: string; expMs: number } | null = null;
 // the refresh endpoint on the first callout.
 import fs from "node:fs";
 import path from "node:path";
-const TOKEN_FILE = path.join(process.cwd(), "data", "cc_token.json");
+import { cfg } from "../config.js";
+// the real data dir (server/data — the Railway volume), NOT process.cwd()/data
+const TOKEN_FILE = path.join(cfg.dataDir, "cc_token.json");
 function loadDiskToken(): void {
   if (cached) return;
   try {

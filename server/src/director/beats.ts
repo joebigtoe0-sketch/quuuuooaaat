@@ -397,7 +397,9 @@ export class Beats {
     this.hub.cue({ t: "camera", preset: "bigscreen" });
     this.loco.sit(true); // the station point IS the chair — always sit here
     this.hub.cue({ t: "anim", clip: "point" });
-    const res = await Promise.race([executeCallout(a.mint, text), realSleep(15000).then(() => null)]);
+    // 30s: postCallout backs off through CC rate-limit 429s (~15-18s worst case);
+    // a 15s watchdog was killing it mid-retry. He stays animated at the screen.
+    const res = await Promise.race([executeCallout(a.mint, text), realSleep(30000).then(() => null)]);
     const ok = res?.ok ?? false;
     const entryMc = a.state.kind === "curve" || a.state.kind === "amm" ? a.state.mcSol : null;
     if (ok) {
