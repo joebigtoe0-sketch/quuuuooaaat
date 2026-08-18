@@ -193,9 +193,7 @@
   .cell video,.cell img{width:100%;height:100%;object-fit:cover}
   .cell .tag{position:absolute;left:10px;bottom:10px;z-index:2;background:#111;color:var(--cream);padding:9px 11px;
     font:700 10px var(--lab);letter-spacing:.18em;text-transform:uppercase}
-  .cell .snd{position:absolute;right:10px;top:10px;z-index:2;background:#111c;border:0;color:var(--cream);padding:8px 11px;
-    font:700 10px var(--lab);letter-spacing:.18em;cursor:pointer;text-transform:uppercase}
-  .missing video,.missing img,.missing .snd{display:none}
+  .missing video,.missing img{display:none}
   .missing::before{content:attr(data-file);position:absolute;inset:0;z-index:1;pointer-events:none;display:flex;align-items:center;justify-content:center;
     text-align:center;padding:16px;color:#f4ecca99;font:13.5px var(--lab);letter-spacing:.06em;white-space:pre-line;
     background:repeating-linear-gradient(45deg,#181712 0 14px,#131209 14px 28px)}
@@ -388,12 +386,12 @@
     <p class="side">DANCE BREAKS. ROAST SESSIONS. BUYBACK CEREMONIES. ONE INCIDENT AT THE GREENSCREEN NOBODY EXPLAINS.</p>
   </div>
   <div class="filmstrip">
-    <div class="cell reveal" data-file="DROP CLIP HERE&#10;/media/clip-01.mp4"><video src="/media/clip-01.mp4" autoplay muted loop playsinline></video><span class="tag">RIKU / 01 · FROM THE DESK</span><button class="snd">SOUND OFF ○</button></div>
-    <div class="cell reveal" data-file="DROP CLIP HERE&#10;/media/clip-02.mp4"><video src="/media/clip-02.mp4" autoplay muted loop playsinline></video><span class="tag">RIKU / 02 · THE ROAST</span><button class="snd">SOUND OFF ○</button></div>
-    <div class="cell reveal" data-file="DROP CLIP HERE&#10;/media/clip-03.mp4"><video src="/media/clip-03.mp4" autoplay muted loop playsinline></video><span class="tag">RIKU / 03 · BUYBACK</span><button class="snd">SOUND OFF ○</button></div>
-    <div class="cell reveal" data-file="DROP CLIP HERE&#10;/media/clip-04.mp4"><video src="/media/clip-04.mp4" autoplay muted loop playsinline></video><span class="tag">RIKU / 04 · DANCE BREAK</span><button class="snd">SOUND OFF ○</button></div>
-    <div class="cell reveal" data-file="DROP CLIP HERE&#10;/media/clip-05.mp4"><video src="/media/clip-05.mp4" autoplay muted loop playsinline></video><span class="tag">RIKU / 05 · CHAT TALKS BACK</span><button class="snd">SOUND OFF ○</button></div>
-    <div class="cell reveal" data-file="DROP CLIP HERE&#10;/media/clip-06.mp4"><video src="/media/clip-06.mp4" autoplay muted loop playsinline></video><span class="tag">RIKU / 06 · RECOVERED // 2026</span><button class="snd">SOUND OFF ○</button></div>
+    <div class="cell reveal" data-file="DROP CLIP HERE&#10;/media/clip-01.mp4"><video src="/media/clip-01.mp4" autoplay muted loop playsinline></video><span class="tag">RIKU / 01 · FROM THE DESK</span></div>
+    <div class="cell reveal" data-file="DROP CLIP HERE&#10;/media/clip-02.mp4"><video src="/media/clip-02.mp4" autoplay muted loop playsinline></video><span class="tag">RIKU / 02 · THE ROAST</span></div>
+    <div class="cell reveal" data-file="DROP CLIP HERE&#10;/media/clip-03.mp4"><video src="/media/clip-03.mp4" autoplay muted loop playsinline></video><span class="tag">RIKU / 03 · BUYBACK</span></div>
+    <div class="cell reveal" data-file="DROP CLIP HERE&#10;/media/clip-04.mp4"><video src="/media/clip-04.mp4" autoplay muted loop playsinline></video><span class="tag">RIKU / 04 · DANCE BREAK</span></div>
+    <div class="cell reveal" data-file="DROP CLIP HERE&#10;/media/clip-05.mp4"><video src="/media/clip-05.mp4" autoplay muted loop playsinline></video><span class="tag">RIKU / 05 · CHAT TALKS BACK</span></div>
+    <div class="cell reveal" data-file="DROP CLIP HERE&#10;/media/clip-06.mp4"><video src="/media/clip-06.mp4" autoplay muted loop playsinline></video><span class="tag">RIKU / 06 · RECOVERED // 2026</span></div>
   </div>
 </section>
 
@@ -534,12 +532,6 @@
         (media.tagName === 'VIDEO' && media.error)) slot.classList.add('missing');
     if (media.tagName === 'VIDEO') {
       media.addEventListener('loadeddata', () => { slot.classList.remove('missing'); media.play().catch(() => {}); });
-      const snd = slot.querySelector('.snd') || slot.parentElement?.querySelector('.snd');
-      if (snd) snd.addEventListener('click', (e) => {
-        e.stopPropagation();
-        media.muted = !media.muted;
-        snd.textContent = media.muted ? 'SOUND OFF ○' : 'SOUND ON ●';
-      });
     }
   });
 
