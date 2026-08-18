@@ -50,6 +50,14 @@ export const ADMIN_HTML = `<!doctype html>
     <div class="note" id="chatinfo"></div>
   </div>
 
+  <h2>corkboard — his on-stream goals</h2>
+  <div class="card">
+    <div class="note">one goal per line (max 7). overwrites his board immediately.</div>
+    <textarea id="boardtext" style="width:100%;height:88px" placeholder="pump $RIKU to $1M market cap&#10;become the greatest KOL alive&#10;never sell $RIKU"></textarea>
+    <button class="go" onclick="setBoard()">set the board</button>
+    <span id="boardmsg"></span>
+  </div>
+
   <h2>status</h2>
   <div class="card" id="status">loading…</div>
 
@@ -133,6 +141,12 @@ async function loadQueue(){
 }
 async function rmQueue(queue,i){ await q('/admin/queue-remove?queue='+queue+'&i='+i,'POST'); loadQueue(); }
 async function rm(id){ await q('/admin/directive?remove='+encodeURIComponent(id)); refresh(); }
+async function setBoard(){
+  const lines=document.getElementById('boardtext').value.split('\n').map(l=>l.trim()).filter(Boolean).slice(0,7);
+  if(!lines.length){document.getElementById('boardmsg').innerHTML=' <span class="err">write at least one goal</span>';return;}
+  await q('/admin/agent','POST',{do:'board',lines});
+  document.getElementById('boardmsg').innerHTML=' <span class="ok">board updated — he\\'ll show it next time he\\'s at the board</span>';
+}
 async function loadClips(){
   const r=await q('/admin/clips');
   const rows=(r.clips||[]);

@@ -79,7 +79,7 @@ let mem: Mem = {
     filmsPerDayTarget: 1,
     riskNote: "small positions until the treasury earns bigger ones",
   },
-  board: ["bond my own token", "become the greatest KOL alive", "never sell $RIKU"],
+  board: ["pump $RIKU to $1M market cap", "become the greatest KOL alive", "never sell $RIKU"],
   directives: [],
 };
 try {
