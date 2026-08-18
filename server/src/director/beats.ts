@@ -450,7 +450,7 @@ export class Beats {
       `Vault time. ${sol.toFixed(3)} sol from the war chest goes into my own supply.${dipLine}${why ? ` ${why.slice(0, 100)}` : ""} Watch closely.`,
       "excited",
     );
-    const res = await Promise.race([doBuyback(sol), realSleep(45000).then(() => null)]).catch(() => null);
+    const res = await Promise.race([doBuyback(sol), realSleep(120000).then(() => null)]).catch(() => null);
     if (res && (res as any).ok !== false) this.dir.noteAction("BUYBACK", "QUANT");
     if (res) {
       await this.dir.refreshTreasury();
@@ -993,7 +993,7 @@ export class Beats {
     const useSol = Math.min(sol, sizeCap);
     this.hub.cue({ t: "takeover", view: { kind: "trade", side: "BUY", symbol: sym, sol: useSol, thesis, state: "working" } });
     await sleep(1400);
-    const res = await Promise.race([tradeBuy(mint, sym, useSol, thesis, null, strategyId), realSleep(45_000).then(() => null)]);
+    const res = await Promise.race([tradeBuy(mint, sym, useSol, thesis, null, strategyId), realSleep(120_000).then(() => null)]);
     this.hub.cue({ t: "takeover", view: { kind: "trade", side: "BUY", symbol: sym, sol: useSol, thesis, state: res?.ok ? "filled" : "failed" } });
     await sleep(2000);
     this.hub.cue({ t: "takeover", view: null });
@@ -1023,7 +1023,7 @@ export class Beats {
     this.hub.cue({ t: "camera", preset: "terminal" });
     this.hub.cue({ t: "takeover", view: { kind: "trade", side: "SELL", symbol: sellSym, sol: 0, thesis: reason, state: "working" } });
     await sleep(1200);
-    const res = await Promise.race([tradeSell(mint, fraction, reason), realSleep(45_000).then(() => null)]);
+    const res = await Promise.race([tradeSell(mint, fraction, reason), realSleep(120_000).then(() => null)]);
     this.hub.cue({ t: "takeover", view: { kind: "trade", side: "SELL", symbol: sellSym, sol: res?.solReceived ?? 0, thesis: reason, state: res?.ok ? "filled" : "failed" } });
     await sleep(2000);
     this.hub.cue({ t: "takeover", view: null });

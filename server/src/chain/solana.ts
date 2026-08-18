@@ -82,14 +82,34 @@ export async function sendIxs(
     skipPreflight: false,
     maxRetries: 3,
   });
-  const conf = await connection.confirmTransaction(
-    { signature: sig, blockhash, lastValidBlockHeight },
-    "confirmed",
-  );
-  if (conf.value.err) {
-    throw new Error(`tx failed on-chain: ${JSON.stringify(conf.value.err)} (${sig})`);
+  // confirm, but don't trust a single websocket wait: under congestion it can
+  // throw blockhash-expired even when the tx LANDED. Fall back to polling the
+  // signature status before declaring failure — false "didn't land"s are worse
+  // than a slow confirm.
+  let confErr: unknown = null;
+  try {
+    const conf = await connection.confirmTransaction(
+      { signature: sig, blockhash, lastValidBlockHeight },
+      "confirmed",
+    );
+    if (conf.value.err) {
+      throw new Error(`tx failed on-chain: ${JSON.stringify(conf.value.err)} (${sig})`);
+    }
+    return sig;
+  } catch (e) {
+    confErr = e;
   }
-  return sig;
+  for (let i = 0; i < 12; i++) {
+    try {
+      const st = (await connection.getSignatureStatuses([sig])).value[0];
+      if (st?.err) throw new Error(`tx failed on-chain: ${JSON.stringify(st.err)} (${sig})`);
+      if (st && (st.confirmationStatus === "confirmed" || st.confirmationStatus === "finalized")) return sig;
+    } catch (e) {
+      if (String(e).includes("tx failed on-chain")) throw e;
+    }
+    await new Promise((r) => setTimeout(r, 5000));
+  }
+  throw confErr instanceof Error ? confErr : new Error(`tx not confirmed after polling: ${sig}`);
 }
 
 // ---------- SOL/USD ----------

@@ -32,9 +32,10 @@ export function unreadChat(): number {
   return buf.filter((m) => m.at > lastReadAt).length;
 }
 
-/** Latest messages, marking the buffer read (he "looked at chat"). */
+/** UNREAD messages only (up to n), marking the buffer read — re-reading the
+ *  same lines every facecam visit made him answer old chat twice. */
 export function readChat(n = 8): ChatMsg[] {
-  const msgs = buf.slice(-n);
+  const msgs = buf.filter((m) => m.at > lastReadAt).slice(-n);
   lastReadAt = Date.now();
   return msgs;
 }
