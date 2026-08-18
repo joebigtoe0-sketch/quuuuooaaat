@@ -34,8 +34,13 @@ export const cfg = {
   root,
   dataDir,
   audioDir: path.join(dataDir, "audio"),
-  // QUANT_PORT wins; PORT is what cloud hosts (Railway) inject.
-  port: num("QUANT_PORT", num("PORT", 8490)),
+  // Local: QUANT_PORT (8490) + loopback-only, so the LAN can't reach /admin.
+  // On Railway (RAILWAY_ENVIRONMENT set): the injected PORT wins even if a
+  // pasted .env carries QUANT_PORT, and we bind all interfaces for the proxy.
+  port: process.env.RAILWAY_ENVIRONMENT
+    ? num("PORT", num("QUANT_PORT", 8490))
+    : num("QUANT_PORT", num("PORT", 8490)),
+  host: str("HOST", process.env.RAILWAY_ENVIRONMENT ? "0.0.0.0" : "127.0.0.1"),
 
   // absolute default (server/data/wallet.json); a relative override resolves
   // against the repo root, never the (variable) spawn cwd.

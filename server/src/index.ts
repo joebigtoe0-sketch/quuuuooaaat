@@ -482,8 +482,8 @@ app.get("/admin/agent-status", async (_req, res) => {
   });
 });
 
-server.listen(cfg.port, "127.0.0.1", () => {
-  log.info("quant", `server on http://127.0.0.1:${cfg.port}  (stage: /stage, ws: /ws)`);
+server.listen(cfg.port, cfg.host, () => {
+  log.info("quant", `server on http://${cfg.host}:${cfg.port}  (stage: /stage, ws: /ws)`);
   log.info("quant", `wallet: ${wallet.publicKey.toBase58()}`);
   log.info(
     "quant",
