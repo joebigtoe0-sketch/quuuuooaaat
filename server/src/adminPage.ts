@@ -58,7 +58,7 @@ export const ADMIN_HTML = `<!doctype html>
     <div class="note">THE one-way button. Paste the pre-generated $RIKU contract address and press: it stores the mint (buyback flywheel + own-mc tracking + airdrops), flips CALLOUT/TRADE/AIRDROP dry-runs OFF, injects the CA into the landing page + pump.fun links, wipes ALL test memory/positions/state, arms the LIVE marker, and reboots him into the real world. Restarts after this KEEP his memory (sim mode hard-disabled). No env edits needed.</div>
     <button onclick="liveCheck()">🧪 check readiness</button>
     <div id="livechecks" class="note"></div>
-    <input id="livemint" placeholder="$RIKU contract address (pre-generated)" style="width:340px">
+    <input id="livemint" value="8J15pUS8TcuoUhLeRfrGv8fv8Lkq5sLt5Hitk162pump" placeholder="$RIKU contract address (pre-generated)" style="width:340px">
     <input id="liveconfirm" placeholder="type GOLIVE" style="width:120px">
     <button class="go" onclick="goLive()">🔴 GO LIVE</button>
     <span id="livemsg"></span>
