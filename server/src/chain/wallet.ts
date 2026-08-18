@@ -80,24 +80,29 @@ export async function tokenDisplay(mint: string): Promise<{ symbol: string; imag
   return m;
 }
 
-/** Every SPL token the wallet actually holds (largest first, up to 10). */
+const TOKEN_PROGRAM = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+const TOKEN_2022_PROGRAM = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
+
+/** Every token the wallet actually holds (largest first). Queries BOTH the
+ *  classic SPL and Token-2022 programs — $RIKU and newer pump.fun coins are
+ *  Token-2022, so querying only the classic program hid them entirely. */
 export async function walletHoldings(): Promise<{ mint: string; symbol: string; amount: number; image?: string }[]> {
   const pk = walletPubkey();
   if (!pk) return [];
   try {
-    const res = await getConnection().getParsedTokenAccountsByOwner(
-      pk,
-      { programId: new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA") },
-      "confirmed",
-    );
-    const held = res.value
+    const conn = getConnection();
+    const [classic, t2022] = await Promise.all([
+      conn.getParsedTokenAccountsByOwner(pk, { programId: TOKEN_PROGRAM }, "confirmed"),
+      conn.getParsedTokenAccountsByOwner(pk, { programId: TOKEN_2022_PROGRAM }, "confirmed").catch(() => ({ value: [] as any[] })),
+    ]);
+    const held = [...classic.value, ...t2022.value]
       .map((a) => {
         const info = (a.account.data as any)?.parsed?.info;
         return { mint: String(info?.mint ?? ""), amount: Number(info?.tokenAmount?.uiAmount ?? 0) };
       })
-      .filter((h) => h.amount > 0)
+      .filter((h) => h.amount > 0 && h.mint)
       .sort((a, b) => b.amount - a.amount)
-      .slice(0, 10);
+      .slice(0, 30);
     const out: { mint: string; symbol: string; amount: number; image?: string }[] = [];
     for (const h of held) {
       const d = await tokenDisplay(h.mint);

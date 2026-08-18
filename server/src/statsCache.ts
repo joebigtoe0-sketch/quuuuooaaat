@@ -23,6 +23,7 @@ async function buildWallet(): Promise<any> {
   const { estimateSellSolFor } = await import("./chain/pump.js");
   const [sol, solUsd, real] = await Promise.all([solBalance(), getSolUsd(), walletHoldings()]);
   const priced = new Map<string, number>();
+  const dexSymbol = new Map<string, string>(); // reliable ticker from the market
   if (real.length) {
     try {
       const r = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${real.map((h: any) => h.mint).join(",")}`);
@@ -31,6 +32,8 @@ async function buildWallet(): Promise<any> {
         const m = p?.baseToken?.address;
         const pr = Number(p?.priceUsd);
         if (m && Number.isFinite(pr) && !priced.has(m)) priced.set(m, pr);
+        const sym = p?.baseToken?.symbol;
+        if (m && sym && !dexSymbol.has(m)) dexSymbol.set(m, String(sym));
       }
     } catch {}
   }
@@ -45,15 +48,19 @@ async function buildWallet(): Promise<any> {
     it.pnlPct = basisUsd > 0.01 ? (it.pnlUsd / basisUsd) * 100 : null;
     it.entryUsd = it.amount > 0 && basisUsd > 0 ? basisUsd / it.amount : null;
   };
-  const items: any[] = real.map((h: any) => {
-    const it: any = {
-      symbol: h.symbol, amount: h.amount, image: h.image,
-      valueUsd: priced.has(h.mint) ? priced.get(h.mint)! * h.amount : null, paper: false,
-    };
+  const items: any[] = [];
+  for (const h of real) {
     const p = posByMint.get(h.mint);
+    let valueUsd: number | null = priced.has(h.mint) ? priced.get(h.mint)! * h.amount : null;
+    // dexscreener doesn't index bonding-curve-only tokens yet — for a held
+    // position, fall back to the on-curve sellback value so value + PnL show.
+    if (valueUsd == null && p) {
+      try { valueUsd = (await estimateSellSolFor(new PublicKey(p.mint), BigInt(p.tokensRaw))) * solUsd; } catch {}
+    }
+    const it: any = { symbol: dexSymbol.get(h.mint) ?? h.symbol, amount: h.amount, image: h.image, valueUsd, paper: false };
     if (p) attachPnl(it, p);
-    return it;
-  });
+    items.push(it);
+  }
   // paper positions exist only in the ledger — surface them with the ᴾ marker.
   // Live positions are real token accounts and already appear in the wallet list.
   if (cfg.tradeDryRun) {
