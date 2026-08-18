@@ -16,6 +16,28 @@ const API_KEY =
 
 let cached: { token: string; expMs: number } | null = null;
 
+// Persist the access token across reboots — Railway restarts on every deploy,
+// and the CC refresh endpoint is aggressively rate-limited (429s in bursts). A
+// disk cache means a reboot reuses the still-valid token instead of hammering
+// the refresh endpoint on the first callout.
+import fs from "node:fs";
+import path from "node:path";
+const TOKEN_FILE = path.join(process.cwd(), "data", "cc_token.json");
+function loadDiskToken(): void {
+  if (cached) return;
+  try {
+    const j = JSON.parse(fs.readFileSync(TOKEN_FILE, "utf8"));
+    if (j?.token && j?.expMs > Date.now() + 60_000) cached = j;
+  } catch {}
+}
+function saveDiskToken(): void {
+  try {
+    fs.mkdirSync(path.dirname(TOKEN_FILE), { recursive: true });
+    fs.writeFileSync(TOKEN_FILE, JSON.stringify(cached));
+  } catch {}
+}
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 function headers(auth?: string): Record<string, string> {
   const h: Record<string, string> = {
     accept: "*/*",
@@ -53,31 +75,32 @@ async function request(method: string, apiPath: string, body?: unknown, auth?: s
 }
 
 export async function getAccessToken(): Promise<string> {
+  loadDiskToken();
   if (cached && Date.now() < cached.expMs - 60_000) return cached.token;
   const refresh = (process.env.QUANT_CC_REFRESH_TOKEN || "").trim();
   if (!refresh) throw new Error("QUANT_CC_REFRESH_TOKEN is not set");
 
-  const shapes: [string, Record<string, string>][] = [
-    ["refreshToken", { refreshToken: refresh }],
-    ["token", { token: refresh }],
-    ["refresh_token", { refresh_token: refresh }],
-  ];
-  const errors: string[] = [];
-  for (const [name, body] of shapes) {
+  // ONE shape (refreshToken — the verified-correct one; probing three tripled
+  // the request rate into a rate-limited endpoint). Retry 429s with backoff.
+  let lastErr = "";
+  for (let attempt = 0; attempt < 4; attempt++) {
+    if (attempt) await sleep(4000 * attempt); // 4s, 8s, 12s
     try {
-      const j = await request("POST", "/api/v1/users/token/refresh", body);
+      const j = await request("POST", "/api/v1/users/token/refresh", { refreshToken: refresh });
       const token = j?.accessToken || j?.access_token || j?.token;
       if (!token) {
-        errors.push(`${name}: 200 but no token`);
+        lastErr = "200 but no token in response";
         continue;
       }
       cached = { token, expMs: jwtExpiryMs(token) || Date.now() + 30 * 60_000 };
+      saveDiskToken();
       return token;
     } catch (e: any) {
-      errors.push(`${name}: ${e.message}`);
+      lastErr = e.message;
+      if (!/^429/.test(String(e.message))) break; // only 429s are worth retrying
     }
   }
-  throw new Error(`token refresh failed. Tried:\n  ${errors.join("\n  ")}`);
+  throw new Error(`token refresh failed: ${lastErr}`);
 }
 
 export async function whoAmI(): Promise<any> {
@@ -85,10 +108,21 @@ export async function whoAmI(): Promise<any> {
 }
 
 export async function postCallout(mint: string, content: string, walletAddress: string): Promise<any> {
-  return request(
-    "POST",
-    `/api/v1/communities/${mint}/callouts`,
-    { chainId: "solana", walletAddress, content },
-    await getAccessToken(),
-  );
+  const token = await getAccessToken();
+  let lastErr = "";
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt) await sleep(5000 * attempt); // 5s, 10s
+    try {
+      return await request(
+        "POST",
+        `/api/v1/communities/${mint}/callouts`,
+        { chainId: "solana", walletAddress, content },
+        token,
+      );
+    } catch (e: any) {
+      lastErr = e.message;
+      if (!/^429/.test(String(e.message))) throw e; // only back off on rate limits
+    }
+  }
+  throw new Error(`callout post failed after retries: ${lastErr}`);
 }
