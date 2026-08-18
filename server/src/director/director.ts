@@ -141,13 +141,15 @@ export class Director {
         (h) =>
           h.mint.endsWith("pump") &&
           !this.recentlyResearched.has(h.mint) &&
-          !this.planner.researchedRecently(h.mint, 6),
+          !this.planner.researchedRecently(h.mint, 8),
       );
       if (!fresh.length) return null;
       const pick = fresh[Math.floor(Math.random() * Math.min(fresh.length, 5))];
       this.recentlyResearched.add(pick.mint);
-      if (this.recentlyResearched.size > 40) {
-        this.recentlyResearched = new Set([...this.recentlyResearched].slice(-20));
+      // the planner's age-based researchedRecently is the real dedup; this set
+      // only guards the gap before research completes — keep it generous.
+      if (this.recentlyResearched.size > 300) {
+        this.recentlyResearched = new Set([...this.recentlyResearched].slice(-150));
       }
       return pick.mint;
     } catch {

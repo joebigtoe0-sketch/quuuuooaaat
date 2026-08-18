@@ -70,7 +70,13 @@ export class Planner {
 
   noteResearch(mint: string, symbol: string, score: number): void {
     this.recentResearch.set(mint, { score, at: Date.now(), symbol });
-    if (this.recentResearch.size > 40) {
+    // Evict by AGE, not count: a count cap (was 40) pushed still-recent tokens
+    // out of memory in a busy show, so the same trending name got re-researched
+    // every few minutes. Keep anything from the last 12h (covers the 3h/6h
+    // dedup windows); only a hard 500 backstop guards against unbounded growth.
+    const cutoff = Date.now() - simT(12 * 3600_000);
+    for (const [m, r] of this.recentResearch) if (r.at < cutoff) this.recentResearch.delete(m);
+    if (this.recentResearch.size > 500) {
       const oldest = [...this.recentResearch.entries()].sort((a, b) => a[1].at - b[1].at)[0];
       this.recentResearch.delete(oldest[0]);
     }
