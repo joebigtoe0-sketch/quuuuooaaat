@@ -60,8 +60,10 @@ async function refreshCaches(): Promise<void> {
 
 export function armDevSniper(d: DirectorHook): void {
   dir = d;
-  void refreshCaches();
-  setInterval(() => void refreshCaches(), 5 * 60_000).unref?.();
+  // a stale SOL price under-reads mc and lets over-ceiling fills through —
+  // keep it fresh, and don't accept the 150 fallback at boot without a fight
+  void refreshCaches().then(() => { if (solUsdCache === 150) setTimeout(() => void refreshCaches(), 15_000); });
+  setInterval(() => void refreshCaches(), 2 * 60_000).unref?.();
   setInterval(() => void watchExits(), 60_000).unref?.();
   log.info("snipe", `dev-sniper armed (${cfg.devsnipeEnabled ? "ON" : "OFF"}): mc<$${cfg.devsnipeMaxMcUsd}, exit ${cfg.devsnipeExitProgress * 100}% / ${cfg.devsnipeMaxHoldH}h`);
 }
@@ -114,20 +116,30 @@ export async function onSnipeLaunch(item: ConveyorItem): Promise<void> {
     const sol = Math.round(Math.max(minSol, Math.min((minSol + conviction * (maxSol - minSol)) * jitter, maxSol, cfg.maxTradeSol)) * 1000) / 1000;
 
     stats.attempts++;
-    // the fast path can beat our own RPC to the curve account — "token not
-    // found" right after launch is a race, not a verdict. Short retries win it.
-    let res: Awaited<ReturnType<typeof tradeBuy>> = { ok: false, dry: false, why: "unattempted" };
-    for (let attempt = 0; attempt < 5; attempt++) {
+    // Two races to win here: (1) our RPC may not see the curve yet ("token
+    // not found") — wait and retry; (2) the coin may PUMP past the ceiling
+    // while we wait — so the mc gate is re-checked against LIVE state before
+    // every attempt. He never fills above the ceiling, period.
+    let res: Awaited<ReturnType<typeof tradeBuy>> = { ok: false, dry: false, why: "rpc never saw the curve" };
+    for (let attempt = 0; attempt < 6; attempt++) {
+      const st = await getTokenState(new PublicKey(item.mint)).catch(() => null);
+      if (!st || st.kind === "none") { await new Promise((r) => setTimeout(r, 650)); continue; }
+      if (st.kind !== "curve" || st.mayhem) { res = { ok: false, dry: false, why: "not a standard curve" }; break; }
+      const liveMc = st.mcSol * solUsdCache;
+      if (liveMc > cfg.devsnipeMaxMcUsd) {
+        res = { ok: false, dry: false, why: `raced past the ceiling (~$${Math.round(liveMc)} at fill time)` };
+        break;
+      }
       res = await tradeBuy(
         item.mint,
         item.symbol,
         sol,
-        `recognized the dev wallet at launch (${record}) — in under $${(mcUsd / 1000).toFixed(1)}k`,
-        item.mcSol ?? null,
+        `recognized the dev wallet at launch (${record}) — in under $${(liveMc / 1000).toFixed(1)}k`,
+        st.mcSol,
         STRAT_ID,
       );
       if (res.ok || !/not found|no curve|empty curve/i.test(res.why ?? "")) break;
-      await new Promise((r) => setTimeout(r, 700));
+      await new Promise((r) => setTimeout(r, 650));
     }
     lastResult = { at: Date.now(), symbol: item.symbol, ok: res.ok, why: res.why };
     if (res.ok) {

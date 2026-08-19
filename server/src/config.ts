@@ -113,8 +113,9 @@ export const cfg = {
   devsnipeMinBondRate: num("DEVSNIPE_MIN_BOND_RATE", 0.2),
   devsnipeMinLaunches: num("DEVSNIPE_MIN_LAUNCHES", 5),
   // prime-only: snipe ONLY the elite prime list (the money bot's exact
-  // wallets). Set false to also take watchlist/archive-qualified devs.
-  devsnipePrimeOnly: bool("DEVSNIPE_PRIME_ONLY", true),
+  // wallets). false (default) also takes watchlist devs + archive/LIVE-counter
+  // qualified devs — closer to the money bot's live-updating coverage.
+  devsnipePrimeOnly: bool("DEVSNIPE_PRIME_ONLY", false),
   devsnipeMaxOpen: num("DEVSNIPE_MAX_OPEN", 3),
   devsnipeExitProgress: num("DEVSNIPE_EXIT_PROGRESS", 0.95),
   devsnipeMaxHoldH: num("DEVSNIPE_MAX_HOLD_H", 6),

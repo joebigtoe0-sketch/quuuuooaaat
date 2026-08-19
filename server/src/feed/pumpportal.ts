@@ -55,12 +55,18 @@ export function startLaunchFeed(
     }
     ws.on("open", () => {
       alive = true;
-      log.info("feed", "pumpportal connected — subscribing to new launches");
+      log.info("feed", "pumpportal connected — subscribing to launches + migrations");
       ws!.send(JSON.stringify({ method: "subscribeNewToken" }));
+      ws!.send(JSON.stringify({ method: "subscribeMigration" })); // graduations feed the live dev counters
     });
     ws.on("message", (data) => {
       try {
         const m = JSON.parse(String(data));
+        if (m?.mint && m?.txType === "migrate") {
+          // a graduation — credit the dev's live bond record
+          void import("../analysis/checks/creator.js").then(({ noteMigration }) => noteMigration(String(m.mint))).catch(() => {});
+          return;
+        }
         if (m?.mint && (m?.txType === "create" || m?.name)) {
           // belt takes STANDARD pump launches only — no mayhem/other pools
           const pool = String(m.pool ?? "pump").toLowerCase();
@@ -73,6 +79,8 @@ export function startLaunchFeed(
             dev: typeof m.traderPublicKey === "string" ? m.traderPublicKey : undefined,
             mayhem: Boolean(m.is_mayhem_mode),
           };
+          // every create feeds the live dev counters (sniper on or off)
+          void import("../analysis/checks/creator.js").then(({ noteLaunch }) => noteLaunch(item.mint, item.dev)).catch(() => {});
           try { onLaunchFast?.(item); } catch {}
           // best-effort image enrichment from the token's ipfs metadata —
           // the coin face on the belt. Never blocks or fails the launch event.
