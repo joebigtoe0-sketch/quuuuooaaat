@@ -38,7 +38,7 @@ const hub = new Hub(server);
 // Control endpoints need the admin key (query ?key=, x-admin-key header, or
 // the qk cookie set by /admin login). Read-only + stage-internal endpoints
 // (feed, layout, clip upload, agent-status, health) stay open.
-const PROTECTED = /^\/admin\/(directive|reset|restart|agent$|fake-send|fake-buyback|pause|resume|goto|anim|camera|fx|tts-test|selfie-take|selfie-last|chat$|chat-add|go-live|syslog|record$|say|queue|clips|clip-file|research-now|blacklist|sniper|operator-call)/;
+const PROTECTED = /^\/admin\/(directive|reset|restart|agent$|fake-send|fake-buyback|pause|resume|goto|anim|camera|fx|tts-test|selfie-take|selfie-last|chat$|chat-add|go-live|syslog|record$|say|queue|clips|clip-file|research-now|blacklist|sniper|operator-call|facts)/;
 function hasAdminKey(req: express.Request): boolean {
   const c = String(req.headers.cookie ?? "");
   const cookieKey = c.match(/(?:^|;\s*)qk=([^;]+)/)?.[1];
@@ -142,6 +142,26 @@ app.post("/admin/blacklist", (req, res) => {
     log.info("admin", `black book: added ${mint.slice(0, 8)}… (${why || "operator flagged"})`);
   }
   res.json({ ok: true, blacklist: store.blacklistAll() });
+});
+
+// THE FACT SHEET — settled truths he answers from. Live-editable, no deploy.
+//   GET  /admin/facts            -> current text
+//   POST /admin/facts  (body)    -> replace whole sheet (raw text body)
+//   POST /admin/facts?add=<line> -> append one fact
+app.get("/admin/facts", async (_req, res) => {
+  const { factSheet } = await import("./agent/facts.js");
+  res.type("text/plain").send(factSheet() || "(empty)");
+});
+app.post("/admin/facts", async (req, res) => {
+  const { saveFacts, appendFact, factSheet } = await import("./agent/facts.js");
+  const add = String(req.query.add ?? "").trim();
+  if (add) appendFact(add);
+  else {
+    const body = typeof req.body === "string" ? req.body : String((req.body as any)?.text ?? "");
+    if (body.trim().length < 10) return res.json({ ok: false, why: "send the full sheet as the body, or use ?add=" });
+    saveFacts(body);
+  }
+  res.json({ ok: true, chars: factSheet().length });
 });
 
 // why did/didn't the sniper act on a mint? (ring of last 300 launch verdicts)

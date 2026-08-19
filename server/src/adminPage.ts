@@ -39,6 +39,12 @@ export const ADMIN_HTML = `<!doctype html>
     <button class="go" onclick="researchNow()">🔬 research a fresh coin NOW</button>
     <button onclick="act({do:'reply_x'})">reply to mentions</button>
     <br>
+    <button onclick="factsLoad()">📋 load fact sheet</button>
+    <button onclick="factsSave()">💾 save facts</button>
+    <span style="opacity:.6">— settled truths he answers from (bubble maps, tokenomics…)</span>
+    <br>
+    <textarea id="facts" placeholder="click 'load fact sheet'" style="width:98%;height:150px;font:12px monospace"></textarea>
+    <br>
     <input id="opmint" placeholder="CA — buy it &amp; stage as HIS find" style="width:340px">
     <input id="opsol" placeholder="sol (blank=auto)" style="width:110px">
     <button class="go" onclick="opCall()">🎯 place the call</button>
@@ -140,6 +146,14 @@ async function whisper(){
 }
 async function act(a){ await q('/admin/agent','POST',a); }
 async function researchNow(){ const r=await q('/admin/research-now','POST'); console.log('research queued', r); }
+async function factsLoad(){
+  const r=await fetch('/admin/facts'); document.getElementById('facts').value=await r.text();
+}
+async function factsSave(){
+  const t=document.getElementById('facts').value;
+  const r=await fetch('/admin/facts',{method:'POST',headers:{'content-type':'text/plain'},body:t}).then(x=>x.json());
+  alert(r.ok?('saved — '+r.chars+' chars, live within 20s'):('failed: '+r.why));
+}
 async function opCall(){
   const m=document.getElementById('opmint').value.trim(), s=document.getElementById('opsol').value.trim();
   if(!m) return alert('mint?');

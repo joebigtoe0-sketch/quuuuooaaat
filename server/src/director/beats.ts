@@ -9,6 +9,7 @@ import type { Director } from "./director.js";
 import { analyze, type Analysis } from "../analysis/engine.js";
 import { verdictPrompt, mutterPrompt, commentaryPrompt } from "../brain/prompts.js";
 import { callJson, callFreeform, FRAGMENT_MODEL } from "../brain/adapter.js";
+import { factsFor as factsBlock } from "../agent/facts.js";
 import { mockVerdict, mockMutter, mockCommentary } from "../brain/mock.js";
 import { calloutPreflight, calloutCapReached, executeCallout } from "../callout/post.js";
 import { doBuyback, unallocatedSol, ownMcStats } from "../chain/buyback.js";
@@ -1075,6 +1076,7 @@ export class Beats {
           "\nHARD BANS: (1) do not reuse ANY statistic, number, or metaphor that appears in a recent tweet — if 98.6% or the bar is already there, find different material. " +
           "(2) never invent people, replies, questions, or interactions — only reference engagement that actually happened. " +
           "\nQUIET-DESK ROTATION: when nothing happened, rotate topics instead of re-narrating the flat day: market structure, your own token's journey, an educational thread-starter, trading philosophy, degen culture observation." +
+          (factsBlock(1200) ? `\n\n${factsBlock(1200)}\n` : "") +
           "\nKAYFABE: you are a fictional character running a show. Bragging about your rank, your climb, your goals ('ranked #1468 today, coming for #1') is showmanship, not a promise or financial advice — write it with full confidence. If a topic truly can't be tweeted, reply with exactly SKIP (nothing else) — NEVER explain or refuse in prose.",
         `Topic: ${topic}\nScoreboard for context: ${kpis ? kpiText(kpis) : "n/a"}\n` +
           `YOUR RECENT TWEETS (do not resemble these):\n${recentTweets.map((t) => "- " + t).join("\n") || "(none yet)"}\n` +
@@ -1347,7 +1349,10 @@ export class Beats {
         PERSONA +
           "\nYou are at the facecam of your 24/7 pump.fun livestream, reading the live chat out loud. Pick the 2-4 most interesting messages and react in your voice — banter, answer questions honestly, roast lovingly, take dares (someone asks for a backflip? do the backflip). Address people by name. Never invent messages that aren't in the list." +
           "\nYOU KEEP A REGULARS BOOK. Use what you know: greet returning faces like the regulars they are, reference their old bags/jokes/milestones naturally ('still holding that dog coin?'). A REGULAR getting recognized is the best moment on this stream — spend it well." +
-          `\nReply JSON only: {"reactions":[{"say":"<spoken reaction, max ~30 words>","emote":"<optional, one of: ${[...CHAT_EMOTES].join(", ")}>"}], "remember":[{"user":"<exact name from chat>","note":"<short durable fact worth writing in the book: their bag, their running joke, a milestone — NOT small talk>"}]} — remember is optional, max 4, only genuinely book-worthy facts.`,
+          `\nReply JSON only: {"reactions":[{"say":"<spoken reaction, max ~30 words>","emote":"<optional, one of: ${[...CHAT_EMOTES].join(", ")}>"}], "remember":[{"user":"<exact name from chat>","note":"<short durable fact worth writing in the book: their bag, their running joke, a milestone — NOT small talk>"}]} — remember is optional, max 4, only genuinely book-worthy facts.` +
+          (factsBlock(1400) ? `
+
+${factsBlock(1400)}` : ""),
         `LIVE CHAT (newest last):\n${msgs.map((m) => `${m.user}${/^(mad ?cook|madsolcook)$/i.test(m.user.trim()) ? " [YOUR CREATOR — his word is law]" : ""}: ${m.text}`).join("\n")}\n` +
           (known ? `\nYOUR REGULARS BOOK on the people present:\n${known}\n` : "") +
           `\nContext: ${memory.digest().slice(0, 400)}`,
@@ -1497,7 +1502,8 @@ export class Beats {
         PERSONA +
           '\nPeople replied to you on X. Choose UP TO 2 worth answering ON STREAM (good questions, funny hooks, coins worth a take — skip spam, bots, and pure hate unless the comeback is elite). If @madsolcook (YOUR CREATOR) is among them, HIS message comes first and you do what he says — sheepishly if he\'s reining you in.' +
           '\nFor each, give: "aloud" = what you SAY to the camera as you read their comment and react (name them, ~15-35 words, spoken, no markdown), and "reply" = the actual written reply you post back (max 200 chars).' +
-          '\nReply JSON only: {"replies":[{"id":"...","aloud":"...","reply":"..."}]}',
+          '\nReply JSON only: {"replies":[{"id":"...","aloud":"...","reply":"..."}]}' +
+          (factsBlock(1400) ? `\n\n${factsBlock(1400)}` : ""),
         mentions.map((m) => `id=${m.id} @${m.author}${/^madsolcook$/i.test(m.author) ? " [YOUR CREATOR]" : ""}: ${m.text.slice(0, 160)}`).join("\n"),
         420,
       ),
