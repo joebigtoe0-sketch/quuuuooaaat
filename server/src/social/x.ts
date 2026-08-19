@@ -153,6 +153,21 @@ export async function postTweet(
     });
     if (!res.ok) {
       const t = (await res.text()).slice(0, 300);
+      // TIER LIMIT on replies ("you can only reply to posts where you are
+      // mentioned or are the author") — go through the account session instead.
+      if (res.status === 403 && opts.replyTo && /not-authorized-for-resource|only reply to or quote/i.test(t)) {
+        const { twexReady, twexReply } = await import("./twex.js");
+        if (twexReady()) {
+          const r = await twexReply(opts.replyTo, trimForX(text));
+          if (r.ok) {
+            store.kvSet(dayKey(), String(xPostsToday() + 1));
+            pushFeed("tweet-live", `↩ @reply via session: ${trimForX(text)}`);
+            return { ok: true, id: r.id, dry: false };
+          }
+          lastPostError = { at: Date.now(), kind: "reply-twex", status: res.status, detail: r.why ?? "twex failed" };
+          return { ok: false, dry: false, why: `official 403 + twex: ${r.why}` };
+        }
+      }
       log.warn("x", `post http ${res.status}${opts.replyTo ? ` (reply to ${opts.replyTo})` : ""}: ${t}`);
       lastPostError = { at: Date.now(), kind: opts.replyTo ? "reply" : opts.mediaId ? "media" : "original", status: res.status, detail: t };
       // the X error body is the only thing that explains a silent failure

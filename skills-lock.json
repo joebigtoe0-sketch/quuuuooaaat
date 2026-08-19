@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "twexapi-cli": {
+      "source": "yeahjjyy/twexapi-cli",
+      "sourceType": "github",
+      "skillPath": "SKILL.md",
+      "computedHash": "474fd4d74cd8c472968f576ef8b628d2e3e1f9e34999db773aced46e407e8e78"
+    }
+  }
+}
