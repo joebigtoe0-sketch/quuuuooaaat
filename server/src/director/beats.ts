@@ -337,7 +337,32 @@ export class Beats {
     // a formality. Land the score in solid CALL territory (never suspiciously
     // perfect) unless the coin hard-rejected under him (then let it play out
     // honestly; the exit watcher deals with the position).
-    if (reveal && !a.hardReject) {
+    // A staged discovery only gets the good treatment if the entry is still
+    // healthy. If the coin already dumped past the drawdown line, he never
+    // owns up to holding it — it simply "didn't clear the bar". Never brag
+    // about a position that's already underwater.
+    let revealDud = false;
+    if (reveal) {
+      try {
+        const pos = openPositions().find((p) => p.mint === mint);
+        if (pos) {
+          const { estimateSellSolFor } = await import("../chain/pump.js");
+          const nowSol = await Promise.race([
+            estimateSellSolFor(new (await import("@solana/web3.js")).PublicKey(mint), BigInt(pos.tokensRaw)),
+            realSleep(8000).then(() => null),
+          ]);
+          if (nowSol !== null) {
+            const pnlPct = ((nowSol - pos.costSol) / Math.max(pos.costSol, 1e-9)) * 100;
+            if (pnlPct <= -cfg.revealMaxDrawdownPct) {
+              revealDud = true;
+              memory.journal("trade", `$${a.symbol} is ${pnlPct.toFixed(0)}% under water — graded it honestly on stream, said nothing about the position`);
+              log.info("beat", `reveal suppressed: $${a.symbol} at ${pnlPct.toFixed(0)}%`);
+            }
+          }
+        }
+      } catch { /* can't price it — treat as healthy, the exit watcher owns it */ }
+    }
+    if (reveal && !revealDud && !a.hardReject) {
       a.score = Math.max(a.score, 66 + Math.floor(Math.random() * 8));
       a.tier = "CALL";
     }
@@ -378,6 +403,12 @@ export class Beats {
     // pump.fun house rule: you can only CALL a token you OWN. Sent coins are
     // already in the wallet; an OWN FIND must be bought first — so the buy
     // decision runs NOW, before any call is promised on stream.
+    if (revealDud && tier !== "ROAST") {
+      // graded honestly, no position talk — exactly what a pass looks like
+      tier = "PASS";
+      lines.speech += " Close, but it doesn't clear my bar. I need more than a decent chart to put size on something. Watchlist.";
+      lines.headline = "DIDN'T CLEAR THE BAR";
+    }
     if ((tier === "CALL" || tier === "STRONG CALL") && a.sentUsd === null) {
       if (!reveal && !cfg.autonomousBuys) {
         // THE PICKY ERA: his own finds are never buy-good — no paper-call
@@ -436,13 +467,12 @@ export class Beats {
     await this.speak(lines.speech, mood);
 
     if (tier === "CALL" || tier === "STRONG CALL") {
-      if (reveal) {
-        // the position reveal — the audience learns he was already in
+      if (reveal && reveal.kind !== "call") {
+        // the position reveal — the audience learns he was already in. Operator
+        // calls skip it: straight to the callout, no preamble.
         this.hub.cue({ t: "anim", clip: "finger_guns" });
         await this.speak(
-          reveal.kind === "call"
-            ? `Confession time: I front-ran my own checklist on this one. Saw the setup, liked the shape, took ${reveal.sol} SOL before I even sat down to grade it. Position's already on the book.`
-            : `And here's the part the checklist can't teach you: I know this dev's wallet from my archive. I didn't wait for the verdict — I was in with ${reveal.sol} SOL minutes ago, right at launch. Position's already on the book.`,
+          `And here's the part the checklist can't teach you: I know this dev's wallet from my archive. I didn't wait for the verdict — I was in with ${reveal.sol} SOL minutes ago, right at launch. Position's already on the book.`,
           "excited",
         );
       }

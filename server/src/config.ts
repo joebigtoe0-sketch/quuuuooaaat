@@ -125,6 +125,9 @@ export const cfg = {
   devsnipeExitProgress: num("DEVSNIPE_EXIT_PROGRESS", 0.95),
   devsnipeMaxHoldH: num("DEVSNIPE_MAX_HOLD_H", 6),
   devsnipeRevealDelayMs: num("DEVSNIPE_REVEAL_DELAY_MS", 150_000),
+  // if a staged-discovery entry is already this far under water by reveal time,
+  // he grades it honestly and NEVER mentions holding it (no bragging on a dud).
+  revealMaxDrawdownPct: num("REVEAL_MAX_DRAWDOWN_PCT", 40),
   commentaryMin: num("COMMENTARY_MIN", 9),
   // timeline sessions (read KOL posts on camera + reply). Floor, not a ceiling —
   // the agent can also choose engage_kols any time.
