@@ -919,10 +919,10 @@ export class Beats {
   // ================== AGENT BEATS (v2) ==================
 
   /** Route a validated agent action to its beat. Returns when done. */
-  async agentBeat(action: AgentAction): Promise<void> {
+  async agentBeat(action: AgentAction, manual = false): Promise<void> {
     switch (action.do) {
       case "tweet":
-        return this.tweetBeat(action.topic, (action as any).image_prompt);
+        return this.tweetBeat(action.topic, (action as any).image_prompt, undefined, manual);
       case "film":
         return this.filmBeat(action.topic);
       case "selfie":
@@ -1089,8 +1089,11 @@ export class Beats {
   }
 
   /** Compose + post a tweet — typed out LIVE on the terminal screen. */
-  private async tweetBeat(topic: string, imagePrompt?: string, attachImage?: string): Promise<void> {
-    const budget = tweetBudget();
+  private async tweetBeat(topic: string, imagePrompt?: string, attachImage?: string, manual = false): Promise<void> {
+    // OPERATOR OVERRIDE: a tweet pressed from the admin panel ignores the
+    // pacing budget (daily cap + 25-min spacing). Those rails exist to stop the
+    // AGENT from flooding; when the producer says post it, it posts.
+    const budget: { ok: boolean; why?: string } = manual ? { ok: true } : tweetBudget();
     if (!budget.ok) {
       memory.journal("tweet", `skipped "${topic.slice(0, 60)}" — ${budget.why}. Slow down; quality over volume.`);
       return;

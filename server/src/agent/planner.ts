@@ -23,6 +23,9 @@ import { z } from "zod";
 export interface QueuedAction {
   action: AgentAction;
   plannedAt: number;
+  /** operator-initiated (admin panel): bypasses pacing budgets — when the
+   *  producer says post it, it posts. Never set by the planner. */
+  manual?: boolean;
 }
 
 const AGENT_SYSTEM = `${PERSONA}

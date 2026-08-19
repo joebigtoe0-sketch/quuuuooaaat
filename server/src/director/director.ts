@@ -298,7 +298,7 @@ export class Director {
           else log.info("director", "random checkup skipped — no trending candidate this cycle");
         }
         else if (job.kind === "buyback") await this.beats.buybackBeat(job.p.sol);
-        else if (job.kind === "agent") await this.beats.agentBeat(job.qa.action);
+        else if (job.kind === "agent") await this.beats.agentBeat(job.qa.action, job.qa.manual === true);
         else if (job.kind === "commentary") await this.beats.commentaryBeat();
       } catch (e) {
         log.error("director", `beat crashed: ${String(e).slice(0, 200)}`);
