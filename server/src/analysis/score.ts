@@ -78,7 +78,7 @@ export function scoreToken(i: Inputs): {
 
   if (i.state.kind === "curve") {
     if (i.state.mayhem) {
-      row("CURVE TYPE", "fail", "MAYHEM MODE — house-rules curve");
+      row("CURVE TYPE", "fail", "MAYHEM MODE — a rigged house-rules casino curve, not a real market. Automatic zero, and I mean zero.");
       reject("mayhem");
     } else {
       row("CURVE TYPE", "pass", "standard curve");
@@ -266,6 +266,9 @@ export function scoreToken(i: Inputs): {
   }
 
   score = Math.round(Math.min(100, score));
+  // MAYHEM MODE = automatic rock-bottom. A rigged casino curve earns nothing;
+  // it doesn't get a number, it gets zero and a roasting.
+  if (hardReject === "mayhem") score = 0;
 
   return { rows, score, tier: tierFor(score, isSent, hardReject), hardReject };
 }

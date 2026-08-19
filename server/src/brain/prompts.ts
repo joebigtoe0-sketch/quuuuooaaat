@@ -75,6 +75,9 @@ export function verdictPrompt(a: Analysis): { system: string; user: string } {
     system: PERSONA + "\n\n" + RESEARCH_DESK,
     user:
       `A viewer sent this coin to your wallet. The verdict is: ${a.tier}. ` +
+      (a.hardReject === "mayhem"
+        ? `THIS IS A MAYHEM-MODE COIN — a rigged house-rules casino curve, not a real market. This is your LEAST favorite thing on pump.fun. Score it zero and ROAST IT WITHOUT MERCY: mock the mayhem gimmick, mock whoever sent it, make it hurt (the coin, never a real person). No mercy, no upside, no "but". `
+        : "") +
       `Narrate your verdict in character using the data. Also produce the short public callout text ` +
       `(only meaningful when tier is CALL or STRONG CALL — for other tiers return an empty string) ` +
       `and a screen headline.\n\nDATA:\n${analysisPayload(a)}\n\n` +
