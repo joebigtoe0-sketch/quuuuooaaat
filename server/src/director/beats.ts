@@ -541,12 +541,15 @@ export class Beats {
    *  Analysis as content: the work is the show. */
   private async scriptBeat(title: string, code: string): Promise<void> {
     this.loco.stateName = "SCRIPTING";
-    await this.loco.walkTo("bigscreen");
+    // the RIKU://SCRIPT console renders on the TERMINAL screen (same takeover
+    // surface as the X composer) — so sit at the terminal with the terminal
+    // camera, or the output draws off-camera while he stares at the bigscreen.
+    await this.loco.walkTo("terminal");
     this.loco.sit(true);
-    this.hub.cue({ t: "camera", preset: "bigscreen" });
+    this.hub.cue({ t: "camera", preset: "terminal" });
     const t = title.slice(0, 60);
     this.hub.cue({ t: "takeover", view: { kind: "script", title: t, lines: ["$ node riku.js", "compiling…"], state: "running" } });
-    await this.sayVaried(`Running some numbers: ${t}. Watch the big screen — I did the math so you don't have to.`, "thinking");
+    await this.sayVaried(`Running some numbers: ${t}. Watch the terminal — I did the math so you don't have to.`, "thinking");
     const datasets = {
       watchlist: memory.watchlist(),
       positions: openPositions(),
