@@ -1606,6 +1606,9 @@ ${factsBlock(1400)}` : ""),
   }
 
   /** Read mentions, pick the ones worth answering, reply in character. */
+  /** Timer-driven entry (the floor) — mentions never go unanswered for long. */
+  async runReplyX(): Promise<void> { return this.replyXBeat(); }
+
   private async replyXBeat(): Promise<void> {
     this.loco.stateName = "REPLYING";
     const replies = Number(store.kvGet(`xreplies:${new Date().toISOString().slice(0, 10)}`) ?? 0);

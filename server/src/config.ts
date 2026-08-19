@@ -132,6 +132,9 @@ export const cfg = {
   // timeline sessions (read KOL posts on camera + reply). Floor, not a ceiling —
   // the agent can also choose engage_kols any time.
   kolFeedMin: num("KOL_FEED_MIN", 35),
+  // answering people who @ him is the highest-value engagement there is —
+  // never leave it to the planner alone. Floor, not a ceiling.
+  replyXMin: num("REPLY_X_MIN", 20),
   inboxPollS: num("INBOX_POLL_S", 15),
 
   floatSol: num("FLOAT_SOL", 0.05),
