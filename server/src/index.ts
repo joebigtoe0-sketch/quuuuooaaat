@@ -420,6 +420,9 @@ app.get("/admin/syslog", (_req, res) => res.json({ entries: systemLog(200) }));
 // ---- livestream chat: the producer relays pump.fun chat here; Quant reads
 // it at the facecam (chatBeat). GET /admin/chat lists the buffer. ----
 app.all("/admin/chat-add", (req, res) => {
+  // relayed from the pump.fun token page by the browser watcher script (a
+  // different origin), so allow the cross-origin read of the response
+  res.setHeader("Access-Control-Allow-Origin", "*");
   const user = String(req.query.user ?? (req.body as any)?.user ?? "viewer");
   const text = String(req.query.text ?? (req.body as any)?.text ?? "");
   const msg = pushChat(user, text);
