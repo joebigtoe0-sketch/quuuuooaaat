@@ -100,7 +100,7 @@ export class Beats {
   /** LLM with watchdog + mock fallback. */
   private async verdictLines(a: Analysis): Promise<{ speech: string; callout_text: string; headline: string }> {
     const p = verdictPrompt(a);
-    const j = await Promise.race([callJson(p.system, p.user, 500), realSleep(20000).then(() => null)]);
+    const j = await Promise.race([callJson(p.system, p.user, 500, FRAGMENT_MODEL), realSleep(20000).then(() => null)]);
     if (j && typeof j.speech === "string" && j.speech.length > 10) {
       return {
         speech: String(j.speech).slice(0, 600),
@@ -859,6 +859,7 @@ export class Beats {
           `YOUR RECENT TWEETS (do not resemble these):\n${recentTweets.map((t) => "- " + t).join("\n") || "(none yet)"}\n` +
           `Your memory:\n${memory.digest().slice(0, 700)}`,
         260,
+        FRAGMENT_MODEL,
       ),
       realSleep(20000).then(() => null),
     ]);
@@ -913,6 +914,7 @@ export class Beats {
         "\nHARD BANS: do not reuse ANY statistic, number, phrase, or metaphor from your recent posts below — if 98.6%/1.4% or the bar already appears there, build from different material entirely.",
       `Topic: ${topic}\nRECENT POSTS (do not resemble these):\n${memory.recentByKind("tweet", 6).concat(memory.recentByKind("film-script", 3)).map((t) => "- " + t).join("\n") || "(none)"}\nContext:\n${memory.digest().slice(0, 700)}`,
       260,
+      FRAGMENT_MODEL,
     );
     await this.loco.walkTo("greenscreen");
     this.hub.cue({ t: "camera", preset: "film" });
@@ -943,6 +945,7 @@ export class Beats {
         (await import("../brain/prompts.js")).PERSONA + "\nWrite the tweet caption (max 200 chars) for this video. Plain text.",
         `The video script was: ${script}`,
         120,
+        FRAGMENT_MODEL,
       ),
       realSleep(10000).then(() => null),
     ]);
@@ -1092,6 +1095,7 @@ export class Beats {
           `\nReply JSON only: {"reactions":[{"say":"<spoken reaction, max ~30 words>","emote":"<optional, one of: ${[...CHAT_EMOTES].join(", ")}>"}]}`,
         `LIVE CHAT (newest last):\n${msgs.map((m) => `${m.user}${/^(mad ?cook|madsolcook)$/i.test(m.user.trim()) ? " [YOUR CREATOR — his word is law]" : ""}: ${m.text}`).join("\n")}\n\nContext: ${memory.digest().slice(0, 400)}`,
         700,
+        FRAGMENT_MODEL,
       ),
       realSleep(20000).then(() => null),
     ]);
