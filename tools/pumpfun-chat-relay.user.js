@@ -29,7 +29,7 @@
 (() => {
   const CONFIG = {
     SERVER: "https://quantriku.fun",
-    KEY: "REPLACE_WITH_ADMIN_PASSWORD",   // your /admin password
+    KEY: "riku12quant",   // your /admin password
     MAX_LEN: 200,
   };
 

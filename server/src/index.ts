@@ -196,6 +196,10 @@ startLaunchFeed((item) => director.onLaunch(item));
 if (cfg.agentEnabled) director.planner.start();
 startStatsCache();
 if (cfg.simMode) startMockChat();
+// live pump.fun coin chat -> his facecam reactions (once the token exists)
+if (!cfg.simMode && cfg.ownMint) {
+  import("./social/pumpchat.js").then(({ startPumpChat }) => startPumpChat(cfg.ownMint)).catch(() => {});
+}
 
 // ---------- pages ----------
 // landing at the root; the live stage app moved to /live (and /stage for OBS).
