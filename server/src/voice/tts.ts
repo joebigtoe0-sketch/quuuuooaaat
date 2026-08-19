@@ -42,15 +42,27 @@ export function mp3DurationMs(buf: Buffer): number | null {
   const SR1 = [44100, 48000, 32000];
   const SR2 = [22050, 24000, 16000];
   const SR25 = [11025, 12000, 8000];
-  for (; i < buf.length - 4; i++) {
-    if (buf[i] !== 0xff || (buf[i + 1] & 0xe0) !== 0xe0) continue;
-    const ver = (buf[i + 1] >> 3) & 0x3;
+  // Walk EVERY frame and sum real frame durations — a first-frame bitrate
+  // shortcut under-reads VBR files, which made subtitles/beats cut the last
+  // words of every line. Frame walk is exact for CBR and VBR alike.
+  let ms = 0;
+  let frames = 0;
+  while (i < buf.length - 4) {
+    if (buf[i] !== 0xff || (buf[i + 1] & 0xe0) !== 0xe0) { i++; continue; }
+    const ver = (buf[i + 1] >> 3) & 0x3; // 3=MPEG1, 2=MPEG2, 0=MPEG2.5
+    const layer = (buf[i + 1] >> 1) & 0x3; // 1 = Layer III
     const bitrate = (ver === 3 ? V1L3 : V2L3)[(buf[i + 2] >> 4) & 0xf];
     const sr = (ver === 3 ? SR1 : ver === 2 ? SR2 : SR25)[(buf[i + 2] >> 2) & 0x3];
-    if (!bitrate || !sr) continue;
-    return Math.round(((buf.length - i) * 8) / bitrate); // ms = bytes*8 / kbps
+    const pad = (buf[i + 2] >> 1) & 0x1;
+    if (layer !== 1 || !bitrate || !sr) { i++; continue; }
+    const samples = ver === 3 ? 1152 : 576;
+    const frameLen = Math.floor(((samples / 8) * bitrate * 1000) / sr) + pad;
+    if (frameLen <= 0) { i++; continue; }
+    ms += (samples / sr) * 1000;
+    i += frameLen;
+    frames++;
   }
-  return null;
+  return frames > 10 ? Math.round(ms) : null;
 }
 
 /** Silent fallback: no audio, estimated pacing, subtitles do the work. */

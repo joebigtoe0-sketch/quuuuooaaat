@@ -38,6 +38,11 @@ export const ADMIN_HTML = `<!doctype html>
     <button onclick="act({do:'scout_trending'})">scout trending (watchlist)</button>
     <button class="go" onclick="researchNow()">🔬 research a fresh coin NOW</button>
     <button onclick="act({do:'reply_x'})">reply to mentions</button>
+    <br>
+    <input id="blmint" placeholder="mint to blacklist" style="width:340px">
+    <input id="blwhy" placeholder="why (scam, rug...)" style="width:180px">
+    <button onclick="blAdd()">🚫 blacklist</button>
+    <button onclick="blList()">📖 show black book</button>
     <button onclick="q('/admin/pause','POST')">⏸ pause show</button>
     <button onclick="q('/admin/resume','POST')">▶ resume</button>
   </div>
@@ -131,6 +136,17 @@ async function whisper(){
 }
 async function act(a){ await q('/admin/agent','POST',a); }
 async function researchNow(){ const r=await q('/admin/research-now','POST'); console.log('research queued', r); }
+async function blAdd(){
+  const m=document.getElementById('blmint').value.trim(), w=document.getElementById('blwhy').value.trim();
+  if(!m) return alert('mint?');
+  const r=await q('/admin/blacklist?mint='+encodeURIComponent(m)+'&why='+encodeURIComponent(w||'operator flagged'));
+  alert('black-booked. total: '+Object.keys(r.blacklist||{}).length);
+}
+async function blList(){
+  const r=await q('/admin/blacklist');
+  const rows=Object.entries(r.blacklist||{}).map(([m,b])=>m+'  ['+b.by+'] '+b.reason).join('\\n');
+  alert(rows||'(black book empty)');
+}
 async function liveCheck(){
   const r=await q('/admin/go-live-check');
   document.getElementById('livechecks').innerHTML=

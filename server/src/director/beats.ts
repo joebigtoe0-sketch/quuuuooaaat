@@ -65,6 +65,12 @@ function cleanSpoken(s: string): string {
     .trim();
 }
 
+/** An LLM REFUSAL must never be posted as content. Narrow patterns on
+ *  refusal-speak (not persona-speak like "I can't believe this chart"). */
+function looksLikeRefusal(s: string): boolean {
+  return /\b(i (?:can'?t|cannot|won'?t|shouldn'?t|am not going to|'?m not going to) (?:help|assist|write|post|tweet|compose|claim|make|create|craft|generate|draft|do th)|i need to (?:hit|tap|pump) (?:the )?brakes|i'?m not (?:able to|comfortable)|i must decline|i (?:have|need) to (?:decline|pass on this|be careful (?:here|about))|i'?d rather not|i apologi[sz]e,? but|as an ai|i want to be (?:careful|straight) (?:here|with you):)\b/i.test(s);
+}
+
 /**
  * Beat scripts. THE invariant (from the plan): no unbounded await on the
  * director's critical path — every LLM/TTS/chain call races a watchdog and
@@ -115,7 +121,9 @@ export class Beats {
     const s = syn ?? { audioUrl: null, durMs: Math.max(1500, text.split(/\s+/).length * 340), words: [] };
     this.hub.cue({ t: "mood", mood });
     this.hub.cue({ t: "speak", audioUrl: s.audioUrl, subtitle: text, durMs: s.durMs, words: s.words });
-    await sleep(s.durMs + 450);
+    // pad covers client fetch/play latency + the subtitle fade — moving on too
+    // early clips the last words of the line on stream
+    await sleep(s.durMs + 900);
   }
 
   /** LLM with watchdog + mock fallback. */
@@ -154,6 +162,24 @@ export class Beats {
       this.hub.cue({ t: "camera", preset: "wide" });
       this.loco.stateName = "IDLE";
       return null;
+    }
+    // THE DESK BOOK: coins he blacklisted or recently exited don't get a fresh
+    // hearing — they get recognized. One line, no ceremony, no second chances.
+    {
+      const { touchBan } = await import("../agent/tokenguard.js");
+      const ban = touchBan(mint);
+      if (ban) {
+        const sym = mint.slice(0, 6);
+        await this.sayVaried(
+          ban.startsWith("blacklisted")
+            ? `Nice try. That mint's in my black book — ${ban.replace(/^blacklisted \([^)]*\): /, "")}. The desk doesn't re-litigate scams.`
+            : `I know this one. Already played it — ${ban.replace(/^already played it — /, "")}. The desk doesn't chase its own tail.`,
+          "disgusted",
+        );
+        memory.journal("desk", `refused to touch ${sym} (${mint.slice(0, 8)}…): ${ban}`);
+        this.loco.stateName = "IDLE";
+        return null;
+      }
     }
     this.loco.stateName = conveyorPick ? "CONVEYOR" : "INBOX";
     log.info("beat", `research ${mint.slice(0, 8)}… (${conveyorPick ? "conveyor" : "inbox"})`);
@@ -216,6 +242,9 @@ export class Beats {
       this.dir.inspection.headline = "MAYHEM — INSTANT ZERO";
       this.hub.cue({ t: "screen_inspection", patch: { rows: a.rows, score: 0, tier: "ROAST", headline: "MAYHEM — INSTANT ZERO" } });
       store.setVerdict(mint, "ROAST", 0);
+      // a mayhem curve never stops being mayhem — black-book it so this roast
+      // is the LAST time the desk spends breath on it
+      store.blacklistAdd(mint, `$${a.symbol} — mayhem-mode house-rules curve`, "verdict");
       this.loco.sit(false);
       await this.loco.walkTo("camera_mark");
       this.hub.cue({ t: "camera", preset: "facecam" });
@@ -343,6 +372,8 @@ export class Beats {
     this.dir.inspection.tier = tier;
     this.dir.inspection.headline = lines.headline;
     store.setVerdict(mint, tier, a.score);
+    // a bubble-map rug is a permanent fact about the mint — black-book it
+    if (a.hardReject === "rug") store.blacklistAdd(mint, `$${a.symbol} — bubble-map rug (fresh-wallet cluster)`, "verdict");
     this.hub.cue({ t: "screen_inspection", patch: { tier, headline: lines.headline } });
 
     // Stand, face camera, deliver.
@@ -413,6 +444,14 @@ export class Beats {
     if (a.buyReject || effScore < bar) return;
     if (cfg.ownMint && a.mint === cfg.ownMint) return;
     if (openPositions().some((p) => p.mint === a.mint)) return;
+    {
+      const { touchBan } = await import("../agent/tokenguard.js");
+      const ban = touchBan(a.mint);
+      if (ban) {
+        memory.journal("trade", `desk book blocked a re-buy of $${a.symbol}: ${ban}`);
+        return;
+      }
+    }
     const { bankSol } = await import("../chain/trader.js");
     const bank = await bankSol();
     if (bank < 0.02) return;
@@ -469,6 +508,17 @@ export class Beats {
   }
 
   private async calloutSequence(a: Analysis, text: string, tier: string): Promise<void> {
+    {
+      // desk book + no repeat plugs: never call out a banned mint, and never
+      // re-call the same coin within 7 days — one plug per coin per week
+      const { touchBan } = await import("../agent/tokenguard.js");
+      const ban = touchBan(a.mint);
+      const recalled = store.callouts().some((c) => c.mint === a.mint && Date.now() - c.at < 7 * 86_400_000);
+      if (ban || recalled) {
+        memory.journal("callout", `skipped callout for $${a.symbol}: ${ban ?? "already called this coin this week"}`);
+        return;
+      }
+    }
     await this.loco.walkTo("bigscreen");
     this.hub.cue({ t: "camera", preset: "bigscreen" });
     this.loco.sit(true); // the station point IS the chair — always sit here
@@ -784,6 +834,13 @@ export class Beats {
           memory.journal("research", `skipped re-research of ${action.mint.slice(0, 8)}… — already on file (<3h)`);
           return;
         }
+        // planner path gets the same discipline as the conveyor: no re-digging
+        // coins he's holding (the position watcher covers those), and the desk
+        // book (blacklist / recent exits) is checked inside researchBeat.
+        if (openPositions().some((p) => p.mint === action.mint)) {
+          memory.journal("research", `skipped re-research of ${action.mint.slice(0, 8)}… — already holding it`);
+          return;
+        }
         const a = await this.researchBeat(action.mint, null, null, true);
         if (a) {
           // noteResearch happens inside researchBeat (buy-calibrated score)
@@ -796,6 +853,13 @@ export class Beats {
         return this.tradeBuyBeat(action.mint, action.sol, action.thesis);
       case "trade_sell":
         return this.tradeSellBeat(action.mint, action.fraction, action.reason);
+      case "blacklist": {
+        const a = action as { mint: string; why: string };
+        store.blacklistAdd(a.mint, a.why, "agent");
+        memory.journal("desk", `black-booked ${a.mint.slice(0, 8)}… — ${a.why}`);
+        await this.sayVaried(`Into the black book. ${a.why.slice(0, 80)}. That mint is dead to this desk — permanently.`, "disgusted");
+        return;
+      }
       case "scout_trending":
         return this.scoutBeat();
       case "engage_chat":
@@ -933,7 +997,8 @@ export class Beats {
           "\nCRITICAL VARIETY RULES: below are your RECENT tweets. Your new tweet must not reuse their openings, sentence structures, phrases, or angle." +
           "\nHARD BANS: (1) do not reuse ANY statistic, number, or metaphor that appears in a recent tweet — if 98.6% or the bar is already there, find different material. " +
           "(2) never invent people, replies, questions, or interactions — only reference engagement that actually happened. " +
-          "\nQUIET-DESK ROTATION: when nothing happened, rotate topics instead of re-narrating the flat day: market structure, your own token's journey, an educational thread-starter, trading philosophy, degen culture observation.",
+          "\nQUIET-DESK ROTATION: when nothing happened, rotate topics instead of re-narrating the flat day: market structure, your own token's journey, an educational thread-starter, trading philosophy, degen culture observation." +
+          "\nKAYFABE: you are a fictional character running a show. Bragging about your rank, your climb, your goals ('ranked #1468 today, coming for #1') is showmanship, not a promise or financial advice — write it with full confidence. If a topic truly can't be tweeted, reply with exactly SKIP (nothing else) — NEVER explain or refuse in prose.",
         `Topic: ${topic}\nScoreboard for context: ${kpis ? kpiText(kpis) : "n/a"}\n` +
           `YOUR RECENT TWEETS (do not resemble these):\n${recentTweets.map((t) => "- " + t).join("\n") || "(none yet)"}\n` +
           `Your memory:\n${memory.digest().slice(0, 700)}`,
@@ -942,6 +1007,13 @@ export class Beats {
       ),
       realSleep(20000).then(() => null),
     ]);
+    // REFUSAL FIREWALL: a model refusal (or SKIP) must never hit the timeline
+    if (text && (looksLikeRefusal(text) || /^\s*SKIP\s*$/i.test(text))) {
+      memory.journal("tweet", `model declined to write "${topic.slice(0, 80)}" — nothing posted`);
+      await this.sayVaried("Editorial passed on that one. Moving on.", "neutral");
+      this.loco.stateName = "IDLE";
+      return;
+    }
     const tweet = cleanSpoken(text ?? `day ${Math.ceil((Date.now() / 86_400_000) % 1000)} on the desk. the tape doesn't lie. $RIKU`);
 
     // attachment: a pre-shot selfie wins; else meme generation runs while he types
@@ -1035,7 +1107,7 @@ export class Beats {
     if (mp4) {
       const mediaId = await uploadVideo(mp4);
       if (mediaId) {
-        const res = await postTweet(cleanSpoken(caption ?? topic), { mediaId });
+        const res = await postTweet(cleanSpoken(caption && !looksLikeRefusal(caption) ? caption : topic), { mediaId });
         posted = res.ok && !res.dry;
         if (!posted) filmWhy = res.dry ? "postTweet gated (not live)" : `postTweet failed: ${(res as any).why ?? "?"}`;
       } else {
@@ -1052,7 +1124,7 @@ export class Beats {
       // tweet budget (in the sim this leaked 4 extra posts past his target)
       const b = tweetBudget();
       if (b.ok) {
-        const res = await postTweet(cleanSpoken(caption ?? script).slice(0, 250));
+        const res = await postTweet(cleanSpoken(caption && !looksLikeRefusal(caption) ? caption : script).slice(0, 250));
         if (res.ok) {
           bumpDaily("tweets");
           noteTweetPosted();
@@ -1071,6 +1143,16 @@ export class Beats {
   /** Buy a researched token, on stage at the terminal. */
   private async tradeBuyBeat(mint: string, sol: number, thesis: string, symbol?: string, strategyId?: string, barOverride?: number): Promise<void> {
     this.loco.stateName = "TRADING";
+    {
+      // desk book first — don't even walk to the terminal for a banned mint
+      const { touchBan } = await import("../agent/tokenguard.js");
+      const ban = touchBan(mint);
+      if (ban) {
+        memory.journal("trade", `desk book blocked buy of ${mint.slice(0, 8)}…: ${ban}`);
+        this.loco.stateName = "IDLE";
+        return;
+      }
+    }
     const strat = memory.strategy();
     const bar = barOverride ?? strat.minBuyScore;
     // barOverride means the caller (playbook path) already gated on the
@@ -1133,6 +1215,10 @@ export class Beats {
       this.hub.cue({ t: "anim", clip: isLoss ? lossAnims[Math.floor(Math.random() * lossAnims.length)] : "fist_pump" });
       await sleep(isLoss ? 3000 : 3400);
       memory.journal("trade", `${res.dry ? "[dry] " : ""}sold ${Math.round(fraction * 100)}% of ${mint.slice(0, 8)}… (${reason}) → ${res.solReceived?.toFixed(3) ?? "?"} SOL`);
+      // scam-smelling exits go straight into the black book — sold-as-scam
+      // means NEVER researched, bought, or called again
+      const { noteExitReason } = await import("../agent/tokenguard.js");
+      noteExitReason(mint, sellSym, reason);
       await this.speak(`${Math.round(fraction * 100)} percent off the ${reason.includes("profit") ? "top. Banked." : "book. " + reason.slice(0, 60)}`, "neutral");
     } else {
       memory.journal("trade", `sell failed ${mint.slice(0, 8)}…: ${res?.why ?? "timeout"}`);
@@ -1321,6 +1407,7 @@ export class Beats {
     for (const r of chosen) {
       const m = mentions.find((x) => x.id === r.id);
       if (!m) continue;
+      if (looksLikeRefusal(r.reply)) continue; // a refusal never gets posted at someone
       // 1. show their incoming reply on screen and read/react to it out loud
       this.hub.cue({ t: "takeover", view: { kind: "mention", author: m.author, text: m.text.slice(0, 240) } });
       await sleep(700);

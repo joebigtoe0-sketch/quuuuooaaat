@@ -21,6 +21,11 @@ export interface BuybackRecord {
   sig: string;
   at: number;
 }
+export interface BlacklistEntry {
+  reason: string;
+  by: "operator" | "agent" | "verdict" | "exit";
+  at: number;
+}
 interface State {
   kv: Record<string, string>;
   seen: Record<string, number>; // mint -> last handled ts (dedupe)
@@ -28,10 +33,11 @@ interface State {
   callouts: CalloutRecord[];
   buybacks: BuybackRecord[];
   verdicts: Record<string, { tier: string; score: number; at: number }>;
+  blacklist: Record<string, BlacklistEntry>; // mint -> permanent do-not-touch
 }
 
 const FILE = path.join(cfg.dataDir, "state.json");
-let state: State = { kv: {}, seen: {}, senders: {}, callouts: [], buybacks: [], verdicts: {} };
+let state: State = { kv: {}, seen: {}, senders: {}, callouts: [], buybacks: [], verdicts: {}, blacklist: {} };
 
 try {
   state = { ...state, ...JSON.parse(fs.readFileSync(FILE, "utf8")) };
@@ -90,4 +96,18 @@ export const store = {
     state.verdicts[mint] = { tier, score, at: Date.now() };
     save();
   },
+  verdictFor: (mint: string): { tier: string; score: number; at: number } | undefined => state.verdicts[mint],
+  // ---- the permanent do-not-touch list. Once a mint lands here it is never
+  // researched, bought, or called out again (operator can remove via admin). ----
+  blacklistAdd: (mint: string, reason: string, by: BlacklistEntry["by"]): void => {
+    if (!mint || state.blacklist[mint]) return; // first reason wins
+    state.blacklist[mint] = { reason: reason.slice(0, 160), by, at: Date.now() };
+    save();
+  },
+  blacklistRemove: (mint: string): void => {
+    delete state.blacklist[mint];
+    save();
+  },
+  blacklistGet: (mint: string): BlacklistEntry | undefined => state.blacklist[mint],
+  blacklistAll: (): Record<string, BlacklistEntry> => state.blacklist,
 };

@@ -144,13 +144,15 @@ export class Director {
   private async pickTrendingMint(): Promise<string | null> {
     const { openPositions } = await import("../chain/trader.js");
     const held = new Set(openPositions().map((p) => p.mint));
+    const { touchBan } = await import("../agent/tokenguard.js");
     const eligible = (mint: string) =>
       mint.endsWith("pump") &&
       mint !== cfg.ownMint &&
       !held.has(mint) &&
       !this.recentlyResearched.has(mint) &&
       !this.planner.researchedRecently(mint, 8) &&
-      !(store.seenAt(mint) && Date.now() - store.seenAt(mint)! < 6 * 3600_000);
+      !(store.seenAt(mint) && Date.now() - store.seenAt(mint)! < 6 * 3600_000) &&
+      !touchBan(mint);
     const take = (mint: string) => {
       this.recentlyResearched.add(mint);
       if (this.recentlyResearched.size > 300) this.recentlyResearched = new Set([...this.recentlyResearched].slice(-150));

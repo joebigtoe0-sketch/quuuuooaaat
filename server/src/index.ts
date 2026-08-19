@@ -37,7 +37,7 @@ const hub = new Hub(server);
 // Control endpoints need the admin key (query ?key=, x-admin-key header, or
 // the qk cookie set by /admin login). Read-only + stage-internal endpoints
 // (feed, layout, clip upload, agent-status, health) stay open.
-const PROTECTED = /^\/admin\/(directive|reset|restart|agent$|fake-send|fake-buyback|pause|resume|goto|anim|camera|fx|tts-test|selfie-take|selfie-last|chat$|chat-add|go-live|syslog|record$|say|queue|clips|clip-file|research-now)/;
+const PROTECTED = /^\/admin\/(directive|reset|restart|agent$|fake-send|fake-buyback|pause|resume|goto|anim|camera|fx|tts-test|selfie-take|selfie-last|chat$|chat-add|go-live|syslog|record$|say|queue|clips|clip-file|research-now|blacklist)/;
 function hasAdminKey(req: express.Request): boolean {
   const c = String(req.headers.cookie ?? "");
   const cookieKey = c.match(/(?:^|;\s*)qk=([^;]+)/)?.[1];
@@ -124,6 +124,22 @@ app.post("/admin/go-live", async (req, res) => {
   log.warn("admin", `🔴 GO LIVE — mint ${mint || cfg.ownMint || "NONE"}, dry-runs forced OFF, test data wiped (${wiped.join(", ") || "none"}), rebooting`);
   res.json({ live: true, ownMint: mint || cfg.ownMint, wiped, restarting: true, ...pre });
   setTimeout(relaunch, 400);
+});
+
+// the black book: list / add / remove permanently banned mints.
+//   GET /admin/blacklist                    -> list
+//   GET /admin/blacklist?mint=..&why=..     -> add (operator)
+//   GET /admin/blacklist?remove=<mint>      -> un-ban
+app.get("/admin/blacklist", (req, res) => {
+  const { mint, why, remove } = req.query as Record<string, string | undefined>;
+  if (remove) {
+    store.blacklistRemove(remove);
+    log.info("admin", `black book: removed ${remove.slice(0, 8)}…`);
+  } else if (mint) {
+    store.blacklistAdd(mint, why || "operator flagged", "operator");
+    log.info("admin", `black book: added ${mint.slice(0, 8)}… (${why || "operator flagged"})`);
+  }
+  res.json({ ok: true, blacklist: store.blacklistAll() });
 });
 
 // research a freshly-discovered coin right now (trending + fresh launch pool)

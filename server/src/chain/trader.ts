@@ -86,6 +86,13 @@ export async function tradeBuy(
   if (sol > cfg.maxTradeSol) sol = cfg.maxTradeSol;
   if (spentToday() + sol > cfg.maxDailyTradeSol) return { ok: false, dry: false, why: "daily trade cap" };
   if (openPositions().some((p) => p.mint === mint)) return { ok: false, dry: false, why: "already holding" };
+  {
+    // THE DESK BOOK — last rail before SOL moves: blacklisted or recently
+    // exited mints never get re-bought, no matter which path proposed it.
+    const { touchBan } = await import("../agent/tokenguard.js");
+    const ban = touchBan(mint);
+    if (ban) return { ok: false, dry: false, why: ban };
+  }
 
   if (cfg.tradeDryRun) {
     if (paperBank() < sol) return { ok: false, dry: true, why: `paper bankroll too low (${paperBank().toFixed(3)} SOL)` };

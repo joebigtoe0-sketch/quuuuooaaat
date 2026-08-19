@@ -30,6 +30,7 @@ export const ActionSchema = z.discriminatedUnion("do", [
     fraction: z.number().min(0.1).max(1),
     reason: txt(3, 200),
   }),
+  z.object({ do: z.literal("blacklist"), mint: mint(), why: txt(5, 160) }),
   z.object({ do: z.literal("engage_chat") }),
   z.object({ do: z.literal("buyback"), sol: z.number().min(0.01).max(0.5), why: txt(3, 200) }),
   z.object({ do: z.literal("strategy_create"), name: txt(3, 40), thesis: txt(10, 300), code: z.string().min(30).max(8000), buyBar: z.number().min(35).max(90), sizeSol: z.number().min(0.01).max(2) }),
@@ -74,6 +75,7 @@ RULE: "mint" must be a FULL base58 address copied EXACTLY from your memory/watch
 - {"do":"research","mint":"...","why":"..."} — run the full on-chain analysis on a NEW token (a scout hit or watchlist name you have NOT researched in the last few hours; repeats are auto-skipped and waste a slot)
 - {"do":"trade_buy","mint":"...","sol":0.05,"thesis":"..."} — buy (ONLY allowed after a recent research on that mint scored >= your minBuyScore; hard caps apply)
 - {"do":"trade_sell","mint":"...","fraction":0.5,"reason":"..."} — sell part/all of an OPEN position (your own token cannot be sold, ever)
+- {"do":"blacklist","mint":"...","why":"..."} — PERMANENTLY ban a mint from this desk: never researched, bought, or called out again. Use it the moment you conclude (or the operator's conviction says) a coin is a scam/rug/honeypot. Selling a scam WITHOUT blacklisting it is how you end up buying it back like a goldfish — always pair them
 - {"do":"strategy_create","name":"...","thesis":"...","buyBar":50,"sizeSol":0.05,"code":"function evaluate(f){ ... return {fit:true, adj:8, note:\"why\"} }"} — author a NEW analysis PLAYBOOK. Your code runs sandboxed against every researched coin's facts f = {symbol, venue:"curve"|"amm", mcSol, mcUsd, ageMin, sentUsd, score, buyScore, holders:{top1Pct,top10Pct,count}|null, dev:{known,launches,bonds,bondRate,onWatchlist}, smartWallets, checks:[{label,verdict,detail}]}. Return {fit:boolean, adj:-15..15, note:string}. When a playbook FITS a coin it sets the buy bar and the position size. Scam hard-rejects stay untouchable. Different games deserve different playbooks: fresh curves vs days-old community survivors vs whatever edge you discover next
 - {"do":"strategy_update","id":"..","code":"...","buyBar":52} — tune an existing playbook (any subset of fields; enabled:false pauses it)
 - {"do":"strategy_retire","id":".."} — retire a playbook whose W/L record doesn't earn its keep

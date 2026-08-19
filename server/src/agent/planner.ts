@@ -134,10 +134,18 @@ export class Planner {
       const pnlPct = ((nowSol - p.costSol) / Math.max(p.costSol, 1e-9)) * 100;
       if (pnlPct > -35 && pnlPct < 80) continue; // nothing dramatic — leave it
       this.lastPosReview.set(p.mint, Date.now());
+      // the operator's whispers (INNER CONVICTIONS) must reach the sell
+      // decision too — "that coin is a scam" can't be invisible right here
+      const convictions = memory
+        .directives()
+        .map((dv) => `- ${dv.text}`)
+        .join("\n")
+        .slice(0, 500);
       const d = SellDecision.safeParse(
         await callJson(
           `${AGENT_SYSTEM}\n\nOne of your positions moved hard. Decide NOW: sell some/all or hold. Reply JSON only: {"sell":true|false,"fraction":0.1-1,"reason":"<short>"}`,
-          `$${p.symbol}: cost ${p.costSol.toFixed(3)} SOL, now ~${nowSol.toFixed(3)} SOL (${pnlPct >= 0 ? "+" : ""}${pnlPct.toFixed(0)}%). Thesis was: ${p.thesis.slice(0, 120)}\nBankroll: ${paperBank().toFixed(3)} SOL.`,
+          `$${p.symbol}: cost ${p.costSol.toFixed(3)} SOL, now ~${nowSol.toFixed(3)} SOL (${pnlPct >= 0 ? "+" : ""}${pnlPct.toFixed(0)}%). Thesis was: ${p.thesis.slice(0, 120)}\nBankroll: ${paperBank().toFixed(3)} SOL.` +
+            (convictions ? `\nYOUR CURRENT CONVICTIONS (act on these):\n${convictions}` : ""),
           200,
         ),
       );
@@ -225,6 +233,7 @@ export class Planner {
       `LIVESTREAM CHAT: ${(await import("../social/livechat.js")).unreadChat()} unread message(s) since you last checked\n\n` +
       `YOUR PLAYBOOKS (id, settings, live performance):\n${strategiesDigest()}\n\n` +
       `RECENTLY RESEARCHED — these are FRESH; re-researching them is wasted airtime. Either trade_buy one (if buy-score >= your bar and you like it) or move on to NEW names:\n${researched.join("\n") || "(none)"}\n\n` +
+      `YOUR BLACK BOOK (permanently banned — never research/buy/call these; blacklist new scams the moment you conclude they're scams):\n${Object.entries(store.blacklistAll()).slice(-8).map(([m, b]) => `- ${m.slice(0, 8)}… ${b.reason}`).join("\n") || "(empty)"}\n\n` +
       `YOUR MEMORY:\n${memory.digest()}\n\n${ACTION_MENU_DOC}\n\n` +
       (reviewDue
         ? `IT HAS BEEN 24H SINCE YOUR LAST SELF-REVIEW. In this plan, include a {"do":"lesson"} distilling what the last day taught you, and consider {"do":"adjust_strategy"} if the data says your parameters are wrong.\n\n`
