@@ -35,7 +35,8 @@ export const ADMIN_HTML = `<!doctype html>
     <input id="topic" placeholder="topic (for tweet / film)">
     <button onclick="agent('tweet')">tweet it</button>
     <button onclick="agent('film')">film it</button>
-    <button onclick="act({do:'scout_trending'})">scout trending</button>
+    <button onclick="act({do:'scout_trending'})">scout trending (watchlist)</button>
+    <button class="go" onclick="researchNow()">🔬 research a fresh coin NOW</button>
     <button onclick="act({do:'reply_x'})">reply to mentions</button>
     <button onclick="q('/admin/pause','POST')">⏸ pause show</button>
     <button onclick="q('/admin/resume','POST')">▶ resume</button>
@@ -129,6 +130,7 @@ async function whisper(){
   refresh();
 }
 async function act(a){ await q('/admin/agent','POST',a); }
+async function researchNow(){ const r=await q('/admin/research-now','POST'); console.log('research queued', r); }
 async function liveCheck(){
   const r=await q('/admin/go-live-check');
   document.getElementById('livechecks').innerHTML=

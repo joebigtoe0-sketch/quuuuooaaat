@@ -37,7 +37,7 @@ const hub = new Hub(server);
 // Control endpoints need the admin key (query ?key=, x-admin-key header, or
 // the qk cookie set by /admin login). Read-only + stage-internal endpoints
 // (feed, layout, clip upload, agent-status, health) stay open.
-const PROTECTED = /^\/admin\/(directive|reset|restart|agent$|fake-send|fake-buyback|pause|resume|goto|anim|camera|fx|tts-test|selfie-take|selfie-last|chat$|chat-add|go-live|syslog|record$|say|queue|clips|clip-file)/;
+const PROTECTED = /^\/admin\/(directive|reset|restart|agent$|fake-send|fake-buyback|pause|resume|goto|anim|camera|fx|tts-test|selfie-take|selfie-last|chat$|chat-add|go-live|syslog|record$|say|queue|clips|clip-file|research-now)/;
 function hasAdminKey(req: express.Request): boolean {
   const c = String(req.headers.cookie ?? "");
   const cookieKey = c.match(/(?:^|;\s*)qk=([^;]+)/)?.[1];
@@ -124,6 +124,13 @@ app.post("/admin/go-live", async (req, res) => {
   log.warn("admin", `🔴 GO LIVE — mint ${mint || cfg.ownMint || "NONE"}, dry-runs forced OFF, test data wiped (${wiped.join(", ") || "none"}), rebooting`);
   res.json({ live: true, ownMint: mint || cfg.ownMint, wiped, restarting: true, ...pre });
   setTimeout(relaunch, 400);
+});
+
+// research a freshly-discovered coin right now (trending + fresh launch pool)
+app.post("/admin/research-now", (_req, res) => {
+  director.forceResearch();
+  log.info("admin", "forced a fresh-coin research");
+  res.json({ ok: true, note: "he'll research a discovered coin on the next beat" });
 });
 
 // ---------- queue inspection: see + drop whatever is waiting to run ----------

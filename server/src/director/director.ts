@@ -174,22 +174,28 @@ export class Director {
           .map((l) => l.mint)),
       ];
       if (!candidates.length) return null;
-      // LIVENESS GATE: only research a coin that isn't dead — current mc above
-      // the floor. Bounded RPC so we never hammer the chain.
+      // LIVENESS PREFERENCE (not a hard block): prefer a coin whose current mc
+      // clears the floor, but NEVER stop researching over it — a fresh launch
+      // sits right at the floor, RPC can hiccup, and the analysis rejects true
+      // corpses anyway. Fall back to a still-eligible candidate.
       const { PublicKey } = await import("@solana/web3.js");
       const { getTokenState } = await import("../chain/pump.js");
       const { getSolUsd } = await import("../chain/solana.js");
       const solUsd = await getSolUsd().catch(() => 150);
       let checked = 0;
+      let backstop: string | null = null;
       for (const mint of candidates) {
-        if (checked++ >= 8) break;
+        if (checked++ >= 6) break;
         try {
           const st = await getTokenState(new PublicKey(mint));
           const mcUsd = st.kind === "curve" || st.kind === "amm" ? st.mcSol * solUsd : 0;
           if (mcUsd >= cfg.minResearchMcUsd) return take(mint);
-        } catch {}
+          if (mcUsd > 0 && !backstop) backstop = mint; // has a live curve — keep as backup
+        } catch {
+          if (!backstop) backstop = mint; // couldn't read mc — still a candidate
+        }
       }
-      return null;
+      return take(backstop ?? candidates[0]);
     } catch {
       return null;
     }
@@ -203,16 +209,22 @@ export class Director {
     log.info("director", "show loop started");
   }
 
+  private forcedResearch = 0;
+  /** Admin: research a freshly-discovered coin NOW (jumps the timer). */
+  forceResearch(): void { this.forcedResearch = Math.min(3, this.forcedResearch + 1); }
+
   private nextJob(): Job | null {
     if (this.inboxQ.length) return this.inboxQ.shift()!;
     if (this.buybackQ.length) return this.buybackQ.shift()!;
     if (this.agentQ.length) return this.agentQ.shift()!;
     const idleMin = (Date.now() - this.lastConveyorPick) / simT(60_000);
-    if (idleMin >= cfg.conveyorPickMin && this.conveyor.length) {
-      // belt items are seconds old — the actual research target is resolved
-      // at execution time (trending boards first, belt as fallback)
-      const item = this.conveyor[this.conveyor.length - 1];
-      this.conveyor = this.conveyor.filter((c) => c.mint !== item.mint);
+    // research a DISCOVERED coin on the timer, or immediately when forced from
+    // admin. The target is resolved at execution (trending + fresh launch pool),
+    // so we no longer gate on the visual belt having items.
+    if (this.forcedResearch > 0 || idleMin >= cfg.conveyorPickMin) {
+      if (this.forcedResearch > 0) this.forcedResearch--;
+      const item = this.conveyor[this.conveyor.length - 1] ?? { mint: "", name: "", symbol: "" };
+      if (item.mint) this.conveyor = this.conveyor.filter((c) => c.mint !== item.mint);
       this.lastConveyorPick = Date.now();
       return { kind: "conveyor", item, at: Date.now() };
     }
