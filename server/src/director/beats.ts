@@ -45,6 +45,26 @@ const noteTweetPosted = () => store.kvSet("lastTweetAt", String(Date.now()));
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, simT(ms)));
 const jitter = (base: number, spread: number) => base + Math.random() * spread;
 
+/** Strip markdown + script scaffolding a model might leak (headers, **bold**,
+ *  [SECTION] labels, --- rules, word counts) so subtitles read clean and TTS
+ *  doesn't pronounce "hashtag" / "star star". Applied to everything he speaks. */
+function cleanSpoken(s: string): string {
+  return String(s)
+    .replace(/```[\s\S]*?```/g, " ")                 // code fences
+    .replace(/^\s*#{1,6}\s*/gm, "")                   // # headers
+    .replace(/RIKU\s*[—–-]\s*TO CAMERA\s*/gi, "")     // "RIKU — TO CAMERA" title phrase
+    .replace(/\*\*(.*?)\*\*/g, "$1")                  // **bold**
+    .replace(/\*(.*?)\*/g, "$1")                      // *italic*
+    .replace(/__(.*?)__/g, "$1")                      // __bold__
+    .replace(/\[[^\]]*\]/g, " ")                      // [OPEN] [CORE] [Word count: 68]
+    .replace(/\(\s*word count[^)]*\)/gi, " ")         // (word count: N)
+    .replace(/\s*[-–—]{2,}\s*/g, " ")                 // --- separators
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/\n{2,}/g, " ")
+    .replace(/\s+([.,!?])/g, "$1")
+    .trim();
+}
+
 /**
  * Beat scripts. THE invariant (from the plan): no unbounded await on the
  * director's critical path — every LLM/TTS/chain call races a watchdog and
@@ -84,6 +104,7 @@ export class Beats {
   }
 
   private async speak(text: string, mood: "neutral" | "excited" | "disgusted" | "thinking" = "neutral"): Promise<void> {
+    text = cleanSpoken(text); // never speak/subtitle raw markdown or script scaffolding
     const { pushFeed } = await import("../feed.js");
     pushFeed("say", text); // every spoken line is visible in the terminal log
     const id = crypto.randomBytes(6).toString("hex");
@@ -865,7 +886,7 @@ export class Beats {
       ),
       realSleep(20000).then(() => null),
     ]);
-    const tweet = (text ?? `day ${Math.ceil((Date.now() / 86_400_000) % 1000)} on the desk. the tape doesn't lie. $RIKU`).trim();
+    const tweet = cleanSpoken(text ?? `day ${Math.ceil((Date.now() / 86_400_000) % 1000)} on the desk. the tape doesn't lie. $RIKU`);
 
     // attachment: a pre-shot selfie wins; else meme generation runs while he types
     const imageP: Promise<string | null> = attachImage
@@ -912,7 +933,8 @@ export class Beats {
     // write the script while walking over
     const scriptP = callFreeform(
       (await import("../brain/prompts.js")).PERSONA +
-        "\nWrite a 60-90 word to-camera video segment script in your voice. Spoken words only — punchy open, one core insight, sign-off." +
+        "\nWrite a 60-90 word to-camera video monologue in your voice. Output ONLY the exact words he says out loud — plain text, one flowing paragraph." +
+        "\nABSOLUTELY NO: markdown (#, *, **), section labels or headers ([OPEN]/[CORE]/[CLOSE], 'RIKU — TO CAMERA'), stage directions, bullet points, or a word count. Just the spoken words, nothing else." +
         "\nHARD BANS: do not reuse ANY statistic, number, phrase, or metaphor from your recent posts below — if 98.6%/1.4% or the bar already appears there, build from different material entirely.",
       `Topic: ${topic}\nRECENT POSTS (do not resemble these):\n${memory.recentByKind("tweet", 6).concat(memory.recentByKind("film-script", 3)).map((t) => "- " + t).join("\n") || "(none)"}\nContext:\n${memory.digest().slice(0, 700)}`,
       260,
@@ -957,7 +979,7 @@ export class Beats {
     if (mp4) {
       const mediaId = await uploadVideo(mp4);
       if (mediaId) {
-        const res = await postTweet(caption ?? topic, { mediaId });
+        const res = await postTweet(cleanSpoken(caption ?? topic), { mediaId });
         posted = res.ok && !res.dry;
         if (!posted) filmWhy = res.dry ? "postTweet gated (not live)" : `postTweet failed: ${(res as any).why ?? "?"}`;
       } else {
@@ -974,7 +996,7 @@ export class Beats {
       // tweet budget (in the sim this leaked 4 extra posts past his target)
       const b = tweetBudget();
       if (b.ok) {
-        const res = await postTweet(caption ?? script.slice(0, 250));
+        const res = await postTweet(cleanSpoken(caption ?? script).slice(0, 250));
         if (res.ok) {
           bumpDaily("tweets");
           noteTweetPosted();
