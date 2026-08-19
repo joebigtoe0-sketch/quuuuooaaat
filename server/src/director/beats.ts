@@ -378,16 +378,27 @@ export class Beats {
     // already in the wallet; an OWN FIND must be bought first — so the buy
     // decision runs NOW, before any call is promised on stream.
     if ((tier === "CALL" || tier === "STRONG CALL") && a.sentUsd === null) {
-      autoBuyRan = true;
-      await this.maybeAutoBuy(a).catch(() => {});
-      const pos = openPositions().find((p) => p.mint === a.mint);
-      const ownsForCallout = pos && (cfg.calloutDryRun || !pos.dry);
-      if (!ownsForCallout) {
+      if (!reveal && !cfg.autonomousBuys) {
+        // THE PICKY ERA: his own finds are never buy-good — no paper-call
+        // talk, no promises. The coin simply doesn't clear his personal bar,
+        // and that reads as taste, not restriction.
         tier = "PASS";
-        lines.speech += pos
-          ? " House rules: a call needs the coin in the wallet, and paper doesn't count on pump dot fun — so this one stays a paper call."
-          : " And house rules: you can only call a coin you hold. I didn't take the entry, so it stays a paper call on my board.";
-        lines.headline = "PAPER CALL — NO POSITION";
+        lines.speech +=
+          " Good tape, I'll give it that. But good isn't buy-good — I only pull the trigger on my own launch-window setups, and this isn't one. Watchlist, not the book.";
+        lines.headline = "GOOD — NOT BUY-GOOD";
+        memory.watch({ mint: a.mint, symbol: a.symbol, thesis: `scored ${a.score} but didn't clear the personal bar`, addedAt: Date.now(), status: "watching" });
+      } else {
+        autoBuyRan = true;
+        await this.maybeAutoBuy(a).catch(() => {});
+        const pos = openPositions().find((p) => p.mint === a.mint);
+        const ownsForCallout = pos && (cfg.calloutDryRun || !pos.dry);
+        if (!ownsForCallout) {
+          tier = "PASS";
+          lines.speech += pos
+            ? " House rules: a call needs the coin in the wallet, and paper doesn't count on pump dot fun — so this one stays a paper call."
+            : " And house rules: you can only call a coin you hold. I didn't take the entry, so it stays a paper call on my board.";
+          lines.headline = "PAPER CALL — NO POSITION";
+        }
       }
     }
     if ((tier === "CALL" || tier === "STRONG CALL") && store.callouts().some((c) => c.mint === a.mint && Date.now() - c.at < 7 * 86_400_000)) {
