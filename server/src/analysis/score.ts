@@ -256,7 +256,7 @@ export function scoreToken(i: Inputs): {
   score += Math.min(6, socials * 3);
   if ((i.coin?.description ?? "").length > 30) score += 2;
   if (i.coin?.image) score += 2;
-  row("SOCIALS", socials > 0 ? "pass" : "warn", socials > 0 ? `${socials} link${socials > 1 ? "s" : ""} present` : "no socials at all");
+  row("SOCIALS", socials > 0 ? "pass" : "warn", socials > 0 ? `${socials} link${socials > 1 ? "s" : ""} — more to dig into` : "no socials yet — normal for a fresh meme, not a red flag");
   // paid dex profile (0-6)
   if (i.dexPaid === true) score += 6;
   // clean bubble map (0-6) — being verifiably NOT a rug is worth points

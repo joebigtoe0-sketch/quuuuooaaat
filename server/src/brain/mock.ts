@@ -66,9 +66,9 @@ export function mockVerdict(a: Analysis): { speech: string; callout_text: string
 }
 
 export function mockMutter(row: { label: string; verdict: string }): string {
-  const good = ["mhm.", "clean.", "I can work with that.", "fine. next.", "good tape."];
-  const bad = ["oof.", "there it is.", "that's a problem.", "who taught you economics.", "grim."];
-  const meh = ["noted.", "we'll see.", "inconclusive. story of my life."];
+  const good = ["mhm.", "clean.", "I can work with that.", "fine, next.", "good tape.", "that checks out.", "no notes."];
+  const bad = ["oof.", "there it is.", "that's a problem.", "grim.", "yikes.", "and there's the crack."];
+  const meh = ["noted.", "we'll see.", "inconclusive.", "gray area.", "keeping an eye on it."];
   return pick(row.verdict === "pass" ? good : row.verdict === "fail" ? bad : meh);
 }
 

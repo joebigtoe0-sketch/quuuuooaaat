@@ -85,12 +85,22 @@ export function verdictPrompt(a: Analysis): { system: string; user: string } {
   };
 }
 
-export function mutterPrompt(a: Analysis, row: { label: string; detail: string }): { system: string; user: string } {
+export function mutterPrompt(a: Analysis, row: { label: string; verdict: string; detail: string }): { system: string; user: string } {
+  const v =
+    row.verdict === "pass" ? "GOOD — this check PASSED"
+    : row.verdict === "fail" ? "BAD — this check FAILED"
+    : "MIXED — a caveat, not a dealbreaker";
   return {
     system: PERSONA,
     user:
-      `You are mid-research at your terminal, reading one result line. React in <=14 words, in character. ` +
-      `Line: "${row.label}: ${sanitize(row.detail)}" (token: ${sanitize(a.symbol)}). Reply with the spoken words only.`,
+      `Mid-research at your terminal, reacting OUT LOUD to ONE check result. <=16 words, in character, freshly phrased.\n` +
+      `MATCH THE FINDING — never contradict it:\n` +
+      `- GOOD -> a confident nod or a small flex. Do NOT roast a check that passed.\n` +
+      `- BAD -> here's where the roast lives.\n` +
+      `- MIXED -> a wry caveat, not a funeral.\n` +
+      `The detail already carries the nuance — if it says "normal for a memecoin" or "not a red flag", then it is FINE, treat it as fine. Memecoins don't need Twitter/Discord or deep liquidity; only react badly if the line itself says something is actually wrong. Never invent a problem the line doesn't state.\n` +
+      `CHECK [${v}] — ${row.label}: ${sanitize(row.detail)}  (coin: $${sanitize(a.symbol)})\n` +
+      `Spoken words only, no markdown.`,
   };
 }
 

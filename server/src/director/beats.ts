@@ -258,7 +258,7 @@ export class Beats {
         const p = mutterPrompt(a, row);
         const m = await Promise.race([
           callFreeform(p.system, p.user, 60, FRAGMENT_MODEL),
-          realSleep(3500).then(() => null),
+          realSleep(6000).then(() => null),
         ]);
         await this.speak(m && m.length > 1 && m.length < 120 ? m : mockMutter(row), "thinking");
       } else {
