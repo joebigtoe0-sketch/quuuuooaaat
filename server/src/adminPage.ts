@@ -39,6 +39,9 @@ export const ADMIN_HTML = `<!doctype html>
     <button class="go" onclick="researchNow()">🔬 research a fresh coin NOW</button>
     <button onclick="act({do:'reply_x'})">reply to mentions</button>
     <br>
+    <textarea id="kolpool" placeholder="paste your ct-accounts JSON here to load the follow pool" style="width:98%;height:60px;font:11px monospace"></textarea>
+    <button onclick="poolImport()">📥 import follow pool</button>
+    <br>
     <button onclick="kolLoad()">🐦 load KOL roster</button>
     <button onclick="kolSave()">💾 save roster</button>
     <button onclick="act({do:'engage_kols'})">▶ do a timeline session NOW</button>
@@ -152,6 +155,12 @@ async function whisper(){
 }
 async function act(a){ await q('/admin/agent','POST',a); }
 async function researchNow(){ const r=await q('/admin/research-now','POST'); console.log('research queued', r); }
+async function poolImport(){
+  const t=document.getElementById('kolpool').value.trim();
+  if(!t) return alert('paste the JSON first');
+  const r=await fetch('/admin/kol-pool',{method:'POST',headers:{'content-type':'text/plain'},body:t}).then(x=>x.json());
+  alert(r.ok?('imported '+r.imported+' handles into the follow pool'):('failed: '+r.why));
+}
 async function kolLoad(){
   const r=await fetch('/admin/kol-roster'); document.getElementById('kols').value=await r.text();
 }
