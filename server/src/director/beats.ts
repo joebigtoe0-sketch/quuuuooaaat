@@ -425,20 +425,29 @@ export class Beats {
       return;
     }
 
+    // SIZE BY CONVICTION (in code, so it actually varies): the further the
+    // effective score clears the bar, the bigger the bet. 0 at the bar, 1 at
+    // ~bar+18. The brain decides buy/pass; the desk decides how much.
+    const conviction = Math.min(1, Math.max(0, (effScore - bar) / 18));
+    const sizeLabel = conviction >= 0.66 ? "a real position" : conviction >= 0.33 ? "a standard clip" : "a starter";
+
     const { PERSONA, RESEARCH_DESK } = await import("../brain/prompts.js");
     const d = await Promise.race([
       callJson(
-        `${PERSONA}\n\n${RESEARCH_DESK}\n\nYou just researched a token live and it CLEARED your buy bar. Decide: take a position or pass. You are a trader — passing on a clean setup needs a reason. Reply JSON only: {"buy":true|false,"sol":<0.01-${Math.min(stdSize * 2, 0.25)}>,"thesis":"<one line>"}`,
+        `${PERSONA}\n\n${RESEARCH_DESK}\n\nYou just researched a token live and it CLEARED your buy bar. Decide ONLY: take a position or pass. You are a trader — passing on a clean setup needs a reason. Position size is set by conviction automatically; you just make the call. Reply JSON only: {"buy":true|false,"thesis":"<one line>"}`,
         `$${a.symbol} — buy-score ${a.buyScore}, effective ${effScore} (bar ${bar}${best ? `, PLAYBOOK ${best.s.name} fits: ${best.read.note}` : ", baseline read"})\n` +
           a.rows.map((r) => `${r.label}: ${r.detail}`).join("\n") +
-          `\nBankroll: ${bank.toFixed(3)} SOL (${bullets.toFixed(1)} standard positions of dry powder — the thinner the stack, the pickier you are). Standard size: ${stdSize} SOL. Open positions: ${openPositions().length}.`,
+          `\nBankroll: ${bank.toFixed(3)} SOL (${bullets.toFixed(1)} standard positions of dry powder — the thinner the stack, the pickier you are). Open positions: ${openPositions().length}.`,
         250,
       ),
       realSleep(25_000).then(() => null),
     ]);
     const buy = d && (d as any).buy === true;
-    // never bet more than a quarter of the remaining bankroll on one name
-    const sol = Math.max(0.01, Math.min(Number((d as any)?.sol) || stdSize, stdSize * 2, bank * 0.25));
+    // conviction-scaled: ~0.6x standard at the bar → ~2.2x on a screamer,
+    // never more than a quarter of the remaining bankroll or the per-trade cap.
+    const sol = Math.round(
+      Math.max(0.01, Math.min(stdSize * (0.6 + conviction * 1.6), stdSize * 2.5, bank * 0.25, cfg.maxTradeSol)) * 1000,
+    ) / 1000;
     const thesis = String((d as any)?.thesis ?? `scored ${a.buyScore} on the desk`).slice(0, 200);
     if (!buy) {
       memory.journal("trade", `passed on $${a.symbol} despite buy-score ${a.buyScore}${d ? `: ${thesis}` : " (brain quiet)"}`);
@@ -446,8 +455,8 @@ export class Beats {
     }
     await this.speak(
       best
-        ? `${a.symbol} fits my ${best.s.name} playbook — ${best.read.note.slice(0, 60)}. Effective read ${effScore}, bar ${bar}. I'm in. ${thesis.slice(0, 70)}`
-        : `And that clears my bar. ${a.symbol}, buy-score ${a.buyScore} — I'm taking a position. ${thesis.slice(0, 80)}`,
+        ? `${a.symbol} fits my ${best.s.name} playbook — ${best.read.note.slice(0, 55)}. Effective read ${effScore}, bar ${bar}. ${sizeLabel} — ${sol} sol. ${thesis.slice(0, 55)}`
+        : `And that clears my bar. ${a.symbol}, buy-score ${a.buyScore} — ${sizeLabel}, ${sol} sol on it. ${thesis.slice(0, 60)}`,
       "excited",
     );
     await this.tradeBuyBeat(a.mint, sol, thesis, a.symbol, best?.s.id, bar);
