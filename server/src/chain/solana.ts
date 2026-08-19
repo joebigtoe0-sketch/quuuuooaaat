@@ -78,10 +78,20 @@ export async function sendIxs(
   }).compileToV0Message();
   const tx = new VersionedTransaction(msg);
   tx.sign([payer]);
-  const sig = await connection.sendRawTransaction(tx.serialize(), {
-    skipPreflight: false,
-    maxRetries: 3,
-  });
+  let sig: string;
+  try {
+    sig = await connection.sendRawTransaction(tx.serialize(), {
+      skipPreflight: false,
+      maxRetries: 3,
+    });
+  } catch (e: any) {
+    // "Transaction simulation failed" alone is undebuggable — surface the
+    // actual program log lines (slippage, insufficient funds, wrong account…)
+    let logs: string[] = [];
+    try { logs = (typeof e?.getLogs === "function" ? await e.getLogs(connection) : e?.logs) ?? []; } catch {}
+    const tail = logs.filter((l: string) => /error|failed|insufficient|slippage|exceed/i.test(l)).slice(-3).join(" | ");
+    throw new Error(`${String(e?.message ?? e).slice(0, 160)}${tail ? ` :: ${tail.slice(0, 220)}` : ""}`);
+  }
   // confirm, but don't trust a single websocket wait: under congestion it can
   // throw blockhash-expired even when the tx LANDED. Fall back to polling the
   // signature status before declaring failure — false "didn't land"s are worse

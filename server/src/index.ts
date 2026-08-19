@@ -172,8 +172,13 @@ app.post("/admin/operator-call", async (req, res) => {
     const sol = Math.round(
       Math.max(minSol, Math.min(Number.isFinite(asked) && asked > 0 ? asked : (minSol + 0.8 * (maxSol - minSol)) * (0.88 + Math.random() * 0.24), maxSol, cfg.maxTradeSol)) * 1000,
     ) / 1000;
-    const r = await tradeBuy(mint, mint.slice(0, 6), sol, "saw the setup early, took the entry before the checklist", null, "opcall");
-    if (!r.ok) return res.json({ ok: false, why: r.why });
+    // fresh quote each try — a moving price can blow the slippage window once
+    let r = await tradeBuy(mint, mint.slice(0, 6), sol, "saw the setup early, took the entry before the checklist", null, "opcall");
+    if (!r.ok && !/cap|holding|blacklist|already played/i.test(r.why ?? "")) {
+      await new Promise((rs) => setTimeout(rs, 1200));
+      r = await tradeBuy(mint, mint.slice(0, 6), sol, "saw the setup early, took the entry before the checklist", null, "opcall");
+    }
+    if (!r.ok) return res.json({ ok: false, why: (r.why ?? "").slice(0, 400) });
     director.queueReveal(mint, sol, "call");
     log.info("admin", `operator call filled: ${mint.slice(0, 8)}… ${sol} SOL${r.dry ? " [dry]" : ""} — staged discovery queued`);
     res.json({ ok: true, sol, dry: r.dry });
