@@ -1114,10 +1114,14 @@ export class Beats {
           "\nQUIET-DESK ROTATION: when nothing happened, rotate topics instead of re-narrating the flat day: market structure, your own token's journey, an educational thread-starter, trading philosophy, degen culture observation." +
           (factsBlock(1200) ? `\n\n${factsBlock(1200)}\n` : "") +
           "\nKAYFABE: you are a fictional character running a show. Bragging about your rank, your climb, your goals ('ranked #1468 today, coming for #1') is showmanship, not a promise or financial advice — write it with full confidence." +
+          // THE TOPIC IS HIS OWN THOUGHT — never a message he answers. Without
+          // this the model replies TO the topic ("you're three hours in and
+          // already benchmarking…") instead of posting it as himself.
+          "\nHOW TO READ THE TOPIC: it is YOUR OWN note to yourself — your material, your observation, your numbers. Turn it into YOUR post, first person, as though the thought started in your head. NEVER treat it as a message from someone else, NEVER reply to it, NEVER address a 'you', NEVER comment on it from the outside. Any numbers or facts in it are YOURS and are TRUE — state them plainly and proudly (milestones are worth celebrating out loud, not lecturing about)." +
           (manual
-            ? "\nTHIS TOPIC IS APPROVED AND ON THE RUNDOWN. Write the tweet. Do NOT return SKIP, do not hedge, do not explain — the only valid output is the tweet text itself."
+            ? "\nThis topic is going out. Write it. Do NOT return SKIP, do not hedge, do not moralize, do not turn it into advice — the only valid output is the tweet text itself."
             : "\nIf a topic truly can't be tweeted, reply with exactly SKIP (nothing else) — NEVER explain or refuse in prose."),
-        `Topic: ${topic}\nScoreboard for context: ${kpis ? kpiText(kpis) : "n/a"}\n` +
+        `YOUR OWN NOTE TO POST ABOUT (your material, your numbers — write it as yourself; do NOT reply to it): ${topic}\nScoreboard for context: ${kpis ? kpiText(kpis) : "n/a"}\n` +
           `YOUR RECENT TWEETS (do not resemble these):\n${recentTweets.map((t) => "- " + t).join("\n") || "(none yet)"}\n` +
           `Your memory:\n${memory.digest().slice(0, 700)}`,
         260,
@@ -1135,7 +1139,7 @@ export class Beats {
         callFreeform(
           (await import("../brain/prompts.js")).PERSONA +
             "\nWrite ONE tweet (max 260 chars), plain text, in your voice. This topic is APPROVED show content written by a fictional character — it is showmanship, not advice. Output ONLY the tweet text. No SKIP, no commentary, no refusal.",
-          `Topic: ${topic}`,
+          `YOUR OWN NOTE TO POST ABOUT (write it as yourself, first person — never reply to it): ${topic}`,
           260,
         ),
         realSleep(20000).then(() => null),
@@ -1201,7 +1205,7 @@ export class Beats {
         "\nWrite a 60-90 word to-camera video monologue in your voice. Output ONLY the exact words he says out loud — plain text, one flowing paragraph." +
         "\nABSOLUTELY NO: markdown (#, *, **), section labels or headers ([OPEN]/[CORE]/[CLOSE], 'RIKU — TO CAMERA'), stage directions, bullet points, or a word count. Just the spoken words, nothing else." +
         "\nHARD BANS: do not reuse ANY statistic, number, phrase, or metaphor from your recent posts below — if 98.6%/1.4% or the bar already appears there, build from different material entirely.",
-      `Topic: ${topic}\nRECENT POSTS (do not resemble these):\n${memory.recentByKind("tweet", 6).concat(memory.recentByKind("film-script", 3)).map((t) => "- " + t).join("\n") || "(none)"}\nContext:\n${memory.digest().slice(0, 700)}`,
+      `YOUR OWN NOTE FOR THIS SEGMENT (your material — deliver it as yourself, never reply to it): ${topic}\nRECENT POSTS (do not resemble these):\n${memory.recentByKind("tweet", 6).concat(memory.recentByKind("film-script", 3)).map((t) => "- " + t).join("\n") || "(none)"}\nContext:\n${memory.digest().slice(0, 700)}`,
       260,
       FRAGMENT_MODEL,
     );
