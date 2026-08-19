@@ -96,6 +96,9 @@ export const cfg = {
   // conveyor discovery only researches coins with at least this current mc —
   // skips dead/dumped launches instead of wasting the ceremony on a corpse.
   minResearchMcUsd: num("MIN_RESEARCH_MC_USD", 4000),
+  // random checkups only pick coins at least this far along the bonding curve
+  // (0.4 = 40% bonded; graduated = 1). Survivors, not corpses.
+  minResearchProgress: num("MIN_RESEARCH_PROGRESS", 0.4),
   // a coin he already bought and EXITED is off the menu for this long —
   // no re-research, no re-buy. Blacklisted (scam/rug) coins are off forever.
   rebuyCooldownH: num("REBUY_COOLDOWN_H", 72),

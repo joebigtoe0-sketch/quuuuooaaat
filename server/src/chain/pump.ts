@@ -29,6 +29,35 @@ const { PUMP_AMM_SDK, OnlinePumpAmmSdk } = pumpSwapSdk as any;
 const TOKEN_DECIMALS = 6;
 const TOTAL_SUPPLY_UI = 1_000_000_000;
 
+/** Bonding progress (0..1) for MANY mints in a few RPC calls — one
+ *  getMultipleAccountsInfo per 100 curve PDAs. complete curves report 1.
+ *  Mints with no curve account (not pump / not indexed) are absent. */
+export async function curveProgressBatch(mints: string[]): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  const conn = getConnection();
+  for (let i = 0; i < mints.length; i += 100) {
+    const chunk = mints.slice(i, i + 100);
+    let infos: (AccountInfo<Buffer> | null)[] = [];
+    try {
+      infos = await conn.getMultipleAccountsInfo(chunk.map((m) => bondingCurvePda(new PublicKey(m))));
+    } catch {
+      continue;
+    }
+    for (let j = 0; j < chunk.length; j++) {
+      const info = infos[j];
+      if (!info) continue;
+      try {
+        const bc = PUMP_SDK.decodeBondingCurveNullable(info) as BondingCurve | null;
+        if (!bc) continue;
+        if (bc.complete) { out.set(chunk[j], 1); continue; }
+        const realQuote = Number(bc.realQuoteReserves.toString()) / LAMPORTS_PER_SOL;
+        out.set(chunk[j], Math.min(1, realQuote / 85));
+      } catch {}
+    }
+  }
+  return out;
+}
+
 export type TokenState =
   | {
       kind: "curve";

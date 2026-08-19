@@ -134,8 +134,10 @@ export class Director {
     this.hub.cue({ t: "conveyor_add", item });
     if (item.mint?.endsWith("pump") && !this.launchPool.some((l) => l.mint === item.mint)) {
       this.launchPool.push({ mint: item.mint, at: Date.now() });
-      const cutoff = Date.now() - 30 * 60_000; // keep the last 30 min
-      this.launchPool = this.launchPool.filter((l) => l.at > cutoff).slice(-400);
+      // keep 4 HOURS of launches — a coin needs time to bond 40%, and the
+      // batched progress sweep makes checking hundreds of them cheap
+      const cutoff = Date.now() - 4 * 3600_000;
+      this.launchPool = this.launchPool.filter((l) => l.at > cutoff).slice(-600);
     }
   }
 
@@ -168,37 +170,31 @@ export class Director {
         new Promise<[]>((r) => setTimeout(() => r([]), 10_000)),
       ]);
       const now = Date.now();
-      // trending first (they have momentum), then the launch pool aged 3-20 min
-      // (readable history, not seconds-old and unreadable)
+      // trending first (they have momentum), then the launch pool aged 3 min -
+      // 4 h (old enough to read, young enough to still be a story)
       const candidates = [
         ...shuffle((hits ?? []).map((h) => h.mint).filter(eligible)),
         ...shuffle(this.launchPool
-          .filter((l) => now - l.at > 3 * 60_000 && now - l.at < 20 * 60_000 && eligible(l.mint))
+          .filter((l) => now - l.at > 3 * 60_000 && eligible(l.mint))
           .map((l) => l.mint)),
       ];
       if (!candidates.length) return null;
-      // LIVENESS PREFERENCE (not a hard block): prefer a coin whose current mc
-      // clears the floor, but NEVER stop researching over it — a fresh launch
-      // sits right at the floor, RPC can hiccup, and the analysis rejects true
-      // corpses anyway. Fall back to a still-eligible candidate.
-      const { PublicKey } = await import("@solana/web3.js");
-      const { getTokenState } = await import("../chain/pump.js");
-      const { getSolUsd } = await import("../chain/solana.js");
-      const solUsd = await getSolUsd().catch(() => 150);
-      let checked = 0;
-      let backstop: string | null = null;
-      for (const mint of candidates) {
-        if (checked++ >= 6) break;
-        try {
-          const st = await getTokenState(new PublicKey(mint));
-          const mcUsd = st.kind === "curve" || st.kind === "amm" ? st.mcSol * solUsd : 0;
-          if (mcUsd >= cfg.minResearchMcUsd) return take(mint);
-          if (mcUsd > 0 && !backstop) backstop = mint; // has a live curve — keep as backup
-        } catch {
-          if (!backstop) backstop = mint; // couldn't read mc — still a candidate
-        }
+      // SURVIVORS ONLY: one batched RPC sweep reads every candidate's bonding
+      // progress. Random checkups only dig into coins that actually CLIMBED —
+      // at least minResearchProgress bonded (graduated counts as done). Dead
+      // launches never reach the desk again.
+      const { curveProgressBatch } = await import("../chain/pump.js");
+      const prog = await curveProgressBatch(candidates.slice(0, 200));
+      const alive = candidates.filter((m) => (prog.get(m) ?? 0) >= cfg.minResearchProgress);
+      if (alive.length) return take(alive[Math.floor(Math.random() * Math.min(alive.length, 6))]);
+      // nothing at the bar this cycle — settle for the liveliest thing that's
+      // at least MOVING (>=10% bonded), never a flatline
+      let best: string | null = null;
+      let bestP = 0.1;
+      for (const [m, p] of prog) {
+        if (p >= bestP && p < 1) { best = m; bestP = p; }
       }
-      return take(backstop ?? candidates[0]);
+      return best ? take(best) : null;
     } catch {
       return null;
     }
