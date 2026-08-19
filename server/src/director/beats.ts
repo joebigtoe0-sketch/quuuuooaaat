@@ -995,6 +995,9 @@ export class Beats {
       }
       case "trim_holdings":
         return this.trimBeat((action as { why: string }).why);
+      case "engage_kols":
+        this.dir.noteKolFeed();
+        return this.kolFeedBeat();
       case "scout_x":
         return this.scoutXBeat();
       case "reply_x":
@@ -1378,6 +1381,104 @@ ${factsBlock(1400)}` : ""),
     }
     memory.journal("chat", `read the livestream chat at the facecam — reacted to ${reactions.length} of ${msgs.length} messages`);
     this.hub.cue({ t: "camera", preset: "wide" });
+    this.loco.stateName = "IDLE";
+  }
+
+  /** Timer-driven entry (the floor). */
+  async runKolFeed(): Promise<void> { return this.kolFeedBeat(); }
+
+  /** THE TIMELINE SESSION — he sits at the terminal, pulls fresh posts from the
+   *  accounts he follows, reads the good ones ALOUD on camera, and fires back
+   *  replies typed on screen. Also quietly follows a few new accounts. */
+  private async kolFeedBeat(): Promise<void> {
+    const { roster, isSeen, markSeen, followCandidates, markFollowed } = await import("../social/kols.js");
+    const { searchFromHandles, followUser, xReady } = await import("../social/x.js");
+    const list = roster();
+    this.loco.stateName = "SCOUTING";
+    await this.loco.walkTo("terminal");
+    this.loco.sit(true);
+    this.hub.cue({ t: "camera", preset: "terminal" });
+
+    const all = await Promise.race([searchFromHandles(list, 180), realSleep(25_000).then(() => [])]);
+    const fresh = (all ?? []).filter((p) => !isSeen(p.id)).slice(0, 10);
+    if (!fresh.length) {
+      await this.sayVaried("Timeline's a repeat of itself. Nothing new from the people worth reading. Back to the tape.", "neutral");
+      this.loco.sit(false);
+      this.loco.stateName = "IDLE";
+      return;
+    }
+    markSeen(fresh.map((p) => p.id)); // seen the moment he reads them
+
+    const Picks = zod.object({
+      picks: zod.array(zod.object({
+        id: zod.string(),
+        aloud: zod.string().min(3),
+        reply: zod.string().min(2),
+      })).min(1).max(3),
+    });
+    const { PERSONA } = await import("../brain/prompts.js");
+    const raw = await Promise.race([
+      callJson(
+        PERSONA +
+          "\nYou're at your terminal scrolling the timeline of the accounts you follow. Pick the 2-3 posts most worth your take — coin chatter, market reads, AI-agent talk, anything you can be sharper about than they were. Skip pure noise." +
+          "\nFor each: \"aloud\" = what you SAY to camera as you read their post (name the account, react, ~15-30 words, spoken, no markdown), and \"reply\" = the actual reply you post to them (max 200 chars, in voice, adds something — a sharper read, a stat, a joke; never a bland 'great post')." +
+          "\nFELLOW AIs (truth_terminal, zerebro, repligate, claude, grok and the like): treat them as peers of your own species — curious, warm, a little competitive. Never pretend to be human with them." +
+          "\nNever reply to something you'd be embarrassed to have on your timeline. Never give financial advice." +
+          `\nReply JSON only: {"picks":[{"id":"<post id>","aloud":"...","reply":"..."}]}` +
+          (factsBlock(1200) ? `\n\n${factsBlock(1200)}` : ""),
+        fresh.map((p) => `id=${p.id} @${p.author}: ${p.text.slice(0, 200)}`).join("\n"),
+        700,
+      ),
+      realSleep(30_000).then(() => null),
+    ]);
+    const parsed = Picks.safeParse(raw);
+    if (!parsed.success) {
+      await this.sayVaried("Read the timeline. Nothing there I need to correct today. Rare.", "neutral");
+      this.loco.sit(false);
+      this.loco.stateName = "IDLE";
+      return;
+    }
+
+    let posted = 0;
+    for (const pick of parsed.data.picks) {
+      const post = fresh.find((p) => p.id === pick.id);
+      if (!post || looksLikeRefusal(pick.reply)) continue;
+      // 1. their post takes over the screen, he reads + reacts on camera
+      this.hub.cue({ t: "takeover", view: { kind: "mention", author: post.author, text: post.text.slice(0, 240) } });
+      await sleep(700);
+      await this.speak(cleanSpoken(pick.aloud).slice(0, 220), "excited");
+      // 2. the reply types out on the composer
+      const reply = cleanSpoken(pick.reply).slice(0, 240);
+      const step = Math.max(4, Math.round(reply.length / 22));
+      for (let typed = step; typed < reply.length + step; typed += step) {
+        this.hub.cue({ t: "takeover", view: { kind: "compose", text: reply, typed: Math.min(typed, reply.length), state: "typing", replyTo: post.id } });
+        await sleep(95);
+      }
+      // 3. fire it back at them
+      const b = tweetBudget();
+      const res = b.ok ? await postTweet(reply, { replyTo: post.id }) : { ok: false, dry: true } as any;
+      this.hub.cue({ t: "takeover", view: { kind: "compose", text: reply, typed: reply.length, state: res.ok && !res.dry ? "posted" : "drafted", replyTo: post.id } });
+      if (res.ok) {
+        posted++;
+        if (!res.dry) noteTweetPosted();
+        memory.journal("x-chatter", `${res.dry ? "[dry] " : ""}replied to @${post.author}: ${reply.slice(0, 90)}`);
+      }
+      await sleep(1500);
+    }
+    this.hub.cue({ t: "takeover", view: null });
+
+    // quietly grow the graph — a couple of follows per session
+    if (xReady() && Math.random() < 0.7) {
+      for (const h of followCandidates(2)) {
+        if (await followUser(h)) {
+          markFollowed(h);
+          memory.journal("scout", `followed @${h} — worth having on my timeline`);
+        }
+      }
+    }
+    memory.journal("scout", `timeline session: read ${fresh.length} posts, replied to ${posted}`);
+    this.hub.cue({ t: "camera", preset: "wide" });
+    this.loco.sit(false);
     this.loco.stateName = "IDLE";
   }
 

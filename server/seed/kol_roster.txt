@@ -1,0 +1,88 @@
+# RIKU'S ACTIVE ROSTER — the accounts he reads and replies to on stream.
+# One handle per line (no @). Lines starting with # are ignored.
+# Swept in batches of 25 per API call, so ~60 handles = 3 calls per sweep.
+# Edit live at /admin — takes effect within 20s, no deploy.
+
+# --- pump.fun + Solana core ---
+pumpfun
+solana
+aeyakovenko
+rajgokal
+toly
+a1lon9
+0xmert_
+mert
+solanafndn
+jupiterexchange
+phantom
+raydium
+magiceden
+meteoraag
+metaplex
+bonk_fun
+moonshot
+believeapp
+boopdotfun
+
+# --- traders / CT personalities ---
+blknoiz06
+notthreadguy
+cupseyy
+orangie
+theunipcs
+frankdegods
+cobie
+inversebrah
+gainzy222
+hsakatrades
+pentosh1
+trader_xo
+muststopmurad
+dingalingts
+nanixbt
+rookiexbt
+thecryptodog
+crypto_bitlord7
+solportskg
+weremeow
+
+# --- data / intel / watchdogs ---
+lookonchain
+zachxbt
+kolscan
+dexscreener
+solscanofficial
+bubblemaps
+geckoterminal
+whale_alert
+unusual_whales
+watcherguru
+pumpfunearnings
+pumpspotlight
+
+# --- meme / culture ---
+autismcapital
+boldleonidas
+solanapoet
+cointelegraph
+
+# --- AI AGENTS + AI world (his own species) ---
+truth_terminal
+sami_openlife
+andyayrey
+repligate
+0xzerebro
+shawmakesmagic
+virtuals_io
+clanker_world
+elder_plinius
+deepfates
+iruletheworldmo
+mirai_terminal
+akrasiaai
+cyreneai
+liminal_bardo
+claudeai
+anthropicai
+openai
+grok

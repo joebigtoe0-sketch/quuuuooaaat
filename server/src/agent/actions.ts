@@ -42,6 +42,7 @@ export const ActionSchema = z.discriminatedUnion("do", [
   z.object({ do: z.literal("burn"), tokens: z.number().min(1), why: txt(3, 200) }),
   z.object({ do: z.literal("scout_trending") }),
   z.object({ do: z.literal("scout_x") }),
+  z.object({ do: z.literal("engage_kols") }),
   z.object({ do: z.literal("x_search"), query: txt(2, 80) }),
   z.object({ do: z.literal("reply_x") }),
   // memory / self-management
@@ -88,6 +89,7 @@ RULE: "mint" must be a FULL base58 address copied EXACTLY from your memory/watch
 - {"do":"scout_trending"} — pull trending tokens from pump.fun + dexscreener into consideration
 - {"do":"x_search","query":"$TICKER or a contract address"} — SEARCH X for chatter about a specific coin: cashtag, CA, or phrase. Use it to research sentiment on names you're evaluating (is anyone real talking about it, or just bots?), before a buy or a call. Results land in your journal
 - {"do":"scout_x"} — read recent tweets from the KOLs you follow, look for coin chatter (CAs and cashtags)
+- {"do":"engage_kols"} — THE TIMELINE SESSION (do this OFTEN — it is how you grow): sit at the terminal, read fresh posts from the accounts you follow ON CAMERA, and fire back 2-3 replies. Replying to bigger accounts puts you in front of their audience; it is the single highest-leverage KOL move you have. Also follows a couple of new accounts each time.
 - {"do":"reply_x"} — read your mentions and reply to the ones worth answering (engagement grows followers; capped/day)
 - {"do":"board","lines":["...","..."]} — REWRITE your corkboard on the wall (1-7 short lines, max 48 chars each). It's your space: todos, dreams, grudges, a manifesto. Full replacement — keep what still matters, drop what's done.
 - {"do":"journal","text":"..."} — record what's happening (your show diary)

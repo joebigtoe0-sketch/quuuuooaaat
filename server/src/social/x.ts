@@ -351,6 +351,62 @@ export async function uploadImage(pngPath: string): Promise<string | null> {
 }
 
 /** Recent tweets from a KOL the agent follows (twitterapi.io read path). */
+/**
+ * FRESH POSTS ACROSS MANY ACCOUNTS IN ONE CALL — `(from:a OR from:b …)` recent
+ * search. Measured against the live key: a 512-char query caps out around 28
+ * `from:` terms, so we batch 25. 75 handles = 3 calls (budget: 450/15min).
+ */
+export async function searchFromHandles(
+  handles: string[],
+  sinceMinutes = 180,
+  perBatch = 10,
+): Promise<{ id: string; author: string; text: string }[]> {
+  if (!BEARER || !handles.length) return [];
+  const out: { id: string; author: string; text: string }[] = [];
+  const start = new Date(Date.now() - sinceMinutes * 60_000).toISOString();
+  for (let i = 0; i < handles.length; i += 25) {
+    const batch = handles.slice(i, i + 25);
+    const q = `(${batch.map((h) => `from:${h}`).join(" OR ")}) -is:retweet -is:reply`;
+    if (q.length > 505) continue; // guard: over the cap, skip rather than 400
+    const j = await v2(
+      `/tweets/search/recent?max_results=${Math.max(10, perBatch)}&query=${encodeURIComponent(q)}` +
+        `&start_time=${start}&tweet.fields=created_at,author_id&expansions=author_id&user.fields=username`,
+    );
+    if (!j?.data) continue;
+    const users: Record<string, string> = {};
+    for (const u of j.includes?.users ?? []) users[u.id] = u.username;
+    for (const t of j.data) {
+      const text = String(t.text ?? "").replace(/https?:\/\/\S+/g, "").trim();
+      if (text.length < 8) continue;
+      out.push({ id: String(t.id), author: users[t.author_id] ?? "?", text });
+    }
+  }
+  return out;
+}
+
+/** Follow an account (user-context OAuth1a — same keys that post tweets). */
+export async function followUser(handle: string): Promise<boolean> {
+  if (!xReady()) return false;
+  try {
+    const me = await userId(HANDLE.replace(/^@/, ""));
+    const target = await userId(handle);
+    if (!me || !target) return false;
+    const url = `https://api.x.com/2/users/${me}/following`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { authorization: oauthHeader("POST", url), "content-type": "application/json" },
+      body: JSON.stringify({ target_user_id: target }),
+    });
+    if (!res.ok) {
+      log.warn("x", `follow @${handle} → ${res.status}`);
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function readUserTweets(handle: string, sinceMinutes = 240): Promise<string[]> {
   if (BEARER) {
     const id = await userId(handle);

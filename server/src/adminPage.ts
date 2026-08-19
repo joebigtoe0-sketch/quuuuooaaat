@@ -39,6 +39,12 @@ export const ADMIN_HTML = `<!doctype html>
     <button class="go" onclick="researchNow()">🔬 research a fresh coin NOW</button>
     <button onclick="act({do:'reply_x'})">reply to mentions</button>
     <br>
+    <button onclick="kolLoad()">🐦 load KOL roster</button>
+    <button onclick="kolSave()">💾 save roster</button>
+    <button onclick="act({do:'engage_kols'})">▶ do a timeline session NOW</button>
+    <br>
+    <textarea id="kols" placeholder="click load KOL roster" style="width:98%;height:110px;font:12px monospace"></textarea>
+    <br>
     <button onclick="factsLoad()">📋 load fact sheet</button>
     <button onclick="factsSave()">💾 save facts</button>
     <span style="opacity:.6">— settled truths he answers from (bubble maps, tokenomics…)</span>
@@ -146,6 +152,14 @@ async function whisper(){
 }
 async function act(a){ await q('/admin/agent','POST',a); }
 async function researchNow(){ const r=await q('/admin/research-now','POST'); console.log('research queued', r); }
+async function kolLoad(){
+  const r=await fetch('/admin/kol-roster'); document.getElementById('kols').value=await r.text();
+}
+async function kolSave(){
+  const t=document.getElementById('kols').value;
+  const r=await fetch('/admin/kol-roster',{method:'POST',headers:{'content-type':'text/plain'},body:t}).then(x=>x.json());
+  alert(r.ok?(r.handles+' handles — '+r.apiCallsPerSweep+' API calls per sweep'):('failed: '+r.why));
+}
 async function factsLoad(){
   const r=await fetch('/admin/facts'); document.getElementById('facts').value=await r.text();
 }

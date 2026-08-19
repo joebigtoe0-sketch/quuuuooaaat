@@ -33,6 +33,7 @@ type Job =
   | { kind: "agent"; qa: QueuedAction; at: number }
   | { kind: "conveyor"; item: ConveyorItem; at: number }
   | { kind: "reveal"; mint: string; sol: number; revealKind: "snipe" | "call"; at: number }
+  | { kind: "kolfeed"; at: number }
   | { kind: "commentary"; at: number };
 
 export class Director {
@@ -46,6 +47,9 @@ export class Director {
   private conveyor: ConveyorItem[] = [];
   private lastConveyorPick = Date.now();
   private lastCommentary = Date.now();
+  private lastKolFeed = Date.now();
+  /** the agent can also trigger it; this is the floor so it ALWAYS happens */
+  noteKolFeed(): void { this.lastKolFeed = Date.now(); }
   private running = false;
   paused = false;
 
@@ -236,6 +240,10 @@ export class Director {
       this.lastConveyorPick = Date.now();
       return { kind: "conveyor", item, at: Date.now() };
     }
+    if ((Date.now() - this.lastKolFeed) / simT(60_000) >= cfg.kolFeedMin) {
+      this.lastKolFeed = Date.now();
+      return { kind: "kolfeed", at: Date.now() };
+    }
     if ((Date.now() - this.lastCommentary) / simT(60_000) >= cfg.commentaryMin) {
       this.lastCommentary = Date.now();
       return { kind: "commentary", at: Date.now() };
@@ -263,6 +271,7 @@ export class Director {
           // launch-feed find — research, high marks, position reveal, callout
           await this.beats.researchBeat(job.mint, null, null, true, { sol: job.sol, kind: job.revealKind });
         }
+        else if (job.kind === "kolfeed") { await this.beats.runKolFeed(); }
         else if (job.kind === "conveyor") {
           // seconds-old launches are unreadable (no candle, no holders) —
           // random checkups use TRENDING tokens only; no candidate = skip

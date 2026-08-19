@@ -38,7 +38,7 @@ const hub = new Hub(server);
 // Control endpoints need the admin key (query ?key=, x-admin-key header, or
 // the qk cookie set by /admin login). Read-only + stage-internal endpoints
 // (feed, layout, clip upload, agent-status, health) stay open.
-const PROTECTED = /^\/admin\/(directive|reset|restart|agent$|fake-send|fake-buyback|pause|resume|goto|anim|camera|fx|tts-test|selfie-take|selfie-last|chat$|chat-add|go-live|syslog|record$|say|queue|clips|clip-file|research-now|blacklist|sniper|operator-call|facts)/;
+const PROTECTED = /^\/admin\/(directive|reset|restart|agent$|fake-send|fake-buyback|pause|resume|goto|anim|camera|fx|tts-test|selfie-take|selfie-last|chat$|chat-add|go-live|syslog|record$|say|queue|clips|clip-file|research-now|blacklist|sniper|operator-call|facts|kol-roster|kol-pool)/;
 function hasAdminKey(req: express.Request): boolean {
   const c = String(req.headers.cookie ?? "");
   const cookieKey = c.match(/(?:^|;\s*)qk=([^;]+)/)?.[1];
@@ -142,6 +142,37 @@ app.post("/admin/blacklist", (req, res) => {
     log.info("admin", `black book: added ${mint.slice(0, 8)}… (${why || "operator flagged"})`);
   }
   res.json({ ok: true, blacklist: store.blacklistAll() });
+});
+
+// KOL ROSTER — the accounts he reads + replies to on camera. Live-editable.
+app.get("/admin/kol-roster", async (_req, res) => {
+  const { roster } = await import("./social/kols.js");
+  const raw = (() => {
+    try { return fs.readFileSync(path.join(cfg.dataDir, "kol_roster.txt"), "utf8"); } catch { return ""; }
+  })();
+  res.type("text/plain").send(raw || `(empty — ${roster().length} handles)`);
+});
+app.post("/admin/kol-roster", async (req, res) => {
+  const { saveRoster, roster } = await import("./social/kols.js");
+  const body = typeof req.body === "string" ? req.body : String((req.body as any)?.text ?? "");
+  if (body.trim().length < 3) return res.json({ ok: false, why: "send the roster as the body" });
+  saveRoster(body);
+  res.json({ ok: true, handles: roster().length, apiCallsPerSweep: Math.ceil(roster().length / 25) });
+});
+// BULK-IMPORT the follow pool: POST the ct-accounts JSON (or a handle array).
+app.post("/admin/kol-pool", async (req, res) => {
+  const { savePool } = await import("./social/kols.js");
+  let handles: string[] = [];
+  try {
+    const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
+    if (Array.isArray(body)) handles = body.map(String);
+    else if (body?.accounts && typeof body.accounts === "object") handles = Object.keys(body.accounts);
+    else if (typeof body === "object") handles = Object.keys(body);
+  } catch {
+    handles = String(req.body ?? "").split(/[\s,]+/);
+  }
+  if (handles.length < 2) return res.json({ ok: false, why: "send the ct-accounts JSON or a handle array" });
+  res.json({ ok: true, imported: savePool(handles) });
 });
 
 // THE FACT SHEET — settled truths he answers from. Live-editable, no deploy.

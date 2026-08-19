@@ -126,6 +126,9 @@ export const cfg = {
   devsnipeMaxHoldH: num("DEVSNIPE_MAX_HOLD_H", 6),
   devsnipeRevealDelayMs: num("DEVSNIPE_REVEAL_DELAY_MS", 150_000),
   commentaryMin: num("COMMENTARY_MIN", 9),
+  // timeline sessions (read KOL posts on camera + reply). Floor, not a ceiling —
+  // the agent can also choose engage_kols any time.
+  kolFeedMin: num("KOL_FEED_MIN", 35),
   inboxPollS: num("INBOX_POLL_S", 15),
 
   floatSol: num("FLOAT_SOL", 0.05),
