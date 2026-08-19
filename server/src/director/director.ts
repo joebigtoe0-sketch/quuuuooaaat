@@ -126,8 +126,18 @@ export class Director {
   }
 
   /** Externally-injected agent action (admin/testing) — same queue the planner feeds. */
-  onAgentAction(qa: QueuedAction): void {
-    if (this.agentQ.length < 6) this.agentQ.push({ kind: "agent", qa, at: Date.now() });
+  onAgentAction(qa: QueuedAction, urgent = false): { ok: boolean; depth: number; why?: string } {
+    // ADMIN presses jump the queue — pressing a button should do the thing
+    // NEXT, not queue behind planner work. Silent drops are never acceptable:
+    // the caller gets the truth so the panel can say so.
+    if (urgent) {
+      this.agentQ.unshift({ kind: "agent", qa, at: Date.now() });
+      if (this.agentQ.length > 8) this.agentQ.length = 8;
+      return { ok: true, depth: this.agentQ.length };
+    }
+    if (this.agentQ.length >= 6) return { ok: false, depth: this.agentQ.length, why: "agent queue full" };
+    this.agentQ.push({ kind: "agent", qa, at: Date.now() });
+    return { ok: true, depth: this.agentQ.length };
   }
 
   // a rolling pool of recent launches from the pumpportal feed — this is our

@@ -153,7 +153,12 @@ async function whisper(){
   document.getElementById('wtext').value='';
   refresh();
 }
-async function act(a){ await q('/admin/agent','POST',a); }
+async function act(a){
+  const r=await q('/admin/agent','POST',a);
+  if(r && r.ok===false) alert('NOT queued: '+(r.why||r.err||'unknown'));
+  else if(r && r.err) alert('rejected: '+r.err);
+  else alert((a.do||'action')+' queued — runs when the current beat ends (queue: '+((r&&r.depth)||1)+')');
+}
 async function researchNow(){ const r=await q('/admin/research-now','POST'); console.log('research queued', r); }
 async function poolImport(){
   const t=document.getElementById('kolpool').value.trim();

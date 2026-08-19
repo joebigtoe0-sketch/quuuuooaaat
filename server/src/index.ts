@@ -697,8 +697,17 @@ app.all("/admin/agent", (req, res) => {
   }
   const parsed = ActionSchema.safeParse(raw);
   if (!parsed.success) return res.status(400).json({ err: parsed.error.issues[0]?.message, got: raw });
-  director.onAgentAction({ action: parsed.data, plannedAt: Date.now() });
-  res.json({ queued: parsed.data });
+  // admin presses are URGENT: they jump to the front so the button does the
+  // thing next, and the result is reported instead of silently dropped
+  const r = director.onAgentAction({ action: parsed.data, plannedAt: Date.now() }, true);
+  log.info("admin", `action ${parsed.data.do} → ${r.ok ? "queued (next up)" : r.why} | depth ${r.depth}`);
+  res.json({
+    ok: r.ok,
+    queued: parsed.data,
+    depth: r.depth,
+    why: r.why,
+    note: r.ok ? "runs as soon as the current beat finishes" : undefined,
+  });
 });
 
 /** PRODUCER CHANNEL — guidance the actor internalizes as his own convictions.
