@@ -122,36 +122,56 @@ export class Director {
     if (this.agentQ.length < 6) this.agentQ.push({ kind: "agent", qa, at: Date.now() });
   }
 
+  // a rolling pool of recent launches from the pumpportal feed — this is our
+  // FRESH pump-token supply for research, since pump.fun's trending API is
+  // Cloudflare-blocked server-side (scout returns "0 pump"). Timestamped so we
+  // can research ones that have aged enough to be readable (candle + holders).
+  private launchPool: { mint: string; at: number }[] = [];
   onLaunch(item: ConveyorItem): void {
     this.conveyor.push(item);
     if (this.conveyor.length > 12) this.conveyor.shift();
     this.hub.cue({ t: "conveyor_add", item });
+    if (item.mint?.endsWith("pump") && !this.launchPool.some((l) => l.mint === item.mint)) {
+      this.launchPool.push({ mint: item.mint, at: Date.now() });
+      const cutoff = Date.now() - 30 * 60_000; // keep the last 30 min
+      this.launchPool = this.launchPool.filter((l) => l.at > cutoff).slice(-400);
+    }
   }
 
   private recentlyResearched = new Set<string>();
-  /** Trending pump token for a random checkup — something with actual history. */
+  /** A pump token for a research checkup — trending boards first, then the fresh
+   *  launch pool (aged 3-20 min so there's actual history to read). */
   private async pickTrendingMint(): Promise<string | null> {
+    const { openPositions } = await import("../chain/trader.js");
+    const held = new Set(openPositions().map((p) => p.mint));
+    const eligible = (mint: string) =>
+      mint.endsWith("pump") &&
+      mint !== cfg.ownMint &&
+      !held.has(mint) &&
+      !this.recentlyResearched.has(mint) &&
+      !this.planner.researchedRecently(mint, 8) &&
+      !(store.seenAt(mint) && Date.now() - store.seenAt(mint)! < 6 * 3600_000);
+    const take = (mint: string) => {
+      this.recentlyResearched.add(mint);
+      if (this.recentlyResearched.size > 300) this.recentlyResearched = new Set([...this.recentlyResearched].slice(-150));
+      return mint;
+    };
     try {
       const { scoutAll } = await import("../social/scout.js");
       const hits = await Promise.race([
         scoutAll(),
         new Promise<[]>((r) => setTimeout(() => r([]), 10_000)),
       ]);
-      const fresh = (hits ?? []).filter(
-        (h) =>
-          h.mint.endsWith("pump") &&
-          !this.recentlyResearched.has(h.mint) &&
-          !this.planner.researchedRecently(h.mint, 8),
+      const fresh = (hits ?? []).filter((h) => eligible(h.mint));
+      if (fresh.length) return take(fresh[Math.floor(Math.random() * Math.min(fresh.length, 5))].mint);
+      // FALLBACK: the fresh launch pool — pick something aged 3-20 min so the
+      // chain actually has data on it (a seconds-old coin is unreadable).
+      const now = Date.now();
+      const aged = this.launchPool.filter(
+        (l) => now - l.at > 3 * 60_000 && now - l.at < 20 * 60_000 && eligible(l.mint),
       );
-      if (!fresh.length) return null;
-      const pick = fresh[Math.floor(Math.random() * Math.min(fresh.length, 5))];
-      this.recentlyResearched.add(pick.mint);
-      // the planner's age-based researchedRecently is the real dedup; this set
-      // only guards the gap before research completes — keep it generous.
-      if (this.recentlyResearched.size > 300) {
-        this.recentlyResearched = new Set([...this.recentlyResearched].slice(-150));
-      }
-      return pick.mint;
+      if (aged.length) return take(aged[Math.floor(Math.random() * Math.min(aged.length, 8))].mint);
+      return null;
     } catch {
       return null;
     }
