@@ -135,6 +135,9 @@ export const cfg = {
   // answering people who @ him is the highest-value engagement there is —
   // never leave it to the planner alone. Floor, not a ceiling.
   replyXMin: num("REPLY_X_MIN", 20),
+  // answering people who @ him: a hard-coded 10/day silently muted him for the
+  // rest of every busy day. Real limit is X's 80-post rail.
+  maxXRepliesPerDay: num("MAX_X_REPLIES_PER_DAY", 40),
   inboxPollS: num("INBOX_POLL_S", 15),
 
   floatSol: num("FLOAT_SOL", 0.05),

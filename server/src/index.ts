@@ -411,7 +411,14 @@ app.get("/health", async (_req, res) => {
     state: director.loco.stateName,
     brain: { hasKey: hasApiKey(), spendTodayUsd: Number(spendToday().toFixed(3)), dailyBudgetUsd: dailyBudgetUsd(), exhausted: budgetExhausted(), lastError: lastBrainError() },
     tts: { provider: cfg.ttsProvider, audioFilesGenerated: audioFiles },
-    x: { postsToday: (await import("./social/x.js")).xPostsToday(), lastError: lastXError() },
+    x: {
+      postsToday: (await import("./social/x.js")).xPostsToday(),
+      // the two counters that can silently mute him for a whole day
+      repliesToday: Number(store.kvGet(`xreplies:${new Date().toISOString().slice(0, 10)}`) ?? 0),
+      replyCap: cfg.maxXRepliesPerDay,
+      repliedLedger: Object.keys((() => { try { return JSON.parse(store.kvGet("kol:seen") ?? "{}"); } catch { return {}; } })()).length,
+      lastError: lastXError(),
+    },
     calloutDryRun: cfg.calloutDryRun,
     calloutsToday: store.calloutsToday(),
     ownMint: cfg.ownMint || null,

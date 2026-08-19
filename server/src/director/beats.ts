@@ -1670,8 +1670,9 @@ ${factsBlock(1400)}` : ""),
   private async replyXBeatInner(): Promise<void> {
     this.loco.stateName = "REPLYING";
     const replies = Number(store.kvGet(`xreplies:${new Date().toISOString().slice(0, 10)}`) ?? 0);
-    if (replies >= 10) {
-      memory.journal("x-chatter", "reply sweep skipped — daily reply cap reached");
+    if (replies >= cfg.maxXRepliesPerDay) {
+      log.warn("x", `reply sweep skipped — daily reply cap ${replies}/${cfg.maxXRepliesPerDay}`);
+      memory.journal("x-chatter", `reply sweep skipped — daily reply cap (${replies}/${cfg.maxXRepliesPerDay})`);
       return;
     }
     await this.loco.walkTo("terminal"); // the compose/mention takeover renders here
