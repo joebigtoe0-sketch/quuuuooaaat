@@ -37,7 +37,13 @@ async function enrichImage(uri: string): Promise<string | null> {
   }
   return null;
 }
-export function startLaunchFeed(onLaunch: (item: ConveyorItem) => void): void {
+export function startLaunchFeed(
+  onLaunch: (item: ConveyorItem) => void,
+  // FAST path: fired synchronously off the raw message, BEFORE the ipfs image
+  // enrichment (which can take 4.5s+ per gateway). Sniping lives or dies on
+  // those seconds — the belt can wait for its coin face, an entry cannot.
+  onLaunchFast?: (item: ConveyorItem) => void,
+): void {
   let ws: WebSocket | null = null;
   let alive = false;
 
@@ -65,7 +71,9 @@ export function startLaunchFeed(onLaunch: (item: ConveyorItem) => void): void {
             symbol: String(m.symbol ?? "").slice(0, 12) || "?",
             mcSol: typeof m.marketCapSol === "number" ? m.marketCapSol : undefined,
             dev: typeof m.traderPublicKey === "string" ? m.traderPublicKey : undefined,
+            mayhem: Boolean(m.is_mayhem_mode),
           };
+          try { onLaunchFast?.(item); } catch {}
           // best-effort image enrichment from the token's ipfs metadata —
           // the coin face on the belt. Never blocks or fails the launch event.
           void enrichImage(String(m.uri ?? ""))

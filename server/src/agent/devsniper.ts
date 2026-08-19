@@ -32,17 +32,30 @@ let dir: DirectorHook | null = null;
 const inflight = new Set<string>(); // mints being bought right now
 const exiting = new Map<string, number>(); // mint -> ts sell was enqueued
 
+// SPEED: zero awaits before the buy decision. SOL price and wallet balance are
+// kept warm here so the hot path reads cached numbers instead of the chain.
+let solUsdCache = 150;
+let heldSolCache = 0;
+async function refreshCaches(): Promise<void> {
+  solUsdCache = await getSolUsd().catch(() => solUsdCache);
+  heldSolCache = await solBalance().catch(() => heldSolCache);
+}
+
 export function armDevSniper(d: DirectorHook): void {
   dir = d;
+  void refreshCaches();
+  setInterval(() => void refreshCaches(), 5 * 60_000).unref?.();
   setInterval(() => void watchExits(), 60_000).unref?.();
   log.info("snipe", `dev-sniper armed (${cfg.devsnipeEnabled ? "ON" : "OFF"}): mc<$${cfg.devsnipeMaxMcUsd}, exit ${cfg.devsnipeExitProgress * 100}% / ${cfg.devsnipeMaxHoldH}h`);
 }
 
-/** Feed hook — called for every pumpportal launch. Fire fast, fail silent. */
+/** FAST feed hook — fired off the raw launch message, before any enrichment.
+ *  No RPC reads before the buy: the message itself carries mc + mayhem, and
+ *  price/balance come from the warm caches. Every saved second is entry mc. */
 export async function onSnipeLaunch(item: ConveyorItem): Promise<void> {
   try {
     if (!cfg.devsnipeEnabled || !dir) return;
-    if (!item.dev || !item.mint.endsWith("pump")) return;
+    if (!item.dev || !item.mint.endsWith("pump") || item.mayhem) return;
     if (cfg.ownMint && item.mint === cfg.ownMint) return;
     if (inflight.has(item.mint)) return;
 
@@ -52,15 +65,13 @@ export async function onSnipeLaunch(item: ConveyorItem): Promise<void> {
     if (openPositions().filter((p) => p.strategyId === STRAT_ID).length >= cfg.devsnipeMaxOpen) return;
 
     inflight.add(item.mint);
-    // early enough = still under the ceiling when we can actually fill
-    const st = await getTokenState(new PublicKey(item.mint));
-    if (st.kind !== "curve" || st.mayhem) { inflight.delete(item.mint); return; }
-    const solUsd = await getSolUsd().catch(() => 150);
-    const mcUsd = st.mcSol * solUsd;
+    // early enough = the LAUNCH mc (dev's initial buy included) is under the
+    // ceiling. The message's marketCapSol is that number — no state fetch.
+    const mcUsd = (item.mcSol ?? 28) * solUsdCache;
     if (mcUsd > cfg.devsnipeMaxMcUsd) { inflight.delete(item.mint); return; }
 
     // HIS book's sizing: 0.05 min .. 6% of wallet, conviction from the record
-    const held = await solBalance().catch(() => 0);
+    const held = heldSolCache;
     const minSol = 0.05;
     const maxSol = Math.max(minSol + 0.001, held * 0.06);
     const conviction = d.onWatchlist ? Math.min(1, 0.7 + d.bondRate * 0.3) : Math.min(1, d.bondRate);
@@ -73,7 +84,7 @@ export async function onSnipeLaunch(item: ConveyorItem): Promise<void> {
       item.symbol,
       sol,
       `recognized the dev wallet at launch (${record}) — in under $${(mcUsd / 1000).toFixed(1)}k`,
-      st.mcSol,
+      item.mcSol ?? null,
       STRAT_ID,
     );
     if (res.ok) {

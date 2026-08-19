@@ -216,10 +216,12 @@ const director = new Director(hub, tts);
 // live inputs
 startInbox(wallet.publicKey, (ev) => director.onInboxCoin(ev));
 startBuybackWatch((p) => director.onBuybackPending(p));
-startLaunchFeed((item) => {
-  director.onLaunch(item);
-  void onSnipeLaunch(item); // the quiet edge rides the same feed
-});
+startLaunchFeed(
+  (item) => director.onLaunch(item),
+  // FAST path — raw message, before image enrichment: the quiet edge fires
+  // here, seconds ahead of the belt
+  (item) => void onSnipeLaunch(item),
+);
 armDevSniper(director);
 // the agent brain (plans its own tweets/films/trades/scouts)
 if (cfg.agentEnabled) director.planner.start();

@@ -59,6 +59,7 @@ export interface ConveyorItem {
   symbol: string;
   mcSol?: number;
   dev?: string; // creator wallet (from the launch feed)
+  mayhem?: boolean; // house-rules curve flag straight off the launch message
   image?: string; // token image URL (ipfs gateway), for the coin face
 }
 
