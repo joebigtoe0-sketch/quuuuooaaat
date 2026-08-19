@@ -358,24 +358,39 @@ function frame(): void {
 }
 
 // ---------- arm audio (one click before going live) ----------
-armEl.addEventListener("click", () => {
-  // unlock autoplay
-  const a = new Audio();
-  a.play().catch(() => {});
-  armEl.style.display = "none";
+let stageStarted = false;
+function startStage(): void {
+  if (stageStarted) return;
+  stageStarted = true;
   frame(); // start rendering IMMEDIATELY — never block on the room load
   net.connect();
   buildAll().catch((err) => {
     console.error("[stage] buildAll failed:", err);
     setStatus("STAGE ERROR: " + String(err?.message ?? err).slice(0, 300));
   });
+}
+armEl.addEventListener("click", () => {
+  // a real click is a user gesture — it unlocks autoplay for the whole page
+  new Audio().play().catch(() => {});
+  armEl.style.display = "none";
+  startStage();
 });
 
-// auto-arm: ?auto=1 (OBS browser sources allow autoplay-with-audio, and a
-// permanently-open armed page is what makes FILM CLIPS possible) — or any
-// prior user activation on normal browsers
+// auto-arm: OBS browser sources allow autoplay-with-audio, so ?auto=1 goes
+// straight in. A NORMAL browser tab BLOCKS autoplay — so we still render the
+// visuals, but KEEP the ARM overlay up so one click can unlock the sound
+// (instead of the old silent dead-end where the button was hidden with no audio).
 if (new URLSearchParams(location.search).has("auto") || navigator.userActivation?.hasBeenActive) {
-  armEl.dispatchEvent(new Event("click"));
+  const probe = new Audio();
+  probe
+    .play()
+    .then(() => {
+      armEl.style.display = "none"; // autoplay works (OBS) — hide overlay, go
+      startStage();
+    })
+    .catch(() => {
+      startStage(); // render visuals; leave the ARM overlay for a click to get sound
+    });
 }
 
 // the landing page embeds this feed and arms it with ITS click (same-origin,
