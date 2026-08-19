@@ -41,7 +41,9 @@ const PROTECTED = /^\/admin\/(directive|reset|restart|agent$|fake-send|fake-buyb
 function hasAdminKey(req: express.Request): boolean {
   const c = String(req.headers.cookie ?? "");
   const cookieKey = c.match(/(?:^|;\s*)qk=([^;]+)/)?.[1];
-  const key = String(req.query.key ?? req.headers["x-admin-key"] ?? cookieKey ?? "");
+  // use || (not ??) so an EMPTY ?key= (e.g. a download link built with a blank
+  // password field) falls through to the header/cookie instead of blocking.
+  const key = String(req.query.key ?? "").trim() || String(req.headers["x-admin-key"] ?? "").trim() || cookieKey || "";
   return key === cfg.adminPassword;
 }
 app.use((req, res, next) => {

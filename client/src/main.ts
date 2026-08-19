@@ -268,12 +268,16 @@ async function takeSelfie(cue: { id: string; anim?: string; expr?: string }): Pr
   avatar.play(cue.anim || "phone_selfie");
   avatar.setExpression?.(cue.expr || "happy");
   oneShotUntil = performance.now() + 4200;
-  // arm's-length framing: in front of his facing, a touch high and to his right
-  const fwd = new THREE.Vector3(Math.sin(pose.heading), 0, Math.cos(pose.heading));
+  // arm's-length framing: in front of his facing, a touch high and to his right.
+  // Use the TARGET heading/position, not the current one — he's usually still
+  // mid-turn when the selfie fires, and by capture (1.7s later) he's settled on
+  // the target. Using the live heading placed the camera at his side.
+  const h = pose.targetHeading, cx = pose.targetX, cz = pose.targetZ;
+  const fwd = new THREE.Vector3(Math.sin(h), 0, Math.cos(h));
   const right = new THREE.Vector3(fwd.z, 0, -fwd.x);
-  const p = new THREE.Vector3(pose.x, 0, pose.z).addScaledVector(fwd, 1.15).addScaledVector(right, 0.35);
+  const p = new THREE.Vector3(cx, 0, cz).addScaledVector(fwd, 1.15).addScaledVector(right, 0.35);
   const prevCam = camTarget;
-  camTarget = { pos: new THREE.Vector3(p.x, 1.85, p.z), look: new THREE.Vector3(pose.x, 1.5, pose.z) };
+  camTarget = { pos: new THREE.Vector3(p.x, 1.85, p.z), look: new THREE.Vector3(cx, 1.5, cz) };
   await new Promise((r) => setTimeout(r, 1700)); // camera lerp + pose settle
   // sync capture: render then read the canvas IMMEDIATELY — the WebGL buffer
   // is cleared after compositing, so async toBlob reads back blank
