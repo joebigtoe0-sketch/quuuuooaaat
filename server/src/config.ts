@@ -24,9 +24,14 @@ const dataDir = path.join(root, "data");
 fs.mkdirSync(dataDir, { recursive: true });
 const seedDir = path.join(root, "seed");
 if (fs.existsSync(seedDir)) {
+  // Intel exports (watchlists, creator stats) ALWAYS overwrite the volume copy
+  // — they're read-only research data and a stale volume copy silently ignores
+  // list updates (bit us: an updated prime list never reached Railway).
+  // Everything else copies only when missing (runtime state lives there).
+  const ALWAYS_FRESH = /^(dev_watchlist.*\.csv|creator_stats\.json|axiom_watchlist\.csv)$/;
   for (const f of fs.readdirSync(seedDir)) {
     const dst = path.join(dataDir, f);
-    if (!fs.existsSync(dst)) fs.copyFileSync(path.join(seedDir, f), dst);
+    if (ALWAYS_FRESH.test(f) || !fs.existsSync(dst)) fs.copyFileSync(path.join(seedDir, f), dst);
   }
 }
 
@@ -112,10 +117,10 @@ export const cfg = {
   // its members run ~0.23 bond-rate; 0.5 was fantasy and matched nobody
   devsnipeMinBondRate: num("DEVSNIPE_MIN_BOND_RATE", 0.2),
   devsnipeMinLaunches: num("DEVSNIPE_MIN_LAUNCHES", 5),
-  // prime-only: snipe ONLY the elite prime list (the money bot's exact
-  // wallets). false (default) also takes watchlist devs + archive/LIVE-counter
-  // qualified devs — closer to the money bot's live-updating coverage.
-  devsnipePrimeOnly: bool("DEVSNIPE_PRIME_ONLY", false),
+  // prime-only: snipe ONLY the prime list (the money bot's EXACT 40 wallets,
+  // operator-supplied). Broad mode (watchlist/archive/live criteria) proved it
+  // buys junk the bot never touches — prime-only is the rule now.
+  devsnipePrimeOnly: bool("DEVSNIPE_PRIME_ONLY", true),
   devsnipeMaxOpen: num("DEVSNIPE_MAX_OPEN", 3),
   devsnipeExitProgress: num("DEVSNIPE_EXIT_PROGRESS", 0.95),
   devsnipeMaxHoldH: num("DEVSNIPE_MAX_HOLD_H", 6),
