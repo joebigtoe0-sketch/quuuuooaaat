@@ -303,7 +303,7 @@ app.get("/wardrobe", (_req, res) => {
 });
 
 // ---------- admin / health ----------
-app.get("/health", (_req, res) => {
+app.get("/health", async (_req, res) => {
   let audioFiles = 0;
   try {
     audioFiles = fs.readdirSync(cfg.audioDir).filter((f) => f.endsWith(".mp3")).length;
@@ -319,6 +319,21 @@ app.get("/health", (_req, res) => {
     calloutDryRun: cfg.calloutDryRun,
     calloutsToday: store.calloutsToday(),
     ownMint: cfg.ownMint || null,
+    trading: await (async () => {
+      try {
+        const { tradeSpentToday, openPositions, bankSol } = await import("./chain/trader.js");
+        const st = tradeSpentToday();
+        const open = openPositions();
+        return {
+          bankSol: Number((await bankSol()).toFixed(3)),
+          spentToday: Number(st.spent.toFixed(3)),
+          dailyCap: st.cap,
+          openPositions: open.length,
+          snipes: open.filter((p) => p.strategyId === "devsnipe").length,
+          lastBlock: JSON.parse(store.kvGet("trade:lastblock") ?? "null"),
+        };
+      } catch { return null; }
+    })(),
   });
 });
 

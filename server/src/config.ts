@@ -130,7 +130,9 @@ export const cfg = {
   paperStartSol: num("PAPER_START_SOL", 1.0), // paper-trading starting bankroll
   adminPassword: str("ADMIN_PASSWORD", "quant2026"), // /admin panel + control endpoints
   maxTradeSol: num("MAX_TRADE_SOL", 0.1),
-  maxDailyTradeSol: num("MAX_DAILY_TRADE_SOL", 0.5),
+  // gross buys per day (sells recycle SOL back, so this is turnover, not risk).
+  // 0.5 starved the desk once the sniper went live — one busy morning ate it.
+  maxDailyTradeSol: num("MAX_DAILY_TRADE_SOL", 2),
   maxOpenPositions: num("MAX_OPEN_POSITIONS", 9999), // no practical cap — the daily SOL caps are the real rail
   tradeReserveSol: num("TRADE_RESERVE_SOL", 0.3), // SOL kept for trading, buybacks don't sweep it
   // airdrops: distribution of his own held tokens to holders (never sells)

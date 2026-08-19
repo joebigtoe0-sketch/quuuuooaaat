@@ -65,6 +65,10 @@ export async function bankSol(): Promise<number> {
 export function openPositions(): Position[] {
   return positions.filter((p) => !p.closed);
 }
+/** Gross SOL bought today vs the daily cap — for /health diagnostics. */
+export function tradeSpentToday(): { spent: number; cap: number } {
+  return { spent: spentToday(), cap: cfg.maxDailyTradeSol };
+}
 export function allPositions(): Position[] {
   return positions;
 }
@@ -82,16 +86,22 @@ export async function tradeBuy(
   entryMcSol: number | null,
   strategyId?: string,
 ): Promise<{ ok: boolean; dry: boolean; sig?: string; why?: string }> {
-  if (openPositions().length >= cfg.maxOpenPositions) return { ok: false, dry: false, why: "max positions" };
+  // every rejection is recorded — a silently starving desk is undebuggable
+  const block = (why: string): { ok: false; dry: false; why: string } => {
+    store.kvSet("trade:lastblock", JSON.stringify({ at: Date.now(), mint: mint.slice(0, 8), symbol, sol, why }));
+    return { ok: false, dry: false, why };
+  };
+  if (openPositions().length >= cfg.maxOpenPositions) return block("max positions");
   if (sol > cfg.maxTradeSol) sol = cfg.maxTradeSol;
-  if (spentToday() + sol > cfg.maxDailyTradeSol) return { ok: false, dry: false, why: "daily trade cap" };
-  if (openPositions().some((p) => p.mint === mint)) return { ok: false, dry: false, why: "already holding" };
+  if (spentToday() + sol > cfg.maxDailyTradeSol)
+    return block(`daily trade cap (${spentToday().toFixed(2)}/${cfg.maxDailyTradeSol} SOL spent)`);
+  if (openPositions().some((p) => p.mint === mint)) return block("already holding");
   {
     // THE DESK BOOK — last rail before SOL moves: blacklisted or recently
     // exited mints never get re-bought, no matter which path proposed it.
     const { touchBan } = await import("../agent/tokenguard.js");
     const ban = touchBan(mint);
-    if (ban) return { ok: false, dry: false, why: ban };
+    if (ban) return block(ban);
   }
 
   if (cfg.tradeDryRun) {
