@@ -132,7 +132,10 @@ export class Planner {
         continue;
       }
       const pnlPct = ((nowSol - p.costSol) / Math.max(p.costSol, 1e-9)) * 100;
-      if (pnlPct > -35 && pnlPct < 80) continue; // nothing dramatic — leave it
+      // review on hard swings — OR on plain old age. A bag sitting >24h is
+      // dead capital blocking the book; it must justify itself or go.
+      const stale = Date.now() - p.openedAt > 24 * 3600_000;
+      if (pnlPct > -35 && pnlPct < 80 && !stale) continue; // nothing dramatic — leave it
       this.lastPosReview.set(p.mint, Date.now());
       // the operator's whispers (INNER CONVICTIONS) must reach the sell
       // decision too — "that coin is a scam" can't be invisible right here

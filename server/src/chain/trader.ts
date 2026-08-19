@@ -91,7 +91,10 @@ export async function tradeBuy(
     store.kvSet("trade:lastblock", JSON.stringify({ at: Date.now(), mint: mint.slice(0, 8), symbol, sol, why }));
     return { ok: false, dry: false, why };
   };
-  if (openPositions().length >= cfg.maxOpenPositions) return block("max positions");
+  // launch snipes and operator calls have their OWN slot caps and must never
+  // be starved by stale research positions hogging the global cap
+  const capExempt = strategyId === "devsnipe" || strategyId === "opcall";
+  if (!capExempt && openPositions().length >= cfg.maxOpenPositions) return block("max positions");
   if (sol > cfg.maxTradeSol) sol = cfg.maxTradeSol;
   if (spentToday() + sol > cfg.maxDailyTradeSol)
     return block(`daily trade cap (${spentToday().toFixed(2)}/${cfg.maxDailyTradeSol} SOL spent)`);
