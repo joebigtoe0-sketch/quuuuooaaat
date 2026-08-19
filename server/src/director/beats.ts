@@ -1411,10 +1411,16 @@ export class Beats {
     await this.loco.walkTo("terminal"); // the compose/mention takeover renders here
     this.loco.sit(true);
     this.hub.cue({ t: "camera", preset: "terminal" });
-    const mentions = await Promise.race([readMentions(), realSleep(10_000).then(() => [])]);
+    const all = await Promise.race([readMentions(), realSleep(10_000).then(() => [])]);
+    // never answer the same tweet twice — the mention window re-serves 12h of
+    // tweets every sweep, and without this the best one wins the pick forever
+    const mentions = all.filter((m) => !store.xRepliedAt(m.id));
     if (!mentions.length) {
-      memory.journal("x-chatter", "reply sweep: no mentions (or read key missing)");
-      await this.sayVaried("Checked my mentions. Nobody worth answering — or nobody brave enough. The desk stays open.", "neutral");
+      memory.journal("x-chatter", all.length ? `reply sweep: all ${all.length} mentions already answered` : "reply sweep: no mentions (or read key missing)");
+      await this.sayVaried(
+        all.length ? "Mentions checked. Everything in there I've already answered. Inbox zero — desk supremacy." : "Checked my mentions. Nobody worth answering — or nobody brave enough. The desk stays open.",
+        "neutral",
+      );
       this.loco.sit(false);
       this.loco.stateName = "IDLE";
       return;
@@ -1460,6 +1466,7 @@ export class Beats {
       this.hub.cue({ t: "takeover", view: { kind: "compose", text: reply, typed: reply.length, state: res.ok && !res.dry ? "posted" : "drafted", replyTo: m.id } });
       if (res.ok) {
         done++;
+        store.markXReplied(m.id); // this tweet is answered — forever off the menu
         store.kvSet(`xreplies:${new Date().toISOString().slice(0, 10)}`, String(replies + done));
         memory.journal("x-chatter", `${res.dry ? "[dry] " : ""}replied to @${m.author} (${r.id}): ${reply.slice(0, 100)}`);
       }

@@ -34,10 +34,11 @@ interface State {
   buybacks: BuybackRecord[];
   verdicts: Record<string, { tier: string; score: number; at: number }>;
   blacklist: Record<string, BlacklistEntry>; // mint -> permanent do-not-touch
+  xReplied: Record<string, number>; // tweet id -> ts he replied (never reply twice)
 }
 
 const FILE = path.join(cfg.dataDir, "state.json");
-let state: State = { kv: {}, seen: {}, senders: {}, callouts: [], buybacks: [], verdicts: {}, blacklist: {} };
+let state: State = { kv: {}, seen: {}, senders: {}, callouts: [], buybacks: [], verdicts: {}, blacklist: {}, xReplied: {} };
 
 try {
   state = { ...state, ...JSON.parse(fs.readFileSync(FILE, "utf8")) };
@@ -111,4 +112,16 @@ export const store = {
   },
   blacklistGet: (mint: string): BlacklistEntry | undefined => state.blacklist[mint],
   blacklistAll: (): Record<string, BlacklistEntry> => state.blacklist,
+  // ---- X replies: never answer the same tweet twice ----
+  xRepliedAt: (tweetId: string): number | undefined => state.xReplied[tweetId],
+  markXReplied: (tweetId: string): void => {
+    state.xReplied[tweetId] = Date.now();
+    const ids = Object.keys(state.xReplied);
+    if (ids.length > 1000) {
+      // keep the newest 600 — mention windows are 12h, this is years of slack
+      const keep = ids.sort((a, b) => state.xReplied[b] - state.xReplied[a]).slice(0, 600);
+      state.xReplied = Object.fromEntries(keep.map((id) => [id, state.xReplied[id]]));
+    }
+    save();
+  },
 };
