@@ -1454,6 +1454,17 @@ ${factsBlock(1400)}` : ""),
    *  accounts he follows, reads the good ones ALOUD on camera, and fires back
    *  replies typed on screen. Also quietly follows a few new accounts. */
   private async kolFeedBeat(): Promise<void> {
+    try {
+      await this.kolFeedBeatInner();
+    } finally {
+      this.hub.cue({ t: "takeover", view: null });
+      this.hub.cue({ t: "camera", preset: "wide" });
+      this.loco.sit(false);
+      this.loco.stateName = "IDLE";
+    }
+  }
+
+  private async kolFeedBeatInner(): Promise<void> {
     const { roster, isSeen, markSeen, followCandidates, markFollowed } = await import("../social/kols.js");
     const { searchFromHandles, followUser, xReady } = await import("../social/x.js");
     const list = roster();
@@ -1643,6 +1654,20 @@ ${factsBlock(1400)}` : ""),
   async runReplyX(): Promise<void> { return this.replyXBeat(); }
 
   private async replyXBeat(): Promise<void> {
+    // EVERY exit path must restore the stage. Without this the beat parked the
+    // camera on the terminal (it never cued wide again), and a throw or the
+    // daily-cap early return stranded him seated in REPLYING forever.
+    try {
+      await this.replyXBeatInner();
+    } finally {
+      this.hub.cue({ t: "takeover", view: null });
+      this.hub.cue({ t: "camera", preset: "wide" });
+      this.loco.sit(false);
+      this.loco.stateName = "IDLE";
+    }
+  }
+
+  private async replyXBeatInner(): Promise<void> {
     this.loco.stateName = "REPLYING";
     const replies = Number(store.kvGet(`xreplies:${new Date().toISOString().slice(0, 10)}`) ?? 0);
     if (replies >= 10) {
