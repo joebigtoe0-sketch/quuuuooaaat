@@ -324,13 +324,18 @@ app.get("/health", async (_req, res) => {
         const { tradeSpentToday, openPositions, bankSol } = await import("./chain/trader.js");
         const st = tradeSpentToday();
         const open = openPositions();
+        const { memory } = await import("./agent/memory.js");
+        const strat = memory.strategy();
         return {
           bankSol: Number((await bankSol()).toFixed(3)),
           spentToday: Number(st.spent.toFixed(3)),
           dailyCap: st.cap,
           openPositions: open.length,
           snipes: open.filter((p) => p.strategyId === "devsnipe").length,
+          minBuyScore: strat.minBuyScore,
+          tradeSizeSol: strat.tradeSizeSol,
           lastBlock: JSON.parse(store.kvGet("trade:lastblock") ?? "null"),
+          lastSkip: JSON.parse(store.kvGet("trade:lastskip") ?? "null"),
         };
       } catch { return null; }
     })(),

@@ -485,7 +485,15 @@ export class Beats {
     const effScore = Math.max(0, Math.min(100, a.buyScore + (best?.read.adj ?? 0)));
     const bar = best ? best.s.buyBar : strat.minBuyScore;
     const stdSize = best ? best.s.sizeSol : strat.tradeSizeSol;
-    if (a.buyReject || effScore < bar) return;
+    // every skipped entry leaves a trace — "he just doesn't buy" must never be
+    // undiagnosable again. Shown in /health as trading.lastSkip.
+    const skip = (why: string): void => {
+      store.kvSet("trade:lastskip", JSON.stringify({
+        at: Date.now(), symbol: a.symbol, showScore: a.score, buyScore: a.buyScore, effScore, bar, why,
+      }));
+    };
+    if (a.buyReject) return skip(`buyReject: ${a.buyReject} (strict buy rules; show score can still be high)`);
+    if (effScore < bar) return skip(`effective ${effScore} under the bar ${bar}${best ? ` (playbook ${best.s.name})` : ""}`);
     if (cfg.ownMint && a.mint === cfg.ownMint) return;
     if (openPositions().some((p) => p.mint === a.mint)) return;
     {
@@ -498,14 +506,14 @@ export class Beats {
     }
     const { bankSol } = await import("../chain/trader.js");
     const bank = await bankSol();
-    if (bank < 0.02) return;
+    if (bank < 0.02) return skip(`bankroll dry (${bank.toFixed(3)} SOL)`);
     // BANKROLL PRESSURE: the thinner the stack, the higher the bar. Measured
     // in "bullets" — how many standard positions the bankroll still covers.
     const bullets = bank / Math.max(stdSize, 0.01);
     const barLift = bullets >= 6 ? 0 : bullets >= 3 ? 5 : bullets >= 1.5 ? 12 : 1000;
     if (effScore < bar + barLift) {
       memory.journal("trade", `passed on $${a.symbol} (eff ${effScore} vs bar ${bar}+${barLift} pressure-lift) — ${bullets.toFixed(1)} bullets left, the desk protects its powder`);
-      return;
+      return skip(`bankroll pressure: eff ${effScore} < bar ${bar}+${barLift} lift (${bullets.toFixed(1)} bullets)`);
     }
 
     // SIZE BY CONVICTION (in code, so it actually varies): the further the
@@ -540,7 +548,7 @@ export class Beats {
     const thesis = String((d as any)?.thesis ?? `scored ${a.buyScore} on the desk`).slice(0, 200);
     if (!buy) {
       memory.journal("trade", `passed on $${a.symbol} despite buy-score ${a.buyScore}${d ? `: ${thesis}` : " (brain quiet)"}`);
-      return;
+      return skip(d ? `brain voted pass: ${thesis.slice(0, 100)}` : "brain timed out on the buy vote");
     }
     await this.speak(
       best
