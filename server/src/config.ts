@@ -121,7 +121,7 @@ export const cfg = {
   // operator-supplied). Broad mode (watchlist/archive/live criteria) proved it
   // buys junk the bot never touches — prime-only is the rule now.
   devsnipePrimeOnly: bool("DEVSNIPE_PRIME_ONLY", true),
-  devsnipeMaxOpen: num("DEVSNIPE_MAX_OPEN", 3),
+  devsnipeMaxOpen: num("DEVSNIPE_MAX_OPEN", 10),
   devsnipeExitProgress: num("DEVSNIPE_EXIT_PROGRESS", 0.95),
   devsnipeMaxHoldH: num("DEVSNIPE_MAX_HOLD_H", 6),
   devsnipeRevealDelayMs: num("DEVSNIPE_REVEAL_DELAY_MS", 150_000),
@@ -147,7 +147,7 @@ export const cfg = {
   maxTradeSol: num("MAX_TRADE_SOL", 0.1),
   // gross buys per day (sells recycle SOL back, so this is turnover, not risk).
   // 0.5 starved the desk once the sniper went live — one busy morning ate it.
-  maxDailyTradeSol: num("MAX_DAILY_TRADE_SOL", 2),
+  maxDailyTradeSol: num("MAX_DAILY_TRADE_SOL", 5),
   maxOpenPositions: num("MAX_OPEN_POSITIONS", 9999), // no practical cap — the daily SOL caps are the real rail
   tradeReserveSol: num("TRADE_RESERVE_SOL", 0.3), // SOL kept for trading, buybacks don't sweep it
   // airdrops: distribution of his own held tokens to holders (never sells)
