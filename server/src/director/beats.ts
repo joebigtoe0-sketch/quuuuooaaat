@@ -443,10 +443,16 @@ export class Beats {
       realSleep(25_000).then(() => null),
     ]);
     const buy = d && (d as any).buy === true;
-    // conviction-scaled: ~0.6x standard at the bar → ~2.2x on a screamer,
-    // never more than a quarter of the remaining bankroll or the per-trade cap.
+    // SIZE = min 0.05 SOL .. max 6% of the SOL we hold, placed by conviction
+    // with a little organic jitter so it never looks scripted. Clamped to the
+    // spendable war chest and the per-trade cap.
+    const { solBalance } = await import("../chain/wallet.js");
+    const heldSol = await solBalance().catch(() => bank);
+    const minSol = 0.05;
+    const maxSol = Math.max(minSol + 0.001, heldSol * 0.06);
+    const jitter = 0.88 + Math.random() * 0.24; // ±12%
     const sol = Math.round(
-      Math.max(0.01, Math.min(stdSize * (0.6 + conviction * 1.6), stdSize * 2.5, bank * 0.25, cfg.maxTradeSol)) * 1000,
+      Math.max(minSol, Math.min((minSol + conviction * (maxSol - minSol)) * jitter, maxSol, bank, cfg.maxTradeSol)) * 1000,
     ) / 1000;
     const thesis = String((d as any)?.thesis ?? `scored ${a.buyScore} on the desk`).slice(0, 200);
     if (!buy) {
