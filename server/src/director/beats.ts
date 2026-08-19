@@ -109,7 +109,11 @@ export class Beats {
       const v = await Promise.race([
         callFreeform(
           PERSONA +
-            "\nRephrase the line below in your own words. SAME meaning, DIFFERENT wording — never reuse its sentence structure. One spoken sentence (max ~22 words), no emoji/markdown.",
+            "\nRephrase the line below in your own words. SAME meaning, DIFFERENT wording — never reuse its sentence structure. One spoken sentence (max ~22 words), no emoji/markdown." +
+            // POV drift here breaks kayfabe: 'Posted. The timeline has been
+            // notified.' came back as 'chat will know what YOU are cooking' —
+            // as if someone else did the work and he was narrating it.
+            "\nPOINT OF VIEW IS FIXED: you are RIKU speaking as yourself, first person. Whatever the line says YOU did stays something YOU did — never re-attribute it to another person, never address a 'you' who did it, never narrate yourself from the outside. (Talking TO chat is fine; handing them credit for your own actions is not.)",
           `Line: ${meaning}`,
           80,
           FRAGMENT_MODEL,
