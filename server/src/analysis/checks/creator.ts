@@ -14,6 +14,7 @@ import { log } from "../../log.js";
  */
 let creatorStats = new Map<string, [number, number]>();
 let goodDevs = new Set<string>();
+let primeDevs = new Set<string>(); // the ELITE list — the exact wallets the money bot snipes
 let smartWallets = new Set<string>();
 
 export function loadIntel(): void {
@@ -26,6 +27,7 @@ export function loadIntel(): void {
   }
   for (const [file, set, col] of [
     ["dev_watchlist_std.csv", goodDevs, 0],
+    ["dev_watchlist_prime.csv", primeDevs, 0],
     ["axiom_watchlist.csv", smartWallets, 0],
   ] as const) {
     try {
@@ -47,6 +49,11 @@ export interface DevHistory {
   bonds: number;
   bondRate: number;
   onWatchlist: boolean;
+}
+
+/** Is this creator on the ELITE prime list (the money bot's exact wallets)? */
+export function primeDev(creator: string | null): boolean {
+  return !!creator && primeDevs.has(creator);
 }
 
 export function devHistory(creator: string | null): DevHistory {

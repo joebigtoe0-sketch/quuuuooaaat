@@ -1,7 +1,7 @@
 import { PublicKey } from "@solana/web3.js";
 import { cfg } from "../config.js";
 import { log } from "../log.js";
-import { devHistory } from "../analysis/checks/creator.js";
+import { devHistory, primeDev } from "../analysis/checks/creator.js";
 import { getTokenState } from "../chain/pump.js";
 import { getSolUsd } from "../chain/solana.js";
 import { tradeBuy, openPositions } from "../chain/trader.js";
@@ -79,13 +79,16 @@ export async function onSnipeLaunch(item: ConveyorItem): Promise<void> {
     if (inflight.has(item.mint)) return;
 
     const d = devHistory(item.dev);
-    const proven = d.onWatchlist || (d.launches >= cfg.devsnipeMinLaunches && d.bondRate >= cfg.devsnipeMinBondRate);
+    const prime = primeDev(item.dev);
+    const proven = cfg.devsnipePrimeOnly
+      ? prime
+      : prime || d.onWatchlist || (d.launches >= cfg.devsnipeMinLaunches && d.bondRate >= cfg.devsnipeMinBondRate);
     if (!proven) {
-      if (d.known || d.onWatchlist) note(item, `dev known but not proven (${d.bonds}/${d.launches}, rate ${(d.bondRate * 100).toFixed(0)}%)`);
+      if (d.known || d.onWatchlist) note(item, `dev known but not proven (${d.bonds}/${d.launches}, rate ${(d.bondRate * 100).toFixed(0)}%${d.onWatchlist ? ", watchlist but prime-only mode" : ""})`);
       return;
     }
     stats.proven++;
-    const record = d.known ? `${d.bonds}/${d.launches} bonded` : "watchlist wallet";
+    const record = prime ? "PRIME dev — the elite list" : d.known ? `${d.bonds}/${d.launches} bonded` : "watchlist wallet";
     lastProven = { at: Date.now(), symbol: item.symbol, mint: item.mint, why: record };
     if (openPositions().filter((p) => p.strategyId === STRAT_ID).length >= cfg.devsnipeMaxOpen) {
       note(item, `proven (${record}) but ${cfg.devsnipeMaxOpen} snipe slots full`);
@@ -106,19 +109,26 @@ export async function onSnipeLaunch(item: ConveyorItem): Promise<void> {
     const held = heldSolCache;
     const minSol = 0.05;
     const maxSol = Math.max(minSol + 0.001, held * 0.06);
-    const conviction = d.onWatchlist ? Math.min(1, 0.7 + d.bondRate * 0.3) : Math.min(1, d.bondRate);
+    const conviction = prime ? 0.85 : d.onWatchlist ? Math.min(1, 0.7 + d.bondRate * 0.3) : Math.min(1, d.bondRate);
     const jitter = 0.88 + Math.random() * 0.24;
     const sol = Math.round(Math.max(minSol, Math.min((minSol + conviction * (maxSol - minSol)) * jitter, maxSol, cfg.maxTradeSol)) * 1000) / 1000;
 
     stats.attempts++;
-    const res = await tradeBuy(
-      item.mint,
-      item.symbol,
-      sol,
-      `recognized the dev wallet at launch (${record}) — in under $${(mcUsd / 1000).toFixed(1)}k`,
-      item.mcSol ?? null,
-      STRAT_ID,
-    );
+    // the fast path can beat our own RPC to the curve account — "token not
+    // found" right after launch is a race, not a verdict. Short retries win it.
+    let res: Awaited<ReturnType<typeof tradeBuy>> = { ok: false, dry: false, why: "unattempted" };
+    for (let attempt = 0; attempt < 5; attempt++) {
+      res = await tradeBuy(
+        item.mint,
+        item.symbol,
+        sol,
+        `recognized the dev wallet at launch (${record}) — in under $${(mcUsd / 1000).toFixed(1)}k`,
+        item.mcSol ?? null,
+        STRAT_ID,
+      );
+      if (res.ok || !/not found|no curve|empty curve/i.test(res.why ?? "")) break;
+      await new Promise((r) => setTimeout(r, 700));
+    }
     lastResult = { at: Date.now(), symbol: item.symbol, ok: res.ok, why: res.why };
     if (res.ok) {
       stats.bought++;
