@@ -204,6 +204,46 @@ export class Beats {
     if (a.sentUsd !== null) this.dir.noteAction("RECEIVED", a.symbol);
     this.hub.cue({ t: "screen_inspection", patch: { name: a.name, symbol: a.symbol, image: a.image } });
 
+    // MAYHEM MODE = instant kill. Don't waste the full research ceremony (row
+    // drip, mutters, analyst, verdict LLM) on a rigged casino curve — flash the
+    // zero and go straight to the roast.
+    if (a.hardReject === "mayhem") {
+      a.score = 0;
+      a.tier = "ROAST";
+      this.dir.inspection.rows = a.rows;
+      this.dir.inspection.score = 0;
+      this.dir.inspection.tier = "ROAST";
+      this.dir.inspection.headline = "MAYHEM — INSTANT ZERO";
+      this.hub.cue({ t: "screen_inspection", patch: { rows: a.rows, score: 0, tier: "ROAST", headline: "MAYHEM — INSTANT ZERO" } });
+      store.setVerdict(mint, "ROAST", 0);
+      this.loco.sit(false);
+      await this.loco.walkTo("camera_mark");
+      this.hub.cue({ t: "camera", preset: "facecam" });
+      this.loco.stateName = "VERDICT:ROAST";
+      const { PERSONA } = await import("../brain/prompts.js");
+      const roast = await Promise.race([
+        callFreeform(
+          PERSONA + "\nA viewer sent you a MAYHEM-MODE coin — a rigged house-rules casino curve, your least favorite thing on pump.fun. Roast it in ONE savage spoken sentence (max 25 words). No mercy, no upside. The coin, never a real person. Spoken words only.",
+          `$${a.symbol} (${a.name})`,
+          70,
+          FRAGMENT_MODEL,
+        ),
+        realSleep(4500).then(() => null),
+      ]);
+      await this.speak(
+        roast && roast.length > 4 ? roast : `Mayhem mode — a rigged casino curve wearing a coin costume. That's a zero. Get it off my desk.`,
+        "disgusted",
+      );
+      this.hub.cue({ t: "fx", kind: "stamp_rekt" });
+      const roasts = ["thumbs_down", "no_more", "facepalm", "you_crazy", "shake_finger", "head_shake", "throat_slit"];
+      this.hub.cue({ t: "anim", clip: roasts[Math.floor(Math.random() * roasts.length)] });
+      await sleep(3000);
+      memory.journal("roast", `mayhem coin $${a.symbol} — instant zero, roasted and dumped, no ceremony wasted`);
+      this.hub.cue({ t: "camera", preset: "wide" });
+      this.loco.stateName = "IDLE";
+      return a;
+    }
+
     // SECOND OPINION: the big model reviews the raw evidence in parallel with
     // the screen drip. It can nudge the score ±10 for nuance the checklist
     // can't see — it can NEVER override a hard reject.
