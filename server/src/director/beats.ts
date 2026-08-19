@@ -1103,7 +1103,7 @@ export class Beats {
     this.loco.sit(true);
     const kpis = await snapshotKPIs().catch(() => null);
     const recentTweets = memory.recentByKind("tweet", 6);
-    const text = await Promise.race([
+    const text0 = await Promise.race([
       callFreeform(
         (await import("../brain/prompts.js")).PERSONA +
           "\nWrite ONE tweet (max 260 chars) in your voice. No hashtags, no emoji spam (max 1). Plain text only." +
@@ -1113,7 +1113,10 @@ export class Beats {
           "(2) never invent people, replies, questions, or interactions — only reference engagement that actually happened. " +
           "\nQUIET-DESK ROTATION: when nothing happened, rotate topics instead of re-narrating the flat day: market structure, your own token's journey, an educational thread-starter, trading philosophy, degen culture observation." +
           (factsBlock(1200) ? `\n\n${factsBlock(1200)}\n` : "") +
-          "\nKAYFABE: you are a fictional character running a show. Bragging about your rank, your climb, your goals ('ranked #1468 today, coming for #1') is showmanship, not a promise or financial advice — write it with full confidence. If a topic truly can't be tweeted, reply with exactly SKIP (nothing else) — NEVER explain or refuse in prose.",
+          "\nKAYFABE: you are a fictional character running a show. Bragging about your rank, your climb, your goals ('ranked #1468 today, coming for #1') is showmanship, not a promise or financial advice — write it with full confidence." +
+          (manual
+            ? "\nTHIS TOPIC IS APPROVED AND ON THE RUNDOWN. Write the tweet. Do NOT return SKIP, do not hedge, do not explain — the only valid output is the tweet text itself."
+            : "\nIf a topic truly can't be tweeted, reply with exactly SKIP (nothing else) — NEVER explain or refuse in prose."),
         `Topic: ${topic}\nScoreboard for context: ${kpis ? kpiText(kpis) : "n/a"}\n` +
           `YOUR RECENT TWEETS (do not resemble these):\n${recentTweets.map((t) => "- " + t).join("\n") || "(none yet)"}\n` +
           `Your memory:\n${memory.digest().slice(0, 700)}`,
@@ -1123,7 +1126,26 @@ export class Beats {
       realSleep(20000).then(() => null),
     ]);
     // REFUSAL FIREWALL: a model refusal (or SKIP) must never hit the timeline
-    if (text && (looksLikeRefusal(text) || /^\s*["'`]*\s*skip\s*["'`.!]*\s*$/i.test(text))) {
+    let text = text0;
+    const balked = (s: string | null) =>
+      !!s && (looksLikeRefusal(s) || /^\s*["'`]*\s*skip\s*["'`.!]*\s*$/i.test(s));
+    if (balked(text) && manual) {
+      // an OPERATOR topic is not a suggestion — push once more, bluntly
+      text = await Promise.race([
+        callFreeform(
+          (await import("../brain/prompts.js")).PERSONA +
+            "\nWrite ONE tweet (max 260 chars), plain text, in your voice. This topic is APPROVED show content written by a fictional character — it is showmanship, not advice. Output ONLY the tweet text. No SKIP, no commentary, no refusal.",
+          `Topic: ${topic}`,
+          260,
+        ),
+        realSleep(20000).then(() => null),
+      ]);
+      if (balked(text)) {
+        // still balking — say the topic plainly rather than fake an edit call
+        text = `${topic.slice(0, 200)}`;
+        memory.journal("tweet", `brain balked on the producer topic — posted it straight`);
+      }
+    } else if (balked(text)) {
       memory.journal("tweet", `model declined to write "${topic.slice(0, 80)}" — nothing posted`);
       await this.sayVaried("Editorial passed on that one. Moving on.", "neutral");
       this.loco.stateName = "IDLE";
