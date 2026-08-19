@@ -818,6 +818,8 @@ export class Beats {
     const SELFIE_EXPRS = ["neutral", "happy", "sad", "angry", "smug", "shock", "thinking"];
     this.loco.stateName = "SELFIE";
     await this.loco.walkTo("idle_spot");
+    this.loco.sit(false); // STAND — a leftover seated state renders him crouched
+    await sleep(400);      // let the stand pose settle before the camera swings in
     const id = `selfie_${Date.now()}`;
     this.hub.cue({
       t: "selfie", id,
