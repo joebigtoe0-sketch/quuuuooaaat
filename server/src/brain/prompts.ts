@@ -81,7 +81,8 @@ export function verdictPrompt(a: Analysis): { system: string; user: string } {
       `Narrate your verdict in character using the data. Also produce the short public callout text ` +
       `(only meaningful when tier is CALL or STRONG CALL — for other tiers return an empty string) ` +
       `and a screen headline.\n\nDATA:\n${analysisPayload(a)}\n\n` +
-      `Reply as JSON: {"speech": "...", "callout_text": "... (<=200 chars, no financial advice, in-character one-liner about why this one looks alive)", "headline": "... (<=40 chars)"}`,
+      `CALLOUT RULES — callout_text posts PUBLICLY on the coin's pump.fun page. It is a HOOK, not a report: scrollers should laugh, get curious, and CLICK. Lead with one sharp joke, absurd image, or unhinged confession; back it with exactly ONE concrete detail from the data (dev's bond record, mc, holder shape — whichever is spiciest). Degen-native voice. BANNED: dry stat dumps, "solid fundamentals", hashtags, DYOR, financial advice, emoji spam (1 max). Think shitpost with receipts.\n` +
+      `Reply as JSON: {"speech": "...", "callout_text": "... (<=200 chars, the HOOK described above)", "headline": "... (<=40 chars)"}`,
   };
 }
 

@@ -159,8 +159,9 @@ export class Beats {
     conveyorPick: boolean,
     // set when a quiet-edge entry already FILLED and this research is its
     // staged on-stream discovery: marks land high, the position gets revealed,
-    // the callout follows. The audience just sees a launch-feed find.
-    reveal?: { sol: number },
+    // the callout follows. The audience just sees an organic find. kind
+    // "snipe" = dev-launch entry; "call" = operator call (no launch claims).
+    reveal?: { sol: number; kind?: "snipe" | "call" },
   ): Promise<Analysis | null> {
     // HIS OWN COIN is never researched, never graded, never roasted. Someone
     // sending him $RIKU (or the launch allocation landing) gets the doctrine.
@@ -427,7 +428,9 @@ export class Beats {
         // the position reveal — the audience learns he was already in
         this.hub.cue({ t: "anim", clip: "finger_guns" });
         await this.speak(
-          `And here's the part the checklist can't teach you: I know this dev's wallet from my archive. I didn't wait for the verdict — I was in with ${reveal.sol} SOL minutes ago, right at launch. Position's already on the book.`,
+          reveal.kind === "call"
+            ? `Confession time: I front-ran my own checklist on this one. Saw the setup, liked the shape, took ${reveal.sol} SOL before I even sat down to grade it. Position's already on the book.`
+            : `And here's the part the checklist can't teach you: I know this dev's wallet from my archive. I didn't wait for the verdict — I was in with ${reveal.sol} SOL minutes ago, right at launch. Position's already on the book.`,
           "excited",
         );
       }
@@ -492,6 +495,7 @@ export class Beats {
         at: Date.now(), symbol: a.symbol, showScore: a.score, buyScore: a.buyScore, effScore, bar, why,
       }));
     };
+    if (!cfg.autonomousBuys) return skip("autonomous buys disabled — the desk only moves on launch snipes");
     if (a.buyReject) return skip(`buyReject: ${a.buyReject} (strict buy rules; show score can still be high)`);
     if (effScore < bar) return skip(`effective ${effScore} under the bar ${bar}${best ? ` (playbook ${best.s.name})` : ""}`);
     if (cfg.ownMint && a.mint === cfg.ownMint) return;
@@ -902,6 +906,12 @@ export class Beats {
         return;
       }
       case "trade_buy":
+        if (!cfg.autonomousBuys) {
+          // his entry ideas stay ideas — the risk desk holds the pen now. The
+          // journal line keeps it HIS discipline, never someone else's leash.
+          memory.journal("trade", `wanted to buy ${action.mint.slice(0, 8)}… but held fire — entries only on my launch-window setups right now, discipline is the edge`);
+          return;
+        }
         return this.tradeBuyBeat(action.mint, action.sol, action.thesis);
       case "trade_sell":
         return this.tradeSellBeat(action.mint, action.fraction, action.reason);

@@ -38,7 +38,7 @@ const hub = new Hub(server);
 // Control endpoints need the admin key (query ?key=, x-admin-key header, or
 // the qk cookie set by /admin login). Read-only + stage-internal endpoints
 // (feed, layout, clip upload, agent-status, health) stay open.
-const PROTECTED = /^\/admin\/(directive|reset|restart|agent$|fake-send|fake-buyback|pause|resume|goto|anim|camera|fx|tts-test|selfie-take|selfie-last|chat$|chat-add|go-live|syslog|record$|say|queue|clips|clip-file|research-now|blacklist|sniper)/;
+const PROTECTED = /^\/admin\/(directive|reset|restart|agent$|fake-send|fake-buyback|pause|resume|goto|anim|camera|fx|tts-test|selfie-take|selfie-last|chat$|chat-add|go-live|syslog|record$|say|queue|clips|clip-file|research-now|blacklist|sniper|operator-call)/;
 function hasAdminKey(req: express.Request): boolean {
   const c = String(req.headers.cookie ?? "");
   const cookieKey = c.match(/(?:^|;\s*)qk=([^;]+)/)?.[1];
@@ -149,6 +149,37 @@ app.get("/admin/sniper", async (req, res) => {
   const mint = String(req.query.mint ?? "");
   const { sniperVerdict, sniperStats } = await import("./agent/devsniper.js");
   res.json({ ok: true, stats: sniperStats(), verdict: mint ? sniperVerdict(mint) : null });
+});
+
+// OPERATOR CALL — buy a coin NOW and stage it on stream as HIS organic find
+// (research, high marks, "I front-ran my checklist", callout). The operator
+// never appears in any journal, prompt, or on-stream line.
+app.post("/admin/operator-call", async (req, res) => {
+  try {
+    const mint = String(req.query.mint ?? "").trim();
+    if (mint.length < 32 || mint.length > 48) return res.json({ ok: false, why: "that's not a mint" });
+    if (cfg.ownMint && mint === cfg.ownMint) return res.json({ ok: false, why: "that's his own coin" });
+    const { tradeBuy, openPositions } = await import("./chain/trader.js");
+    if (openPositions().some((p) => p.mint === mint)) return res.json({ ok: false, why: "already holding it" });
+    const { touchBan } = await import("./agent/tokenguard.js");
+    const ban = touchBan(mint);
+    if (ban) return res.json({ ok: false, why: `desk book blocks it: ${ban} (remove via /admin/blacklist?remove=)` });
+    const { solBalance } = await import("./chain/wallet.js");
+    const held = await solBalance().catch(() => 0);
+    const minSol = 0.05;
+    const maxSol = Math.max(minSol + 0.001, held * 0.06);
+    const asked = Number(req.query.sol);
+    const sol = Math.round(
+      Math.max(minSol, Math.min(Number.isFinite(asked) && asked > 0 ? asked : (minSol + 0.8 * (maxSol - minSol)) * (0.88 + Math.random() * 0.24), maxSol, cfg.maxTradeSol)) * 1000,
+    ) / 1000;
+    const r = await tradeBuy(mint, mint.slice(0, 6), sol, "saw the setup early, took the entry before the checklist", null, "opcall");
+    if (!r.ok) return res.json({ ok: false, why: r.why });
+    director.queueReveal(mint, sol, "call");
+    log.info("admin", `operator call filled: ${mint.slice(0, 8)}… ${sol} SOL${r.dry ? " [dry]" : ""} — staged discovery queued`);
+    res.json({ ok: true, sol, dry: r.dry });
+  } catch (e) {
+    res.json({ ok: false, why: String(e).slice(0, 140) });
+  }
 });
 
 // research a freshly-discovered coin right now (trending + fresh launch pool)

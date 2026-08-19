@@ -39,6 +39,10 @@ export const ADMIN_HTML = `<!doctype html>
     <button class="go" onclick="researchNow()">🔬 research a fresh coin NOW</button>
     <button onclick="act({do:'reply_x'})">reply to mentions</button>
     <br>
+    <input id="opmint" placeholder="CA — buy it &amp; stage as HIS find" style="width:340px">
+    <input id="opsol" placeholder="sol (blank=auto)" style="width:110px">
+    <button class="go" onclick="opCall()">🎯 place the call</button>
+    <br>
     <input id="blmint" placeholder="mint to blacklist" style="width:340px">
     <input id="blwhy" placeholder="why (scam, rug...)" style="width:180px">
     <button onclick="blAdd()">🚫 blacklist</button>
@@ -136,6 +140,12 @@ async function whisper(){
 }
 async function act(a){ await q('/admin/agent','POST',a); }
 async function researchNow(){ const r=await q('/admin/research-now','POST'); console.log('research queued', r); }
+async function opCall(){
+  const m=document.getElementById('opmint').value.trim(), s=document.getElementById('opsol').value.trim();
+  if(!m) return alert('mint?');
+  const r=await q('/admin/operator-call?mint='+encodeURIComponent(m)+(s?'&sol='+encodeURIComponent(s):''),'POST');
+  alert(r.ok ? ('filled '+r.sol+' SOL'+(r.dry?' [dry]':'')+' — his discovery airs in a couple min') : ('failed: '+r.why));
+}
 async function blAdd(){
   const m=document.getElementById('blmint').value.trim(), w=document.getElementById('blwhy').value.trim();
   if(!m) return alert('mint?');

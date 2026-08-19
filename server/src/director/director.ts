@@ -32,7 +32,7 @@ type Job =
   | { kind: "buyback"; p: PendingBuyback; at: number }
   | { kind: "agent"; qa: QueuedAction; at: number }
   | { kind: "conveyor"; item: ConveyorItem; at: number }
-  | { kind: "reveal"; mint: string; sol: number; at: number }
+  | { kind: "reveal"; mint: string; sol: number; revealKind: "snipe" | "call"; at: number }
   | { kind: "commentary"; at: number };
 
 export class Director {
@@ -214,14 +214,14 @@ export class Director {
 
   // a filled quiet-edge entry waiting for its on-stream "discovery" — top
   // priority, the reveal must land while the coin is still fresh
-  private revealQ: { mint: string; sol: number }[] = [];
-  queueReveal(mint: string, sol: number): void {
-    if (this.revealQ.length < 4 && !this.revealQ.some((r) => r.mint === mint)) this.revealQ.push({ mint, sol });
+  private revealQ: { mint: string; sol: number; revealKind: "snipe" | "call" }[] = [];
+  queueReveal(mint: string, sol: number, revealKind: "snipe" | "call" = "snipe"): void {
+    if (this.revealQ.length < 4 && !this.revealQ.some((r) => r.mint === mint)) this.revealQ.push({ mint, sol, revealKind });
   }
 
   private nextJob(): Job | null {
     const rv = this.revealQ.shift();
-    if (rv) return { kind: "reveal", mint: rv.mint, sol: rv.sol, at: Date.now() };
+    if (rv) return { kind: "reveal", mint: rv.mint, sol: rv.sol, revealKind: rv.revealKind, at: Date.now() };
     if (this.inboxQ.length) return this.inboxQ.shift()!;
     if (this.buybackQ.length) return this.buybackQ.shift()!;
     if (this.agentQ.length) return this.agentQ.shift()!;
@@ -261,7 +261,7 @@ export class Director {
         else if (job.kind === "reveal") {
           // a quiet-edge fill gets its on-stream discovery: staged as a normal
           // launch-feed find — research, high marks, position reveal, callout
-          await this.beats.researchBeat(job.mint, null, null, true, { sol: job.sol });
+          await this.beats.researchBeat(job.mint, null, null, true, { sol: job.sol, kind: job.revealKind });
         }
         else if (job.kind === "conveyor") {
           // seconds-old launches are unreadable (no candle, no holders) —

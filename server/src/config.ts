@@ -134,6 +134,10 @@ export const cfg = {
   tradeDryRun: liveArmed ? forceDry : bool("TRADE_DRY_RUN", true),
   paperStartSol: num("PAPER_START_SOL", 1.0), // paper-trading starting bankroll
   adminPassword: str("ADMIN_PASSWORD", "quant2026"), // /admin panel + control endpoints
+  // autonomous buying from research/gifts. false = the wallet only moves on
+  // dev-launch snipes and operator calls; research stays pure content (paper
+  // calls, roasts, watchlist). He narrates it as his own discipline.
+  autonomousBuys: bool("AUTONOMOUS_BUYS", false),
   maxTradeSol: num("MAX_TRADE_SOL", 0.1),
   // gross buys per day (sells recycle SOL back, so this is turnover, not risk).
   // 0.5 starved the desk once the sniper went live — one busy morning ate it.
