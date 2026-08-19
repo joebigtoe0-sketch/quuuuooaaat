@@ -24,7 +24,9 @@ export function lastExit(mint: string): ExitRecord | null {
   for (const p of allPositions()) {
     if (p.mint !== mint || !p.closed) continue;
     if (!best || p.closed.at > best.at) {
-      best = { at: p.closed.at, pnlSol: (p.soldSol ?? 0) - p.costSol, reason: p.closed.reason ?? "" };
+      // legacy positions predate soldSol — fall back to the close's proceeds
+      const got = p.soldSol ?? p.closed.solReceived ?? 0;
+      best = { at: p.closed.at, pnlSol: got - p.costSol, reason: p.closed.reason ?? "" };
     }
   }
   return best;
@@ -46,7 +48,8 @@ export function touchBan(mint: string): string | null {
 }
 
 /** Auto-blacklist on exits that smell like fraud — a scam exit is forever. */
-const SCAMMY = /scam|rug|honeypot|fraud|drain|stole|dump.?er|blacklis/i;
+// word-bounded so "struggling"/"shrug" in a sell reason can't blacklist a coin
+const SCAMMY = /\b(scam(?:my|mer)?|rug(?:ged|pull|s)?|honeypot|fraud|drain(?:ed|er)?|stolen?|dump\s?and\s?run|blacklist(?:ed)?)\b/i;
 export function noteExitReason(mint: string, symbol: string, reason: string): void {
   if (SCAMMY.test(reason)) {
     store.blacklistAdd(mint, `sold $${symbol}: ${reason.slice(0, 100)}`, "exit");

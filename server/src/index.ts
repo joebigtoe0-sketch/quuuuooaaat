@@ -126,11 +126,12 @@ app.post("/admin/go-live", async (req, res) => {
   setTimeout(relaunch, 400);
 });
 
-// the black book: list / add / remove permanently banned mints.
-//   GET /admin/blacklist                    -> list
-//   GET /admin/blacklist?mint=..&why=..     -> add (operator)
-//   GET /admin/blacklist?remove=<mint>      -> un-ban
-app.get("/admin/blacklist", (req, res) => {
+// the black book: GET lists; POST mutates (mutations stay POST — CSRF hygiene).
+//   GET  /admin/blacklist                    -> list
+//   POST /admin/blacklist?mint=..&why=..     -> add (operator)
+//   POST /admin/blacklist?remove=<mint>      -> un-ban
+app.get("/admin/blacklist", (_req, res) => res.json({ ok: true, blacklist: store.blacklistAll() }));
+app.post("/admin/blacklist", (req, res) => {
   const { mint, why, remove } = req.query as Record<string, string | undefined>;
   if (remove) {
     store.blacklistRemove(remove);

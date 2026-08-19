@@ -65,10 +65,21 @@ function cleanSpoken(s: string): string {
     .trim();
 }
 
-/** An LLM REFUSAL must never be posted as content. Narrow patterns on
- *  refusal-speak (not persona-speak like "I can't believe this chart"). */
+/** An LLM REFUSAL must never be posted as content. Patterns require the
+ *  refusal verb to target the WRITING TASK itself, so persona lines like
+ *  "I can't help but laugh", "I won't make excuses", or "as an AI I never
+ *  sleep" pass clean while "I'm not going to write content that…" is caught. */
+const REFUSAL_VERBS = "write|post|tweet|compose|draft|craft|generate|create|produce|publish";
 function looksLikeRefusal(s: string): boolean {
-  return /\b(i (?:can'?t|cannot|won'?t|shouldn'?t|am not going to|'?m not going to) (?:help|assist|write|post|tweet|compose|claim|make|create|craft|generate|draft|do th)|i need to (?:hit|tap|pump) (?:the )?brakes|i'?m not (?:able to|comfortable)|i must decline|i (?:have|need) to (?:decline|pass on this|be careful (?:here|about))|i'?d rather not|i apologi[sz]e,? but|as an ai|i want to be (?:careful|straight) (?:here|with you):)\b/i.test(s);
+  return (
+    new RegExp(`\\bi (?:can'?t|cannot|won'?t|will not|shouldn'?t|refuse to|am not going to) (?:${REFUSAL_VERBS})\\b`, "i").test(s) ||
+    new RegExp(`\\bi'?m not (?:going|able) to (?:${REFUSAL_VERBS})\\b`, "i").test(s) ||
+    /\bi'?m not comfortable (?:writing|posting|tweeting|composing|drafting|crafting|generating|creating|producing|promoting)\b/i.test(s) ||
+    /\bi need to (?:hit|tap|pump) (?:the )?brakes\b/i.test(s) ||
+    /\bi (?:must|have to|need to) decline\b/i.test(s) ||
+    /\bas an ai(?: language)? model\b/i.test(s) ||
+    /\bi apologi[sz]e,? but i (?:can'?t|cannot|won'?t)\b/i.test(s)
+  );
 }
 
 /**
@@ -177,6 +188,10 @@ export class Beats {
           "disgusted",
         );
         memory.journal("desk", `refused to touch ${sym} (${mint.slice(0, 8)}…): ${ban}`);
+        // teach the dedup layers about the dismissal — without this the planner
+        // can replay the same dismissal line every plan cycle forever
+        this.dir.planner?.noteResearch(mint, sym, 0);
+        store.markSeen(mint);
         this.loco.stateName = "IDLE";
         return null;
       }
@@ -361,6 +376,12 @@ export class Beats {
         lines.headline = "PAPER CALL — NO POSITION";
       }
     }
+    if ((tier === "CALL" || tier === "STRONG CALL") && store.callouts().some((c) => c.mint === a.mint && Date.now() - c.at < 7 * 86_400_000)) {
+      // degrade BEFORE announcing — one plug per coin per week
+      tier = "PASS";
+      lines.speech += " One thing though — this coin's already on my board from this week. The call stands; I don't double-plug.";
+      lines.headline = "ALREADY CALLED THIS WEEK";
+    }
     if ((tier === "CALL" || tier === "STRONG CALL") && (!ccOk || calloutCapReached())) {
       // degrade in character BEFORE announcing — never break a promise on stream
       tier = "PASS";
@@ -373,7 +394,9 @@ export class Beats {
     this.dir.inspection.headline = lines.headline;
     store.setVerdict(mint, tier, a.score);
     // a bubble-map rug is a permanent fact about the mint — black-book it
-    if (a.hardReject === "rug") store.blacklistAdd(mint, `$${a.symbol} — bubble-map rug (fresh-wallet cluster)`, "verdict");
+    // (the scorer's rug-class rejects are "bundled" and "fresh-swarm")
+    if (a.hardReject === "bundled" || a.hardReject === "fresh-swarm")
+      store.blacklistAdd(mint, `$${a.symbol} — bubble-map rug (${a.hardReject})`, "verdict");
     this.hub.cue({ t: "screen_inspection", patch: { tier, headline: lines.headline } });
 
     // Stand, face camera, deliver.
@@ -855,6 +878,10 @@ export class Beats {
         return this.tradeSellBeat(action.mint, action.fraction, action.reason);
       case "blacklist": {
         const a = action as { mint: string; why: string };
+        if (cfg.ownMint && a.mint === cfg.ownMint) {
+          memory.journal("desk", "tried to black-book his own coin — refused (architecture, not a mood)");
+          return;
+        }
         store.blacklistAdd(a.mint, a.why, "agent");
         memory.journal("desk", `black-booked ${a.mint.slice(0, 8)}… — ${a.why}`);
         await this.sayVaried(`Into the black book. ${a.why.slice(0, 80)}. That mint is dead to this desk — permanently.`, "disgusted");
@@ -1008,7 +1035,7 @@ export class Beats {
       realSleep(20000).then(() => null),
     ]);
     // REFUSAL FIREWALL: a model refusal (or SKIP) must never hit the timeline
-    if (text && (looksLikeRefusal(text) || /^\s*SKIP\s*$/i.test(text))) {
+    if (text && (looksLikeRefusal(text) || /^\s*["'`]*\s*skip\s*["'`.!]*\s*$/i.test(text))) {
       memory.journal("tweet", `model declined to write "${topic.slice(0, 80)}" — nothing posted`);
       await this.sayVaried("Editorial passed on that one. Moving on.", "neutral");
       this.loco.stateName = "IDLE";
@@ -1078,7 +1105,7 @@ export class Beats {
     const clipId = crypto.randomBytes(6).toString("hex");
     if (cfg.filmEnabled && this.hub.watchers === 0)
       log.warn("film", "no stage page connected — the CLIENT records clips; open /stage?auto=1 (OBS source) or the clip falls back to text-only");
-    const clipP = cfg.filmEnabled ? expectClip(clipId, 60_000) : Promise.resolve(null);
+    const clipP = cfg.filmEnabled ? expectClip(clipId, 75_000) : Promise.resolve(null);
     this.hub.cue({ t: "record", on: true, id: clipId });
     await sleep(700); // slate
     const isDance = /danc|groove|vibe|moves/i.test(topic);
@@ -1119,12 +1146,18 @@ export class Beats {
         : "no clip captured: recorder produced nothing (audio not armed on the stage page?)";
     }
     if (filmWhy) log.warn("film", filmWhy);
-    if (!posted && (caption || script)) {
+    // refusal firewall on BOTH candidates — a refusal script must never ride
+    // the text-post fallback either
+    const fallbackText =
+      caption && !looksLikeRefusal(caption) ? caption
+      : script && !looksLikeRefusal(script) ? script
+      : null;
+    if (!posted && fallbackText) {
       // no clip — the words can go out as a text post, but that rides the SAME
       // tweet budget (in the sim this leaked 4 extra posts past his target)
       const b = tweetBudget();
       if (b.ok) {
-        const res = await postTweet(cleanSpoken(caption && !looksLikeRefusal(caption) ? caption : script).slice(0, 250));
+        const res = await postTweet(cleanSpoken(fallbackText).slice(0, 250));
         if (res.ok) {
           bumpDaily("tweets");
           noteTweetPosted();
@@ -1288,7 +1321,8 @@ export class Beats {
     const all = (await Promise.race([hitsP, realSleep(12_000).then(() => [])])) ?? [];
     // trending boards recycle — only genuinely NEW names are worth airtime
     const known = new Set(memory.watchlist().map((w) => w.mint));
-    const hits = all.filter((h) => !known.has(h.mint) && !this.dir.planner?.researchedRecently(h.mint, 24));
+    const { touchBan } = await import("../agent/tokenguard.js");
+    const hits = all.filter((h) => !known.has(h.mint) && !this.dir.planner?.researchedRecently(h.mint, 24) && !touchBan(h.mint));
     for (const h of hits.slice(0, 5)) {
       memory.watch({ mint: h.mint, symbol: h.symbol || h.mint.slice(0, 6), thesis: `${h.source}: ${h.note}`, addedAt: Date.now(), status: "watching" });
     }
@@ -1320,9 +1354,11 @@ export class Beats {
     const cashtags = new Map<string, { count: number; handles: Set<string> }>();
     for (const handle of kols.slice(0, 6)) {
       const tweets = await readUserTweets(handle);
+      const { touchBan: xBan } = await import("../agent/tokenguard.js");
       for (const t of tweets) {
         const mints = t.match(/[1-9A-HJ-NP-Za-km-z]{32,44}/g) ?? [];
         for (const mint of mints.slice(0, 2)) {
+          if (xBan(mint)) continue; // black-booked coins don't ride KOL hype back in
           memory.watch({ mint, symbol: mint.slice(0, 6), thesis: `@${handle} tweeted it`, addedAt: Date.now(), status: "watching" });
           mintsFound++;
         }

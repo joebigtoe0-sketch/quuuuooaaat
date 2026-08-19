@@ -139,7 +139,7 @@ async function researchNow(){ const r=await q('/admin/research-now','POST'); con
 async function blAdd(){
   const m=document.getElementById('blmint').value.trim(), w=document.getElementById('blwhy').value.trim();
   if(!m) return alert('mint?');
-  const r=await q('/admin/blacklist?mint='+encodeURIComponent(m)+'&why='+encodeURIComponent(w||'operator flagged'));
+  const r=await q('/admin/blacklist?mint='+encodeURIComponent(m)+'&why='+encodeURIComponent(w||'operator flagged'),'POST');
   alert('black-booked. total: '+Object.keys(r.blacklist||{}).length);
 }
 async function blList(){

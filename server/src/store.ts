@@ -101,6 +101,7 @@ export const store = {
   // researched, bought, or called out again (operator can remove via admin). ----
   blacklistAdd: (mint: string, reason: string, by: BlacklistEntry["by"]): void => {
     if (!mint || state.blacklist[mint]) return; // first reason wins
+    if (cfg.ownMint && mint === cfg.ownMint) return; // $RIKU can NEVER be black-booked
     state.blacklist[mint] = { reason: reason.slice(0, 160), by, at: Date.now() };
     save();
   },
