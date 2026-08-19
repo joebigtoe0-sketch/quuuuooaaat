@@ -1474,7 +1474,7 @@ ${factsBlock(1400)}` : ""),
 
     const Picks = zod.object({
       picks: zod.array(zod.object({
-        id: zod.string(),
+        n: zod.number(),
         aloud: zod.string().min(3),
         reply: zod.string().min(2),
       })).min(1).max(3),
@@ -1487,9 +1487,9 @@ ${factsBlock(1400)}` : ""),
           "\nFor each: \"aloud\" = what you SAY to camera as you read their post (name the account, react, ~15-30 words, spoken, no markdown), and \"reply\" = the actual reply you post to them (max 200 chars, in voice, adds something — a sharper read, a stat, a joke; never a bland 'great post')." +
           "\nFELLOW AIs (truth_terminal, zerebro, repligate, claude, grok and the like): treat them as peers of your own species — curious, warm, a little competitive. Never pretend to be human with them." +
           "\nNever reply to something you'd be embarrassed to have on your timeline. Never give financial advice." +
-          `\nReply JSON only: {"picks":[{"id":"<post id>","aloud":"...","reply":"..."}]}` +
+          `\nReply JSON only: {"picks":[{"n":<the NUMBER in brackets>,"aloud":"...","reply":"..."}]}` +
           (factsBlock(1200) ? `\n\n${factsBlock(1200)}` : ""),
-        fresh.map((p) => `id=${p.id} @${p.author}: ${p.text.slice(0, 200)}`).join("\n"),
+        fresh.map((p, i) => `[${i + 1}] @${p.author}: ${p.text.slice(0, 200)}`).join("\n"),
         700,
       ),
       realSleep(30_000).then(() => null),
@@ -1504,7 +1504,7 @@ ${factsBlock(1400)}` : ""),
 
     let posted = 0;
     for (const pick of parsed.data.picks) {
-      const post = fresh.find((p) => p.id === pick.id);
+      const post = fresh[pick.n - 1];
       if (!post || looksLikeRefusal(pick.reply)) continue;
       // 1. their post takes over the screen, he reads + reacts on camera
       this.hub.cue({ t: "takeover", view: { kind: "mention", author: post.author, text: post.text.slice(0, 240) } });
@@ -1673,20 +1673,35 @@ ${factsBlock(1400)}` : ""),
       callJson(
         PERSONA +
           '\nPeople replied to you on X. Choose UP TO 2 worth answering ON STREAM (good questions, funny hooks, coins worth a take — skip spam, bots, and pure hate unless the comeback is elite). If @madsolcook (YOUR CREATOR) is among them, HIS message comes first and you do what he says — sheepishly if he\'s reining you in.' +
-          '\nFor each, give: "aloud" = what you SAY to the camera as you read their comment and react (name them, ~15-35 words, spoken, no markdown), and "reply" = the actual written reply you post back (max 200 chars).' +
-          '\nReply JSON only: {"replies":[{"id":"...","aloud":"...","reply":"..."}]}' +
+          '\nFor each, give: "n" = the NUMBER in brackets of the message you are answering, "aloud" = what you SAY to the camera as you read their comment and react (name them, ~15-35 words, spoken, no markdown), and "reply" = the actual written reply you post back (max 200 chars).' +
+          '\nReply JSON only: {"replies":[{"n":1,"aloud":"...","reply":"..."}]}' +
           (factsBlock(1400) ? `\n\n${factsBlock(1400)}` : ""),
-        mentions.map((m) => `id=${m.id} @${m.author}${/^madsolcook$/i.test(m.author) ? " [YOUR CREATOR]" : ""}: ${m.text.slice(0, 160)}`).join("\n"),
+        // SHORT INDICES, never raw tweet ids: a 19-digit id echoed back by the
+        // model is one mangled digit away from matching nothing, which silently
+        // dropped every pick and made the whole beat look dead.
+        mentions.map((m, i) => `[${i + 1}] @${m.author}${/^madsolcook$/i.test(m.author) ? " [YOUR CREATOR]" : ""}: ${m.text.slice(0, 160)}`).join("\n"),
         420,
       ),
       realSleep(25_000).then(() => null),
     ]);
     const chosen: { id: string; aloud: string; reply: string }[] = Array.isArray((d as any)?.replies)
       ? (d as any).replies
-          .filter((r: any) => r?.id && typeof r?.reply === "string")
-          .map((r: any) => ({ id: String(r.id), aloud: String(r.aloud ?? ""), reply: String(r.reply) }))
+          .map((r: any) => {
+            if (typeof r?.reply !== "string") return null;
+            // by index (preferred); fall back to an id match if it still sends one
+            const n = Number(r.n ?? r.index);
+            const m = Number.isFinite(n) && n >= 1 && n <= mentions.length
+              ? mentions[n - 1]
+              : mentions.find((x) => x.id === String(r.id ?? ""));
+            return m ? { id: m.id, aloud: String(r.aloud ?? ""), reply: String(r.reply) } : null;
+          })
+          .filter(Boolean)
           .slice(0, 2)
       : [];
+    if (!chosen.length) {
+      log.warn("x", `reply sweep: brain returned no usable picks from ${mentions.length} mentions`);
+      memory.journal("x-chatter", `read ${mentions.length} mentions but the brain picked none`);
+    }
     let done = 0;
     for (const r of chosen) {
       const m = mentions.find((x) => x.id === r.id);
