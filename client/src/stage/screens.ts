@@ -120,6 +120,39 @@ export class Screens {
         g.font = "bold 28px 'Consolas', monospace";
         g.fillText(v.state === "posted" ? "✓ POSTED" : "✓ DRAFTED (keys pending)", 48, H - 70);
       }
+    } else if (v.kind === "mention") {
+      // incoming X reply/mention he's reading on camera
+      g.fillStyle = "#5a7290";
+      g.font = "bold 22px 'Consolas', monospace";
+      g.fillText("𝕏  INCOMING REPLY", 28, 26);
+      g.fillStyle = "#1c2740";
+      g.fillRect(28, 62, W - 56, 4);
+      // avatar circle + handle
+      g.fillStyle = "#89ddff";
+      g.beginPath();
+      g.arc(56, 116, 24, 0, Math.PI * 2);
+      g.fill();
+      g.fillStyle = "#0a0f18";
+      g.font = "bold 24px 'Consolas', monospace";
+      g.fillText((v.author[0] || "?").toUpperCase(), 48, 104);
+      g.fillStyle = "#e8f0ff";
+      g.font = "bold 26px 'Consolas', monospace";
+      g.fillText("@" + v.author.slice(0, 22), 94, 104);
+      g.fillStyle = "#5a7290";
+      g.font = "18px 'Consolas', monospace";
+      g.fillText("replied to you", 94, 132);
+      // their message, wrapped
+      g.fillStyle = "#dfe8fa";
+      g.font = "28px 'Consolas', monospace";
+      const maxW = W - 96;
+      let x = 48, y = 196;
+      for (const word of v.text.split(/(\s+)/)) {
+        const w = g.measureText(word).width;
+        if (x + w > 48 + maxW) { x = 48; y += 38; }
+        if (y > H - 60) break;
+        g.fillText(word, x, y);
+        x += w;
+      }
     } else if (v.kind === "script") {
       // RIKU://SCRIPT — his own code running on the bigscreen
       g.fillStyle = "#2affd4";

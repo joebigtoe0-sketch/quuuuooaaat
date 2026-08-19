@@ -73,7 +73,8 @@ export interface ConveyorItem {
 /** Full-screen takeover of the research terminal for visual moments:
  *  the X composer while he types, the trade ticket while he trades. */
 export type TakeoverView =
-  | { kind: "compose"; text: string; typed: number; state: "typing" | "posted" | "drafted" }
+  | { kind: "compose"; text: string; typed: number; state: "typing" | "posted" | "drafted"; replyTo?: string }
+  | { kind: "mention"; author: string; text: string }
   | { kind: "script"; title: string; lines: string[]; state: "running" | "done" | "error" }
   | {
       kind: "trade";

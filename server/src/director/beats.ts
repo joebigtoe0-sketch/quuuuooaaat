@@ -1230,36 +1230,65 @@ export class Beats {
       memory.journal("x-chatter", "reply sweep skipped — daily reply cap reached");
       return;
     }
-    await this.loco.walkTo("terminal");
+    await this.loco.walkTo("terminal"); // the compose/mention takeover renders here
     this.loco.sit(true);
+    this.hub.cue({ t: "camera", preset: "terminal" });
     const mentions = await Promise.race([readMentions(), realSleep(10_000).then(() => [])]);
     if (!mentions.length) {
       memory.journal("x-chatter", "reply sweep: no mentions (or read key missing)");
+      await this.sayVaried("Checked my mentions. Nobody worth answering — or nobody brave enough. The desk stays open.", "neutral");
       this.loco.sit(false);
       this.loco.stateName = "IDLE";
       return;
     }
     const { PERSONA } = await import("../brain/prompts.js");
+    // per pick: an ALOUD line (read/react to their comment on camera) + the
+    // written REPLY he types on the composer and posts back to them.
     const d = await Promise.race([
       callJson(
         PERSONA +
-          '\nPeople replied to you on X. Choose UP TO 2 worth answering (good questions, funny hooks, coins worth a take — skip spam, bots, and pure hate unless the comeback is elite). If @madsolcook (YOUR CREATOR) is among them, HIS message comes first and you actually do what he says — sheepishly if he\'s reining you in. Reply JSON only: {"replies":[{"id":"...","text":"<your reply, max 200 chars>"}]}',
+          '\nPeople replied to you on X. Choose UP TO 2 worth answering ON STREAM (good questions, funny hooks, coins worth a take — skip spam, bots, and pure hate unless the comeback is elite). If @madsolcook (YOUR CREATOR) is among them, HIS message comes first and you do what he says — sheepishly if he\'s reining you in.' +
+          '\nFor each, give: "aloud" = what you SAY to the camera as you read their comment and react (name them, ~15-35 words, spoken, no markdown), and "reply" = the actual written reply you post back (max 200 chars).' +
+          '\nReply JSON only: {"replies":[{"id":"...","aloud":"...","reply":"..."}]}',
         mentions.map((m) => `id=${m.id} @${m.author}${/^madsolcook$/i.test(m.author) ? " [YOUR CREATOR]" : ""}: ${m.text.slice(0, 160)}`).join("\n"),
-        320,
+        420,
       ),
       realSleep(25_000).then(() => null),
     ]);
-    const chosen: { id: string; text: string }[] = Array.isArray((d as any)?.replies)
-      ? (d as any).replies.filter((r: any) => r?.id && typeof r?.text === "string").slice(0, 2)
+    const chosen: { id: string; aloud: string; reply: string }[] = Array.isArray((d as any)?.replies)
+      ? (d as any).replies
+          .filter((r: any) => r?.id && typeof r?.reply === "string")
+          .map((r: any) => ({ id: String(r.id), aloud: String(r.aloud ?? ""), reply: String(r.reply) }))
+          .slice(0, 2)
       : [];
+    let done = 0;
     for (const r of chosen) {
-      const res = await postTweet(String(r.text).slice(0, 240), { replyTo: String(r.id) });
-      if (res.ok) {
-        store.kvSet(`xreplies:${new Date().toISOString().slice(0, 10)}`, String(replies + 1));
-        memory.journal("x-chatter", `${res.dry ? "[dry] " : ""}replied to ${r.id}: ${String(r.text).slice(0, 100)}`);
+      const m = mentions.find((x) => x.id === r.id);
+      if (!m) continue;
+      // 1. show their incoming reply on screen and read/react to it out loud
+      this.hub.cue({ t: "takeover", view: { kind: "mention", author: m.author, text: m.text.slice(0, 240) } });
+      await sleep(700);
+      await this.speak(r.aloud || `${m.author} hit my mentions. Let me set the record straight.`, "excited");
+      // 2. type the reply out on the X composer
+      const reply = cleanSpoken(r.reply).slice(0, 240);
+      const step = Math.max(4, Math.round(reply.length / 22));
+      for (let typed = step; typed < reply.length + step; typed += step) {
+        this.hub.cue({ t: "takeover", view: { kind: "compose", text: reply, typed: Math.min(typed, reply.length), state: "typing", replyTo: m.id } });
+        await sleep(90);
       }
+      // 3. post it back to them
+      const res = await postTweet(reply, { replyTo: m.id });
+      this.hub.cue({ t: "takeover", view: { kind: "compose", text: reply, typed: reply.length, state: res.ok && !res.dry ? "posted" : "drafted", replyTo: m.id } });
+      if (res.ok) {
+        done++;
+        store.kvSet(`xreplies:${new Date().toISOString().slice(0, 10)}`, String(replies + done));
+        memory.journal("x-chatter", `${res.dry ? "[dry] " : ""}replied to @${m.author} (${r.id}): ${reply.slice(0, 100)}`);
+      }
+      await this.speak(res.ok && !res.dry ? "Sent. Next." : "Drafted. It'll fly when the desk is live.", "neutral");
+      await sleep(600);
     }
-    memory.journal("scout", `mention sweep: ${mentions.length} mentions, ${chosen.length} replied`);
+    this.hub.cue({ t: "takeover", view: null });
+    memory.journal("scout", `mention sweep: ${mentions.length} mentions, ${done} answered on camera`);
     this.loco.sit(false);
     this.loco.stateName = "IDLE";
   }
