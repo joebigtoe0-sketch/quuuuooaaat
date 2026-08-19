@@ -93,6 +93,9 @@ export const cfg = {
   autoCallPct: num("AUTO_CALL_PCT", 20),
   senderCooldownMin: num("SENDER_COOLDOWN_MIN", 10),
   conveyorPickMin: num("CONVEYOR_PICK_MIN", 5),
+  // conveyor discovery only researches coins with at least this current mc —
+  // skips dead/dumped launches instead of wasting the ceremony on a corpse.
+  minResearchMcUsd: num("MIN_RESEARCH_MC_USD", 4000),
   commentaryMin: num("COMMENTARY_MIN", 9),
   inboxPollS: num("INBOX_POLL_S", 15),
 

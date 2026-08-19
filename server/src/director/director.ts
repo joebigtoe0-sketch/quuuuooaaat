@@ -156,21 +156,39 @@ export class Director {
       if (this.recentlyResearched.size > 300) this.recentlyResearched = new Set([...this.recentlyResearched].slice(-150));
       return mint;
     };
+    const shuffle = (a: string[]) =>
+      a.map((v) => [Math.random(), v] as const).sort((x, y) => x[0] - y[0]).map(([, v]) => v);
     try {
       const { scoutAll } = await import("../social/scout.js");
       const hits = await Promise.race([
         scoutAll(),
         new Promise<[]>((r) => setTimeout(() => r([]), 10_000)),
       ]);
-      const fresh = (hits ?? []).filter((h) => eligible(h.mint));
-      if (fresh.length) return take(fresh[Math.floor(Math.random() * Math.min(fresh.length, 5))].mint);
-      // FALLBACK: the fresh launch pool — pick something aged 3-20 min so the
-      // chain actually has data on it (a seconds-old coin is unreadable).
       const now = Date.now();
-      const aged = this.launchPool.filter(
-        (l) => now - l.at > 3 * 60_000 && now - l.at < 20 * 60_000 && eligible(l.mint),
-      );
-      if (aged.length) return take(aged[Math.floor(Math.random() * Math.min(aged.length, 8))].mint);
+      // trending first (they have momentum), then the launch pool aged 3-20 min
+      // (readable history, not seconds-old and unreadable)
+      const candidates = [
+        ...shuffle((hits ?? []).map((h) => h.mint).filter(eligible)),
+        ...shuffle(this.launchPool
+          .filter((l) => now - l.at > 3 * 60_000 && now - l.at < 20 * 60_000 && eligible(l.mint))
+          .map((l) => l.mint)),
+      ];
+      if (!candidates.length) return null;
+      // LIVENESS GATE: only research a coin that isn't dead — current mc above
+      // the floor. Bounded RPC so we never hammer the chain.
+      const { PublicKey } = await import("@solana/web3.js");
+      const { getTokenState } = await import("../chain/pump.js");
+      const { getSolUsd } = await import("../chain/solana.js");
+      const solUsd = await getSolUsd().catch(() => 150);
+      let checked = 0;
+      for (const mint of candidates) {
+        if (checked++ >= 8) break;
+        try {
+          const st = await getTokenState(new PublicKey(mint));
+          const mcUsd = st.kind === "curve" || st.kind === "amm" ? st.mcSol * solUsd : 0;
+          if (mcUsd >= cfg.minResearchMcUsd) return take(mint);
+        } catch {}
+      }
       return null;
     } catch {
       return null;
