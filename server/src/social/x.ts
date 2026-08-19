@@ -53,6 +53,8 @@ function v2Texts(j: any): { author: string; text: string; id: string }[] {
     text: String(t.text ?? "").replace(/https?:\/\/\S+/g, "").trim(),
   }));
 }
+let lastPostError: { at: number; kind: string; status: number; detail: string } | null = null;
+export const lastXError = () => lastPostError;
 const MAX_POST_LEN = Number(process.env.X_MAX_POST_LEN ?? 272);
 const MAX_POSTS_PER_DAY = Number(process.env.X_MAX_POSTS_PER_DAY ?? 80); // hard rail incl. replies; originals capped at cfg.maxTweetsPerDay in beats
 
@@ -150,9 +152,11 @@ export async function postTweet(
       body: JSON.stringify(body),
     });
     if (!res.ok) {
-      const t = (await res.text()).slice(0, 160);
-      log.warn("x", `post http ${res.status}: ${t}`);
-      return { ok: false, dry: false, why: `http ${res.status}` };
+      const t = (await res.text()).slice(0, 300);
+      log.warn("x", `post http ${res.status}${opts.replyTo ? ` (reply to ${opts.replyTo})` : ""}: ${t}`);
+      lastPostError = { at: Date.now(), kind: opts.replyTo ? "reply" : opts.mediaId ? "media" : "original", status: res.status, detail: t };
+      // the X error body is the only thing that explains a silent failure
+      return { ok: false, dry: false, why: `http ${res.status}: ${t.slice(0, 180)}` };
     }
     const data = (await res.json()) as { data?: { id?: string } };
     store.kvSet(dayKey(), String(xPostsToday() + 1));
@@ -160,6 +164,7 @@ export async function postTweet(
     pushFeed("tweet-live", `${trimForX(text)}${opts.mediaId ? " [+video]" : ""} → https://x.com/${HANDLE}/status/${data.data?.id}`);
     return { ok: true, id: data.data?.id, dry: false };
   } catch (e) {
+    lastPostError = { at: Date.now(), kind: opts.replyTo ? "reply" : "original", status: 0, detail: String(e).slice(0, 200) };
     return { ok: false, dry: false, why: String(e).slice(0, 100) };
   }
 }

@@ -16,6 +16,7 @@ import { OpenAITTS } from "./voice/openaiTts.js";
 import { GoogleTTS } from "./voice/gtts.js";
 import { SilentTTS, type TTSProvider } from "./voice/tts.js";
 import { hasApiKey, spendToday, lastBrainError, budgetExhausted, dailyBudgetUsd } from "./brain/adapter.js";
+import { lastXError } from "./social/x.js";
 import { store } from "./store.js";
 import { ADMIN_HTML } from "./adminPage.js";
 import { armDevSniper, onSnipeLaunch } from "./agent/devsniper.js";
@@ -410,6 +411,7 @@ app.get("/health", async (_req, res) => {
     state: director.loco.stateName,
     brain: { hasKey: hasApiKey(), spendTodayUsd: Number(spendToday().toFixed(3)), dailyBudgetUsd: dailyBudgetUsd(), exhausted: budgetExhausted(), lastError: lastBrainError() },
     tts: { provider: cfg.ttsProvider, audioFilesGenerated: audioFiles },
+    x: { postsToday: (await import("./social/x.js")).xPostsToday(), lastError: lastXError() },
     calloutDryRun: cfg.calloutDryRun,
     calloutsToday: store.calloutsToday(),
     ownMint: cfg.ownMint || null,
