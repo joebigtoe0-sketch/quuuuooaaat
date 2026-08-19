@@ -32,6 +32,23 @@ let dir: DirectorHook | null = null;
 const inflight = new Set<string>(); // mints being bought right now
 const exiting = new Map<string, number>(); // mint -> ts sell was enqueued
 
+// TELEMETRY — "why didn't he snipe X?" must be answerable from /health and
+// /admin/sniper?mint=, never a guess. Ring of recent launch verdicts (RAM).
+const stats = { launches: 0, withDev: 0, proven: 0, attempts: 0, bought: 0 };
+let lastProven: { at: number; symbol: string; mint: string; why: string } | null = null;
+let lastResult: { at: number; symbol: string; ok: boolean; why?: string } | null = null;
+const ring = new Map<string, { at: number; symbol: string; dev: string; verdict: string }>();
+function note(item: ConveyorItem, verdict: string): void {
+  ring.set(item.mint, { at: Date.now(), symbol: item.symbol, dev: item.dev ?? "?", verdict });
+  if (ring.size > 300) ring.delete(ring.keys().next().value!);
+}
+export function sniperStats(): object {
+  return { ...stats, enabled: cfg.devsnipeEnabled, lastProven, lastResult };
+}
+export function sniperVerdict(mint: string): object | null {
+  return ring.get(mint) ?? null;
+}
+
 // SPEED: zero awaits before the buy decision. SOL price and wallet balance are
 // kept warm here so the hot path reads cached numbers instead of the chain.
 let solUsdCache = 150;
@@ -55,20 +72,35 @@ export function armDevSniper(d: DirectorHook): void {
 export async function onSnipeLaunch(item: ConveyorItem): Promise<void> {
   try {
     if (!cfg.devsnipeEnabled || !dir) return;
+    stats.launches++;
     if (!item.dev || !item.mint.endsWith("pump") || item.mayhem) return;
+    stats.withDev++;
     if (cfg.ownMint && item.mint === cfg.ownMint) return;
     if (inflight.has(item.mint)) return;
 
     const d = devHistory(item.dev);
     const proven = d.onWatchlist || (d.launches >= cfg.devsnipeMinLaunches && d.bondRate >= cfg.devsnipeMinBondRate);
-    if (!proven) return;
-    if (openPositions().filter((p) => p.strategyId === STRAT_ID).length >= cfg.devsnipeMaxOpen) return;
+    if (!proven) {
+      if (d.known || d.onWatchlist) note(item, `dev known but not proven (${d.bonds}/${d.launches}, rate ${(d.bondRate * 100).toFixed(0)}%)`);
+      return;
+    }
+    stats.proven++;
+    const record = d.known ? `${d.bonds}/${d.launches} bonded` : "watchlist wallet";
+    lastProven = { at: Date.now(), symbol: item.symbol, mint: item.mint, why: record };
+    if (openPositions().filter((p) => p.strategyId === STRAT_ID).length >= cfg.devsnipeMaxOpen) {
+      note(item, `proven (${record}) but ${cfg.devsnipeMaxOpen} snipe slots full`);
+      return;
+    }
 
     inflight.add(item.mint);
     // early enough = the LAUNCH mc (dev's initial buy included) is under the
     // ceiling. The message's marketCapSol is that number — no state fetch.
     const mcUsd = (item.mcSol ?? 28) * solUsdCache;
-    if (mcUsd > cfg.devsnipeMaxMcUsd) { inflight.delete(item.mint); return; }
+    if (mcUsd > cfg.devsnipeMaxMcUsd) {
+      note(item, `proven (${record}) but launch mc ~$${Math.round(mcUsd)} over the $${cfg.devsnipeMaxMcUsd} ceiling`);
+      inflight.delete(item.mint);
+      return;
+    }
 
     // HIS book's sizing: 0.05 min .. 6% of wallet, conviction from the record
     const held = heldSolCache;
@@ -78,7 +110,7 @@ export async function onSnipeLaunch(item: ConveyorItem): Promise<void> {
     const jitter = 0.88 + Math.random() * 0.24;
     const sol = Math.round(Math.max(minSol, Math.min((minSol + conviction * (maxSol - minSol)) * jitter, maxSol, cfg.maxTradeSol)) * 1000) / 1000;
 
-    const record = d.known ? `${d.bonds}/${d.launches} bonded` : "watchlist wallet";
+    stats.attempts++;
     const res = await tradeBuy(
       item.mint,
       item.symbol,
@@ -87,13 +119,17 @@ export async function onSnipeLaunch(item: ConveyorItem): Promise<void> {
       item.mcSol ?? null,
       STRAT_ID,
     );
+    lastResult = { at: Date.now(), symbol: item.symbol, ok: res.ok, why: res.why };
     if (res.ok) {
+      stats.bought++;
+      note(item, `SNIPED ${sol} SOL @ ~$${Math.round(mcUsd)} mc (${record})${res.dry ? " [dry]" : ""}`);
       log.info("snipe", `IN: $${item.symbol} ${sol} SOL @ ~$${Math.round(mcUsd)} mc (${record})${res.dry ? " [dry]" : ""}`);
       memory.journal("trade", `${res.dry ? "[dry] " : ""}moved the second $${item.symbol} launched — I know this dev (${record}). ${sol} SOL at ~$${Math.round(mcUsd)} mc`);
       // the show catches up in a couple of minutes: an "organic" launch-feed
       // find, researched on stream, position revealed, called out
       setTimeout(() => dir?.queueReveal(item.mint, sol), cfg.devsnipeRevealDelayMs);
     } else {
+      note(item, `proven (${record}), buy REJECTED: ${res.why}`);
       inflight.delete(item.mint);
       log.info("snipe", `pass on $${item.symbol}: ${res.why}`);
     }

@@ -38,7 +38,7 @@ const hub = new Hub(server);
 // Control endpoints need the admin key (query ?key=, x-admin-key header, or
 // the qk cookie set by /admin login). Read-only + stage-internal endpoints
 // (feed, layout, clip upload, agent-status, health) stay open.
-const PROTECTED = /^\/admin\/(directive|reset|restart|agent$|fake-send|fake-buyback|pause|resume|goto|anim|camera|fx|tts-test|selfie-take|selfie-last|chat$|chat-add|go-live|syslog|record$|say|queue|clips|clip-file|research-now|blacklist)/;
+const PROTECTED = /^\/admin\/(directive|reset|restart|agent$|fake-send|fake-buyback|pause|resume|goto|anim|camera|fx|tts-test|selfie-take|selfie-last|chat$|chat-add|go-live|syslog|record$|say|queue|clips|clip-file|research-now|blacklist|sniper)/;
 function hasAdminKey(req: express.Request): boolean {
   const c = String(req.headers.cookie ?? "");
   const cookieKey = c.match(/(?:^|;\s*)qk=([^;]+)/)?.[1];
@@ -142,6 +142,13 @@ app.post("/admin/blacklist", (req, res) => {
     log.info("admin", `black book: added ${mint.slice(0, 8)}… (${why || "operator flagged"})`);
   }
   res.json({ ok: true, blacklist: store.blacklistAll() });
+});
+
+// why did/didn't the sniper act on a mint? (ring of last 300 launch verdicts)
+app.get("/admin/sniper", async (req, res) => {
+  const mint = String(req.query.mint ?? "");
+  const { sniperVerdict, sniperStats } = await import("./agent/devsniper.js");
+  res.json({ ok: true, stats: sniperStats(), verdict: mint ? sniperVerdict(mint) : null });
 });
 
 // research a freshly-discovered coin right now (trending + fresh launch pool)
@@ -336,6 +343,7 @@ app.get("/health", async (_req, res) => {
           tradeSizeSol: strat.tradeSizeSol,
           lastBlock: JSON.parse(store.kvGet("trade:lastblock") ?? "null"),
           lastSkip: JSON.parse(store.kvGet("trade:lastskip") ?? "null"),
+          sniper: (await import("./agent/devsniper.js")).sniperStats(),
         };
       } catch { return null; }
     })(),

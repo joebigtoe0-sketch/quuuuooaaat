@@ -108,8 +108,10 @@ export const cfg = {
   // (0.05 min .. 6% of wallet). The stream sees an organic launch-feed find.
   devsnipeEnabled: bool("DEVSNIPE_ENABLED", true),
   devsnipeMaxMcUsd: num("DEVSNIPE_MAX_MC_USD", 7000),
-  devsnipeMinBondRate: num("DEVSNIPE_MIN_BOND_RATE", 0.5),
-  devsnipeMinLaunches: num("DEVSNIPE_MIN_LAUNCHES", 3),
+  // archive criteria calibrated to the SAME bar as the curated watchlist —
+  // its members run ~0.23 bond-rate; 0.5 was fantasy and matched nobody
+  devsnipeMinBondRate: num("DEVSNIPE_MIN_BOND_RATE", 0.2),
+  devsnipeMinLaunches: num("DEVSNIPE_MIN_LAUNCHES", 5),
   devsnipeMaxOpen: num("DEVSNIPE_MAX_OPEN", 3),
   devsnipeExitProgress: num("DEVSNIPE_EXIT_PROGRESS", 0.95),
   devsnipeMaxHoldH: num("DEVSNIPE_MAX_HOLD_H", 6),
