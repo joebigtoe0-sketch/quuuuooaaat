@@ -873,7 +873,8 @@ export class Beats {
     const text = await Promise.race([
       callFreeform(
         (await import("../brain/prompts.js")).PERSONA +
-          "\nWrite ONE tweet (max 260 chars) in your voice. No hashtags unless organic, no emoji spam (max 1). Plain text only." +
+          "\nWrite ONE tweet (max 260 chars) in your voice. No hashtags, no emoji spam (max 1). Plain text only." +
+          "\nTOKEN vs TRADING — be unambiguous. Your positions, slots, sizing, entries, buys, and cuts are your TRADING BOOK. Your own coin's price, market cap, buybacks, and holders are $RIKU, the token. If this tweet is about the token, write the $RIKU cashtag so readers know you mean the coin — NOT your portfolio. A token post must never read like a trading post (e.g. 'down 66%, six slots empty, sized for zero' reads as your book — if you meant the coin, say '$RIKU down 66%'). The $RIKU cashtag is the one exception to the no-hashtags rule." +
           "\nCRITICAL VARIETY RULES: below are your RECENT tweets. Your new tweet must not reuse their openings, sentence structures, phrases, or angle." +
           "\nHARD BANS: (1) do not reuse ANY statistic, number, or metaphor that appears in a recent tweet — if 98.6% or the bar is already there, find different material. " +
           "(2) never invent people, replies, questions, or interactions — only reference engagement that actually happened. " +
