@@ -56,8 +56,15 @@ export function startInbox(
         log.info("inbox", `watching ${owner.toBase58()} — ${known.size} existing holdings ignored`);
         return;
       }
+      // tokens HE bought (open positions) or his own token (buybacks) appear in
+      // the wallet too — those are NOT gifts. Skip them or he "receives" his own
+      // trades and re-researches them as sent to the desk.
+      const { openPositions } = await import("./trader.js");
+      const ownedMints = new Set(openPositions().map((p) => p.mint));
       for (const [mint, amountRaw] of now) {
         if (DENYLIST.has(mint)) continue;
+        if (cfg.ownMint && mint === cfg.ownMint) continue;
+        if (ownedMints.has(mint)) continue;
         if (!known.has(mint)) {
           log.info("inbox", `coin received: ${mint}`);
           const sender = await findSender(owner, mint).catch(() => null);
