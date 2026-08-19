@@ -38,7 +38,7 @@ function bodyFor(model: string, maxTokens: number, temperature: number) {
   return { model, max_tokens: maxTokens, temperature };
 }
 
-const DAILY_USD = Number(process.env.LLM_DAILY_USD ?? 10);
+const DAILY_USD = Number(process.env.LLM_DAILY_USD ?? 20);
 const PRICE_IN = Number(process.env.LLM_PRICE_IN ?? 1.25);
 const PRICE_OUT = Number(process.env.LLM_PRICE_OUT ?? 10);
 
@@ -57,6 +57,7 @@ export function lastBrainError(): { note: string; agoSec: number } | null {
 const spendKey = () => `spend:${new Date().toISOString().slice(0, 10)}`;
 export const spendToday = () => Number(store.kvGet(spendKey()) ?? 0);
 export const budgetExhausted = () => spendToday() >= DAILY_USD;
+export const dailyBudgetUsd = () => DAILY_USD;
 
 // When the primary model is overloaded (529/503/429), retry once on a fallback
 // so the show keeps a real brain while opus capacity is saturated.

@@ -140,7 +140,7 @@ export class Beats {
   /** LLM with watchdog + mock fallback. */
   private async verdictLines(a: Analysis): Promise<{ speech: string; callout_text: string; headline: string }> {
     const p = verdictPrompt(a);
-    const j = await Promise.race([callJson(p.system, p.user, 500, FRAGMENT_MODEL), realSleep(20000).then(() => null)]);
+    const j = await Promise.race([callJson(p.system, p.user, 500), realSleep(20000).then(() => null)]);
     if (j && typeof j.speech === "string" && j.speech.length > 10) {
       return {
         speech: String(j.speech).slice(0, 600),
@@ -1174,7 +1174,6 @@ export class Beats {
         (await import("../brain/prompts.js")).PERSONA + "\nWrite the tweet caption (max 200 chars) for this video. Plain text.",
         `The video script was: ${script}`,
         120,
-        FRAGMENT_MODEL,
       ),
       realSleep(10000).then(() => null),
     ]);

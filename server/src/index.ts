@@ -15,7 +15,7 @@ import { EdgeTTS } from "./voice/edgeTts.js";
 import { OpenAITTS } from "./voice/openaiTts.js";
 import { GoogleTTS } from "./voice/gtts.js";
 import { SilentTTS, type TTSProvider } from "./voice/tts.js";
-import { hasApiKey, spendToday, lastBrainError } from "./brain/adapter.js";
+import { hasApiKey, spendToday, lastBrainError, budgetExhausted, dailyBudgetUsd } from "./brain/adapter.js";
 import { store } from "./store.js";
 import { ADMIN_HTML } from "./adminPage.js";
 import { armDevSniper, onSnipeLaunch } from "./agent/devsniper.js";
@@ -357,7 +357,7 @@ app.get("/health", async (_req, res) => {
     wallet: wallet.publicKey.toBase58(),
     watchers: hub.watchers,
     state: director.loco.stateName,
-    brain: { hasKey: hasApiKey(), spendTodayUsd: Number(spendToday().toFixed(3)), lastError: lastBrainError() },
+    brain: { hasKey: hasApiKey(), spendTodayUsd: Number(spendToday().toFixed(3)), dailyBudgetUsd: dailyBudgetUsd(), exhausted: budgetExhausted(), lastError: lastBrainError() },
     tts: { provider: cfg.ttsProvider, audioFilesGenerated: audioFiles },
     calloutDryRun: cfg.calloutDryRun,
     calloutsToday: store.calloutsToday(),
