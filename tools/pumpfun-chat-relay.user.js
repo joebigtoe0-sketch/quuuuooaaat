@@ -1,25 +1,30 @@
 // ==UserScript==
 // @name         RIKU pump.fun chat relay
 // @namespace    quantriku
-// @version      2.0
+// @version      3.0
 // @description  Watches the pump.fun livestream chat on RIKU's coin page and relays NEW messages to RIKU's server so he reacts to them on camera.
 // @match        https://pump.fun/*
 // @run-at       document-idle
-// @grant        none
+// @grant        GM_xmlhttpRequest
+// @grant        GM.xmlHttpRequest
+// @connect      quantriku.fun
 // ==/UserScript==
 
 /*
- * HOW TO USE
- *  - Easiest: paste this whole file into the browser Console on RIKU's coin page.
- *  - Or install Tampermonkey and add it as a userscript (it auto-runs on pump.fun).
+ * MUST be installed as a TAMPERMONKEY userscript — NOT pasted in the console.
+ * pump.fun's Content Security Policy blocks page-context fetches to other
+ * domains, so a console paste can't reach RIKU. Tampermonkey's GM_xmlhttpRequest
+ * bypasses that (it runs in the extension, outside the page CSP).
  *
- * On start it marks every message already on screen as seen and IGNORES them.
- * Only messages that arrive AFTER it starts get sent to RIKU.
+ * SETUP:
+ *  1. Install the Tampermonkey extension.
+ *  2. Tampermonkey → Create a new script → paste this whole file → save.
+ *  3. Set KEY below to your /admin password.
+ *  4. Open RIKU's pump.fun coin page. It auto-runs (see the console log).
  *
- * Tuned to pump.fun's real chat markup:
- *   row      = div.flex.items-start
- *   username = a[href^="/profile/"]        (href holds the FULL handle)
- *   text     = span.text-text-primary      (minus the invisible padding span)
+ * It ignores whatever chat is already on screen and relays only NEW messages.
+ * Tuned to pump.fun markup: row=div.flex.items-start, user=a[href^="/profile/"],
+ * text=span.text-text-primary (minus the invisible padding span).
  */
 (() => {
   const CONFIG = {
@@ -31,17 +36,23 @@
   if (window.__rikuChatRelay) { console.log("[riku] relay already running — reload the page to restart"); return; }
   window.__rikuChatRelay = true;
 
+  // CSP-proof sender: Tampermonkey's GM_xmlhttpRequest (v4 = GM.xmlHttpRequest)
+  const gmSend =
+    (typeof GM_xmlhttpRequest !== "undefined" && GM_xmlhttpRequest) ||
+    (typeof GM !== "undefined" && GM.xmlHttpRequest) ||
+    null;
+  if (!gmSend) {
+    console.warn("[riku] NOT running under Tampermonkey — pump.fun's CSP will block the relay. Install this as a Tampermonkey userscript (see the header comment).");
+  }
+
   const seenRows = new WeakSet();
 
-  // pull {author, text} out of one message row (div.flex.items-start)
   function extract(row) {
     const link = row.querySelector('a[href^="/profile/"]');
     const textEl = row.querySelector(".text-text-primary");
     if (!link || !textEl) return null;
-    // href = /profile/<fullhandle> — better than the truncated display text
     const href = link.getAttribute("href") || "";
     let author = href.split("/").filter(Boolean).pop() || link.textContent.trim() || "viewer";
-    // message text, skipping the invisible aria-hidden padding span
     let text = "";
     textEl.childNodes.forEach((n) => {
       if (n.nodeType === 1 && n.getAttribute && n.getAttribute("aria-hidden") === "true") return;
@@ -53,10 +64,15 @@
   }
 
   function relay(m) {
-    const u = `${CONFIG.SERVER}/admin/chat-add?user=${encodeURIComponent(m.author)}&text=${encodeURIComponent(m.text)}&key=${encodeURIComponent(CONFIG.KEY)}`;
-    fetch(u).then((r) => r.json()).then((j) => {
-      console.log(`[riku] relayed  ${m.author}: ${m.text}` + (j && j.unread != null ? `  (unread ${j.unread})` : ""));
-    }).catch((e) => console.warn("[riku] relay failed (check KEY/SERVER):", e.message));
+    const url = `${CONFIG.SERVER}/admin/chat-add?user=${encodeURIComponent(m.author)}&text=${encodeURIComponent(m.text)}&key=${encodeURIComponent(CONFIG.KEY)}`;
+    const ok = () => console.log(`[riku] relayed  ${m.author}: ${m.text}`);
+    const fail = (e) => console.warn("[riku] relay failed:", e && e.error ? e.error : e);
+    if (gmSend) {
+      gmSend({ method: "GET", url, onload: ok, onerror: fail, ontimeout: fail });
+    } else {
+      // last resort (will be CSP-blocked on pump.fun) — proves capture works
+      fetch(url).then(ok).catch(() => console.warn("[riku] fetch blocked by pump.fun CSP — install as a Tampermonkey userscript"));
+    }
   }
 
   function handleRow(row) {
@@ -66,7 +82,6 @@
     if (m) relay(m);
   }
 
-  // find message rows inside any newly-added DOM node and process them
   function scan(node) {
     if (node.nodeType !== 1) return;
     if (node.matches && node.matches("div.flex.items-start") && node.querySelector('a[href^="/profile/"]')) handleRow(node);
@@ -78,12 +93,10 @@
     }
   }
 
-  // find the chat scroll area; fall back to body if the class ever changes
   function findChat() {
     return (
       document.querySelector("div.flex.flex-grow.flex-col.gap-0") ||
-      // fallback: the element that actually holds message rows
-      (document.querySelector('a[href^="/profile/"]')?.closest("div.flex.items-start")?.parentElement) ||
+      document.querySelector('a[href^="/profile/"]')?.closest("div.flex.items-start")?.parentElement ||
       document.body
     );
   }
@@ -91,15 +104,14 @@
   let tries = 0;
   const timer = setInterval(() => {
     const container = findChat();
-    const rows = container.querySelectorAll('div.flex.items-start');
+    const rows = container.querySelectorAll("div.flex.items-start");
     if (rows.length || ++tries > 40) {
       clearInterval(timer);
-      // ignore everything already on screen
       container.querySelectorAll(".text-text-primary").forEach((t) => {
         const row = t.closest("div.flex.items-start");
         if (row) seenRows.add(row);
       });
-      console.log(`[riku] watching pump.fun chat — ${rows.length} existing messages ignored. New ones go to RIKU.`);
+      console.log(`[riku] watching pump.fun chat — ${rows.length} existing messages ignored. New ones go to RIKU.` + (gmSend ? "" : "  (⚠ no Tampermonkey — relay will be CSP-blocked)"));
       const obs = new MutationObserver((muts) => {
         for (const mu of muts) for (const n of mu.addedNodes) scan(n);
       });
