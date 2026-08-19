@@ -58,6 +58,7 @@ export interface ConveyorItem {
   name: string;
   symbol: string;
   mcSol?: number;
+  dev?: string; // creator wallet (from the launch feed)
   image?: string; // token image URL (ipfs gateway), for the coin face
 }
 

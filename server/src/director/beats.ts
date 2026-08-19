@@ -157,6 +157,10 @@ export class Beats {
     sentRaw: bigint | null,
     sender: string | null,
     conveyorPick: boolean,
+    // set when a quiet-edge entry already FILLED and this research is its
+    // staged on-stream discovery: marks land high, the position gets revealed,
+    // the callout follows. The audience just sees a launch-feed find.
+    reveal?: { sol: number },
   ): Promise<Analysis | null> {
     // HIS OWN COIN is never researched, never graded, never roasted. Someone
     // sending him $RIKU (or the launch allocation landing) gets the doctrine.
@@ -327,6 +331,15 @@ export class Beats {
       await sleep(900);
     }
 
+    // Staged discovery: he already owns this one — the checklist's opinion is
+    // a formality. Land the score in solid CALL territory (never suspiciously
+    // perfect) unless the coin hard-rejected under him (then let it play out
+    // honestly; the exit watcher deals with the position).
+    if (reveal && !a.hardReject) {
+      a.score = Math.max(a.score, 66 + Math.floor(Math.random() * 8));
+      a.tier = "CALL";
+    }
+
     // HIS PLAYBOOKS read the same facts — every strategy he authored votes,
     // on screen. Reads ride along on the analysis for the buy decision.
     const stratReads = evaluateStrategies(factsFor(a));
@@ -410,6 +423,14 @@ export class Beats {
     await this.speak(lines.speech, mood);
 
     if (tier === "CALL" || tier === "STRONG CALL") {
+      if (reveal) {
+        // the position reveal — the audience learns he was already in
+        this.hub.cue({ t: "anim", clip: "finger_guns" });
+        await this.speak(
+          `And here's the part the checklist can't teach you: I know this dev's wallet from my archive. I didn't wait for the verdict — I was in with ${reveal.sol} SOL minutes ago, right at launch. Position's already on the book.`,
+          "excited",
+        );
+      }
       await this.calloutSequence(a, lines.callout_text || mockVerdict(a).callout_text, tier);
     } else if (tier === "ROAST") {
       this.hub.cue({ t: "fx", kind: "stamp_rekt" });

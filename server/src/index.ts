@@ -18,6 +18,7 @@ import { SilentTTS, type TTSProvider } from "./voice/tts.js";
 import { hasApiKey, spendToday, lastBrainError } from "./brain/adapter.js";
 import { store } from "./store.js";
 import { ADMIN_HTML } from "./adminPage.js";
+import { armDevSniper, onSnipeLaunch } from "./agent/devsniper.js";
 import { wardrobe } from "./wardrobe.js";
 import { startStatsCache, cachedWallet, cachedStats } from "./statsCache.js";
 import { pushChat, allChat, unreadChat, startMockChat } from "./social/livechat.js";
@@ -215,7 +216,11 @@ const director = new Director(hub, tts);
 // live inputs
 startInbox(wallet.publicKey, (ev) => director.onInboxCoin(ev));
 startBuybackWatch((p) => director.onBuybackPending(p));
-startLaunchFeed((item) => director.onLaunch(item));
+startLaunchFeed((item) => {
+  director.onLaunch(item);
+  void onSnipeLaunch(item); // the quiet edge rides the same feed
+});
+armDevSniper(director);
 // the agent brain (plans its own tweets/films/trades/scouts)
 if (cfg.agentEnabled) director.planner.start();
 startStatsCache();

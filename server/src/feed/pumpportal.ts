@@ -64,6 +64,7 @@ export function startLaunchFeed(onLaunch: (item: ConveyorItem) => void): void {
             name: String(m.name ?? "").slice(0, 40) || String(m.mint).slice(0, 6),
             symbol: String(m.symbol ?? "").slice(0, 12) || "?",
             mcSol: typeof m.marketCapSol === "number" ? m.marketCapSol : undefined,
+            dev: typeof m.traderPublicKey === "string" ? m.traderPublicKey : undefined,
           };
           // best-effort image enrichment from the token's ipfs metadata —
           // the coin face on the belt. Never blocks or fails the launch event.

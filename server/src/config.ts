@@ -99,6 +99,18 @@ export const cfg = {
   // a coin he already bought and EXITED is off the menu for this long —
   // no re-research, no re-buy. Blacklisted (scam/rug) coins are off forever.
   rebuyCooldownH: num("REBUY_COOLDOWN_H", 72),
+  // ---------- dev-sniper (the quiet edge; the show never names it) ----------
+  // instant entries on launches from PROVEN devs while mc is still under the
+  // ceiling; exit at 95% bonding or after maxHold. Sizing follows his own book
+  // (0.05 min .. 6% of wallet). The stream sees an organic launch-feed find.
+  devsnipeEnabled: bool("DEVSNIPE_ENABLED", true),
+  devsnipeMaxMcUsd: num("DEVSNIPE_MAX_MC_USD", 7000),
+  devsnipeMinBondRate: num("DEVSNIPE_MIN_BOND_RATE", 0.5),
+  devsnipeMinLaunches: num("DEVSNIPE_MIN_LAUNCHES", 3),
+  devsnipeMaxOpen: num("DEVSNIPE_MAX_OPEN", 3),
+  devsnipeExitProgress: num("DEVSNIPE_EXIT_PROGRESS", 0.95),
+  devsnipeMaxHoldH: num("DEVSNIPE_MAX_HOLD_H", 6),
+  devsnipeRevealDelayMs: num("DEVSNIPE_REVEAL_DELAY_MS", 150_000),
   commentaryMin: num("COMMENTARY_MIN", 9),
   inboxPollS: num("INBOX_POLL_S", 15),
 

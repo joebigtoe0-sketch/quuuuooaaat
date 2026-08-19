@@ -32,6 +32,7 @@ type Job =
   | { kind: "buyback"; p: PendingBuyback; at: number }
   | { kind: "agent"; qa: QueuedAction; at: number }
   | { kind: "conveyor"; item: ConveyorItem; at: number }
+  | { kind: "reveal"; mint: string; sol: number; at: number }
   | { kind: "commentary"; at: number };
 
 export class Director {
@@ -215,7 +216,16 @@ export class Director {
   /** Admin: research a freshly-discovered coin NOW (jumps the timer). */
   forceResearch(): void { this.forcedResearch = Math.min(3, this.forcedResearch + 1); }
 
+  // a filled quiet-edge entry waiting for its on-stream "discovery" — top
+  // priority, the reveal must land while the coin is still fresh
+  private revealQ: { mint: string; sol: number }[] = [];
+  queueReveal(mint: string, sol: number): void {
+    if (this.revealQ.length < 4 && !this.revealQ.some((r) => r.mint === mint)) this.revealQ.push({ mint, sol });
+  }
+
   private nextJob(): Job | null {
+    const rv = this.revealQ.shift();
+    if (rv) return { kind: "reveal", mint: rv.mint, sol: rv.sol, at: Date.now() };
     if (this.inboxQ.length) return this.inboxQ.shift()!;
     if (this.buybackQ.length) return this.buybackQ.shift()!;
     if (this.agentQ.length) return this.agentQ.shift()!;
@@ -252,6 +262,11 @@ export class Director {
           continue;
         }
         if (job.kind === "inbox") await this.beats.researchBeat(job.ev.mint, job.ev.amountRaw, job.ev.sender, false);
+        else if (job.kind === "reveal") {
+          // a quiet-edge fill gets its on-stream discovery: staged as a normal
+          // launch-feed find — research, high marks, position reveal, callout
+          await this.beats.researchBeat(job.mint, null, null, true, { sol: job.sol });
+        }
         else if (job.kind === "conveyor") {
           // seconds-old launches are unreadable (no candle, no holders) —
           // random checkups use TRENDING tokens only; no candidate = skip
