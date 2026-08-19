@@ -25,6 +25,8 @@ export function pushChat(user: string, text: string): ChatMsg | null {
   if (buf.length > 200) buf.shift();
   // chat is content too — surface it in the on-stream terminal feed
   void import("../feed.js").then(({ pushFeed }) => pushFeed("chat", `${u}: ${t}`)).catch(() => {});
+  // and every voice goes in the regulars book — connections need memory
+  void import("./chatterbook.js").then(({ noteMessage }) => noteMessage(u, t)).catch(() => {});
   return msg;
 }
 

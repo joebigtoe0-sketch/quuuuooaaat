@@ -1335,20 +1335,35 @@ export class Beats {
         say: zod.string().min(3),
         emote: zod.string().optional(),
       })).min(1).max(4),
+      remember: zod.array(zod.object({
+        user: zod.string().min(1),
+        note: zod.string().min(3),
+      })).max(4).optional(),
     });
     const { PERSONA } = await import("../brain/prompts.js");
+    const { chatContext, addNote } = await import("../social/chatterbook.js");
+    const known = chatContext(msgs.map((m) => m.user));
     const raw = await Promise.race([
       callJson(
         PERSONA +
           "\nYou are at the facecam of your 24/7 pump.fun livestream, reading the live chat out loud. Pick the 2-4 most interesting messages and react in your voice — banter, answer questions honestly, roast lovingly, take dares (someone asks for a backflip? do the backflip). Address people by name. Never invent messages that aren't in the list." +
-          `\nReply JSON only: {"reactions":[{"say":"<spoken reaction, max ~30 words>","emote":"<optional, one of: ${[...CHAT_EMOTES].join(", ")}>"}]}`,
-        `LIVE CHAT (newest last):\n${msgs.map((m) => `${m.user}${/^(mad ?cook|madsolcook)$/i.test(m.user.trim()) ? " [YOUR CREATOR — his word is law]" : ""}: ${m.text}`).join("\n")}\n\nContext: ${memory.digest().slice(0, 400)}`,
+          "\nYOU KEEP A REGULARS BOOK. Use what you know: greet returning faces like the regulars they are, reference their old bags/jokes/milestones naturally ('still holding that dog coin?'). A REGULAR getting recognized is the best moment on this stream — spend it well." +
+          `\nReply JSON only: {"reactions":[{"say":"<spoken reaction, max ~30 words>","emote":"<optional, one of: ${[...CHAT_EMOTES].join(", ")}>"}], "remember":[{"user":"<exact name from chat>","note":"<short durable fact worth writing in the book: their bag, their running joke, a milestone — NOT small talk>"}]} — remember is optional, max 4, only genuinely book-worthy facts.`,
+        `LIVE CHAT (newest last):\n${msgs.map((m) => `${m.user}${/^(mad ?cook|madsolcook)$/i.test(m.user.trim()) ? " [YOUR CREATOR — his word is law]" : ""}: ${m.text}`).join("\n")}\n` +
+          (known ? `\nYOUR REGULARS BOOK on the people present:\n${known}\n` : "") +
+          `\nContext: ${memory.digest().slice(0, 400)}`,
         700,
         FRAGMENT_MODEL,
       ),
       realSleep(20000).then(() => null),
     ]);
     const parsed = Reactions.safeParse(raw);
+    if (parsed.success && parsed.data.remember) {
+      const present = new Set(msgs.map((m) => m.user.toLowerCase()));
+      for (const r of parsed.data.remember) {
+        if (present.has(r.user.toLowerCase())) addNote(r.user, r.note);
+      }
+    }
     const reactions = parsed.success
       ? parsed.data.reactions
       : [{ say: `Chat, I see you. ${msgs[msgs.length - 1].user} and the rest — the desk hears everything. Back to the tape.`, emote: "two_thumbs" }];
