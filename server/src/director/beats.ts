@@ -1484,14 +1484,19 @@ ${factsBlock(1400)}` : ""),
         this.hub.cue({ t: "takeover", view: { kind: "compose", text: reply, typed: Math.min(typed, reply.length), state: "typing", replyTo: post.id } });
         await sleep(95);
       }
-      // 3. fire it back at them
-      const b = tweetBudget();
-      const res = b.ok ? await postTweet(reply, { replyTo: post.id }) : { ok: false, dry: true } as any;
+      // 3. fire it back at them. REPLIES ARE EXEMPT from the originals budget
+      // (that budget's 25-min spacing rule is for his own timeline posts, and
+      // gating replies on it silently drafted nearly all of them). The hard
+      // X_MAX_POSTS_PER_DAY rail inside postTweet is the real backstop, and
+      // noteTweetPosted() is NOT called — a reply must not delay his next post.
+      const res = await postTweet(reply, { replyTo: post.id });
       this.hub.cue({ t: "takeover", view: { kind: "compose", text: reply, typed: reply.length, state: res.ok && !res.dry ? "posted" : "drafted", replyTo: post.id } });
       if (res.ok) {
         posted++;
-        if (!res.dry) noteTweetPosted();
         memory.journal("x-chatter", `${res.dry ? "[dry] " : ""}replied to @${post.author}: ${reply.slice(0, 90)}`);
+      } else {
+        log.warn("x", `KOL reply to @${post.author} failed: ${(res as any).why ?? "?"}`);
+        memory.journal("x-chatter", `reply to @${post.author} didn't send: ${(res as any).why ?? "?"}`);
       }
       await sleep(1500);
     }
