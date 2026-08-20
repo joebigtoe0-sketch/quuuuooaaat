@@ -377,7 +377,7 @@ startStatsCache();
 // keep the callout track record warm so the stats window never waits on it
 void import("./callout/performance.js").then(({ refreshPerformance }) => {
   void refreshPerformance();
-  setInterval(() => void refreshPerformance(true), 6 * 60_000).unref?.();
+  setInterval(() => void refreshPerformance(true), 2 * 60_000).unref?.();
 });
 if (cfg.simMode) startMockChat();
 // live pump.fun coin chat -> his facecam reactions (once the token exists)

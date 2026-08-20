@@ -1,4 +1,5 @@
 import type { Analysis } from "../analysis/engine.js";
+import { pickLens, trackRecordBrief } from "./lenses.js";
 
 /**
  * Quant's character bible + prompt builders. The verdict TIER is decided by
@@ -71,9 +72,18 @@ export function analysisPayload(a: Analysis): string {
 }
 
 export function verdictPrompt(a: Analysis, hold = false): { system: string; user: string } {
+  // The checks decide the TIER; the lens decides what he actually talks about.
+  // Without it every verdict was the same checklist recital in the same order.
+  const lens = pickLens();
+  const record = trackRecordBrief();
   return {
     system: PERSONA + "\n\n" + RESEARCH_DESK,
     user:
+      `ANGLE FOR THIS VERDICT — ${lens.id.toUpperCase()}: ${lens.brief}\n` +
+      "Argue that angle. Do NOT recite the checklist in order — the checks are on screen already and reading them aloud is the most boring thing you can do. Pick the ONE thing that decides this coin and make the case, in specifics. Assume the audience can read; give them what they can't see.\n" +
+      "DEPTH BEATS COVERAGE: one real insight, properly argued, beats six observations. No filler transitions, no summarising what you just said, no 'at the end of the day'.\n" +
+      (record ? `${record}\n` : "") +
+      "\n" +
       (hold
         ? "THIS ONE IS DIFFERENT — IT IS A LONG-TERM CONVICTION POSITION, NOT A TRADE.\n" +
           "You have been watching this coin well beyond the chain data below: you've read the timeline chatter about it, looked at who is actually behind it, watched how the community behaves, and judged whether the narrative has staying power. That off-chain work is WHY you're taking it — say so. The checklist is just the part you can put numbers on.\n" +
