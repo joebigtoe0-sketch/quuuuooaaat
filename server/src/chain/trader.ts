@@ -95,8 +95,11 @@ export async function tradeBuy(
   // be starved by stale research positions hogging the global cap
   const capExempt = strategyId === "devsnipe" || strategyId === "opcall";
   if (!capExempt && openPositions().length >= cfg.maxOpenPositions) return block("max positions");
-  if (sol > cfg.maxTradeSol) sol = cfg.maxTradeSol;
-  if (spentToday() + sol > cfg.maxDailyTradeSol)
+  // MAX_TRADE_SOL bounds what the AGENT may risk on its own. An operator call
+  // (opcall / long-term hold) is an explicit instruction and sizes itself.
+  const operatorSized = strategyId === "opcall" || strategyId === HOLD_STRATEGY;
+  if (!operatorSized && sol > cfg.maxTradeSol) sol = cfg.maxTradeSol;
+  if (!operatorSized && spentToday() + sol > cfg.maxDailyTradeSol)
     return block(`daily trade cap (${spentToday().toFixed(2)}/${cfg.maxDailyTradeSol} SOL spent)`);
   if (openPositions().some((p) => p.mint === mint)) return block("already holding");
   {

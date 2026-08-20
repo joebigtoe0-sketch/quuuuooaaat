@@ -193,7 +193,7 @@ async function opCall(){
   const hold=document.getElementById('ophold').checked;
   if(!m) return alert('mint?');
   const r=await q('/admin/operator-call?mint='+encodeURIComponent(m)+(s?'&sol='+encodeURIComponent(s):'')+(hold?'&hold=1':''),'POST');
-  alert(r.ok ? ('filled '+r.sol+' SOL'+(r.dry?' [dry]':'')+(hold?' as a LONG HOLD (he can never sell it)':'')+' — his discovery airs in a couple min') : ('failed: '+r.why));
+  alert(r.ok ? ((r.trimmed?'⚠ TRIMMED from '+r.asked+' — wallet too thin. ':'')+'filled '+r.sol+' SOL'+(r.dry?' [dry]':'')+(hold?' as a LONG HOLD (he can never sell it)':'')+' — his discovery airs in a couple min') : ('failed: '+r.why));
 }
 async function opSell(){
   const m=document.getElementById('selmint').value.trim(), f=document.getElementById('selfrac').value.trim()||'1';

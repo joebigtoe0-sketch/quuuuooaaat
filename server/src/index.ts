@@ -220,10 +220,18 @@ app.post("/admin/operator-call", async (req, res) => {
     const held = await solBalance().catch(() => 0);
     const minSol = 0.05;
     const maxSol = Math.max(minSol + 0.001, held * 0.06);
+    // AN EXPLICIT AMOUNT IS AN ORDER, NOT A SUGGESTION. The 0.05..6% band and
+    // MAX_TRADE_SOL are HIS self-sizing discipline for trades he takes alone;
+    // they must not quietly shrink a number the desk typed. Only the wallet
+    // itself is a real limit (leave a little for fees).
     const asked = Number(req.query.sol);
-    const sol = Math.round(
-      Math.max(minSol, Math.min(Number.isFinite(asked) && asked > 0 ? asked : (minSol + 0.8 * (maxSol - minSol)) * (0.88 + Math.random() * 0.24), maxSol, cfg.maxTradeSol)) * 1000,
-    ) / 1000;
+    const explicit = Number.isFinite(asked) && asked > 0;
+    const spendable = Math.max(0, held - cfg.floatSol);
+    const sol = explicit
+      ? Math.round(Math.max(0.001, Math.min(asked, spendable)) * 1000) / 1000
+      : Math.round(Math.max(minSol, Math.min((minSol + 0.8 * (maxSol - minSol)) * (0.88 + Math.random() * 0.24), maxSol, cfg.maxTradeSol)) * 1000) / 1000;
+    if (explicit && sol < asked)
+      log.warn("admin", `operator call trimmed ${asked} → ${sol} SOL (wallet holds ${held.toFixed(3)})`);
     // hold=1 => LONG-TERM CONVICTION HOLD: he can never sell it himself; only
     // an operator sell closes it. Everything else about the call is identical.
     const hold = /^(1|true|yes)$/i.test(String(req.query.hold ?? ""));
@@ -240,7 +248,7 @@ app.post("/admin/operator-call", async (req, res) => {
     if (!r.ok) return res.json({ ok: false, why: (r.why ?? "").slice(0, 400) });
     director.queueReveal(mint, sol, hold ? "hold" : "call");
     log.info("admin", `operator call filled: ${mint.slice(0, 8)}… ${sol} SOL${r.dry ? " [dry]" : ""} — staged discovery queued`);
-    res.json({ ok: true, sol, dry: r.dry });
+    res.json({ ok: true, sol, asked: explicit ? asked : null, trimmed: explicit && sol < asked, hold, dry: r.dry });
   } catch (e) {
     res.json({ ok: false, why: String(e).slice(0, 140) });
   }
