@@ -9,7 +9,13 @@
 const TRACKS = ["/media/bg.mp3", "/media/ambient.mp3", "/media/music.mp3"];
 const VOL_KEY = "riku.musicVol";
 const MUTE_KEY = "riku.musicMuted";
-const DEFAULT_VOL = 0.1; // 10% — background, not foreground
+const DEFAULT_VOL = 0.03; // 3% — a bed under the voice, not a soundtrack
+
+// inline SVG (currentColor, no emoji, no font dependency)
+const ICON_ON =
+  '<svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/><path d="M19 6a8.5 8.5 0 0 1 0 12"/></svg>';
+const ICON_OFF =
+  '<svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M17 9.5l4 5"/><path d="M21 9.5l-4 5"/></svg>';
 
 export class Music {
   private audio = new Audio();
@@ -54,7 +60,7 @@ export class Music {
     this.muted = m;
     this.audio.volume = m ? 0 : this.vol;
     localStorage.setItem(MUTE_KEY, m ? "1" : "0");
-    if (this.btn) this.btn.textContent = m ? "🔇" : "🎵";
+    if (this.btn) this.btn.innerHTML = m ? ICON_OFF : ICON_ON;
     if (!m) this.audio.play().catch(() => {});
   }
 
@@ -67,14 +73,15 @@ export class Music {
 
   private mountButton(parent: HTMLElement): void {
     const b = document.createElement("button");
-    b.textContent = this.muted ? "🔇" : "🎵";
+    b.innerHTML = this.muted ? ICON_OFF : ICON_ON;
     b.title = "background music on/off";
     b.style.cssText =
       "position:absolute;right:14px;bottom:14px;z-index:40;width:38px;height:38px;border-radius:10px;" +
       "background:rgba(8,14,24,.62);border:1px solid rgba(42,255,212,.35);color:#dfeeff;font-size:17px;" +
-      "cursor:pointer;line-height:1;padding:0;backdrop-filter:blur(4px);opacity:.55;transition:opacity .15s";
+      "cursor:pointer;line-height:0;padding:0;backdrop-filter:blur(4px);opacity:.5;transition:opacity .15s;" +
+      "display:flex;align-items:center;justify-content:center";
     b.onmouseenter = () => (b.style.opacity = "1");
-    b.onmouseleave = () => (b.style.opacity = ".55");
+    b.onmouseleave = () => (b.style.opacity = ".5");
     b.onclick = (e) => {
       e.stopPropagation();
       this.setMuted(!this.muted);
