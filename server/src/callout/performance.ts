@@ -35,6 +35,17 @@ export interface CallPerf {
   dry: boolean;
 }
 
+/**
+ * Operator-supplied entry corrections for calls made before the market-cap fix.
+ * Applied once at boot and never overwritten, so a later manual edit sticks.
+ */
+const KNOWN_ENTRY_FIXES: Record<string, number> = {
+  // Penguin — recorded with no entry at all; operator confirmed $5.5k
+  "2sfcCR5ceJwMpWw76onH8zzz5hwJugmB9ABMQ3X3pump": 5500,
+  // ZBULL — logged $213 by the broken AMM maths; called around $2k
+  FqBzU27KvwRKki7ZLzVMBgtKaVjdE64nfEkL1An1pump: 2000,
+};
+
 const CACHE_KEY = "callout:perf";
 const TTL_MS = 2 * 60_000; // sample often — a measured high can only catch spikes it sees
 let cache: { at: number; rows: CallPerf[] } = { at: 0, rows: [] };
@@ -64,8 +75,19 @@ async function coinMc(mint: string): Promise<{ nowUsd: number | null; athUsd: nu
   }
 }
 
+let seeded = false;
+function seedKnownFixes(): void {
+  if (seeded) return;
+  seeded = true;
+  const have = store.calloutEntryFixes();
+  for (const [mint, usd] of Object.entries(KNOWN_ENTRY_FIXES)) {
+    if (have[mint] == null) store.fixCalloutEntry(mint, usd); // never clobber a manual edit
+  }
+}
+
 /** Rebuild the record. Throttled: at most one refresh per TTL. */
 export async function refreshPerformance(force = false): Promise<CallPerf[]> {
+  seedKnownFixes();
   if (!force && Date.now() - cache.at < TTL_MS && cache.rows.length) return cache.rows;
   const calls = store.callouts();
   if (!calls.length) return [];
@@ -78,7 +100,10 @@ export async function refreshPerformance(force = false): Promise<CallPerf[]> {
     const prev = cache.rows.find((r) => r.mint === c.mint);
     // entry mc was stored in SOL; convert once using the live SOL price. Small
     // drift vs the price at call time, immaterial against a 2x-100x multiple.
-    const entryMcUsd = c.entryMcSol != null && solUsd > 0 ? c.entryMcSol * solUsd : (prev?.entryMcUsd ?? null);
+    // an operator correction always wins: the stored entry came from our broken
+    // AMM maths on older calls, and some calls have no entry at all
+    const fixed = store.calloutEntryFix(c.mint);
+    const entryMcUsd = fixed ?? (c.entryMcSol != null && solUsd > 0 ? c.entryMcSol * solUsd : (prev?.entryMcUsd ?? null));
     const { nowUsd, athUsd, athAt } = await coinMc(c.mint);
     // THE PEAK MUST BE POST-CALL. The API's all-time high is often from BEFORE
     // he called it (coin ran, dumped, then got called on the way down) — using

@@ -112,6 +112,28 @@ export const store = {
   },
   blacklistGet: (mint: string): BlacklistEntry | undefined => state.blacklist[mint],
   blacklistAll: (): Record<string, BlacklistEntry> => state.blacklist,
+  // ---- entry-mc corrections. Early calls were recorded with a broken AMM
+  // market cap (ZBULL logged $213 for a ~$2k call), and some have no entry at
+  // all. These operator-supplied USD figures override the stored value. ----
+  fixCalloutEntry: (mint: string, entryMcUsd: number): void => {
+    if (!mint || !Number.isFinite(entryMcUsd) || entryMcUsd <= 0) return;
+    const d = (() => { try { return JSON.parse(state.kv["callout:entryfix"] ?? "{}"); } catch { return {}; } })();
+    d[mint] = entryMcUsd;
+    state.kv["callout:entryfix"] = JSON.stringify(d);
+    save();
+  },
+  calloutEntryFix: (mint: string): number | null => {
+    try {
+      const d = JSON.parse(state.kv["callout:entryfix"] ?? "{}");
+      const v = Number(d[mint]);
+      return Number.isFinite(v) && v > 0 ? v : null;
+    } catch {
+      return null;
+    }
+  },
+  calloutEntryFixes: (): Record<string, number> => {
+    try { return JSON.parse(state.kv["callout:entryfix"] ?? "{}"); } catch { return {}; }
+  },
   // ---- token dictionary: NAME -> TICKER, so a post can never say
   // "Tung Tung Tung Sahur" where it should say "$SAHUR" ----
   noteToken: (name: string, symbol: string): void => {

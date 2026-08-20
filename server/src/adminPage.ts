@@ -64,6 +64,10 @@ export const ADMIN_HTML = `<!doctype html>
     <button onclick="opSell()">💰 sell it</button>
     <button onclick="posList()">📊 open positions</button>
     <br>
+    <input id="fixmint" placeholder="CA — correct its CALL entry mc" style="width:340px">
+    <input id="fixusd" placeholder="entry $ (e.g. 5500)" style="width:150px">
+    <button onclick="fixEntry()">✏️ fix entry mc</button>
+    <br>
     <input id="blmint" placeholder="mint to blacklist" style="width:340px">
     <input id="blwhy" placeholder="why (scam, rug...)" style="width:180px">
     <button onclick="blAdd()">🚫 blacklist</button>
@@ -205,6 +209,12 @@ async function posList(){
   const r=await q('/admin/positions');
   const rows=(r.positions||[]).map(p=>p.kind+'  $'+p.symbol+'  '+p.costSol+' SOL  '+p.mint).join('\\n');
   alert(rows||'(no open positions)');
+}
+async function fixEntry(){
+  const m=document.getElementById('fixmint').value.trim(), u=document.getElementById('fixusd').value.trim();
+  if(!m||!u) return alert('need the CA and the entry mc in dollars');
+  const r=await q('/admin/callout-entry?mint='+encodeURIComponent(m)+'&usd='+encodeURIComponent(u),'POST');
+  alert(r.ok ? ('$'+(r.symbol||'?')+' entry set to $'+r.entryMcUsd+' — now '+(r.multiplier==null?'unscored':r.multiplier.toFixed(2)+'x')) : ('failed: '+r.why));
 }
 async function blAdd(){
   const m=document.getElementById('blmint').value.trim(), w=document.getElementById('blwhy').value.trim();

@@ -39,7 +39,7 @@ const hub = new Hub(server);
 // Control endpoints need the admin key (query ?key=, x-admin-key header, or
 // the qk cookie set by /admin login). Read-only + stage-internal endpoints
 // (feed, layout, clip upload, agent-status, health) stay open.
-const PROTECTED = /^\/admin\/(directive|reset|restart|agent$|fake-send|fake-buyback|pause|resume|goto|anim|camera|fx|tts-test|selfie-take|selfie-last|chat$|chat-add|go-live|syslog|record$|say|queue|clips|clip-file|research-now|blacklist|sniper|operator-call|operator-sell|positions|facts|kol-roster|kol-pool)/;
+const PROTECTED = /^\/admin\/(directive|reset|restart|agent$|fake-send|fake-buyback|pause|resume|goto|anim|camera|fx|tts-test|selfie-take|selfie-last|chat$|chat-add|go-live|syslog|record$|say|queue|clips|clip-file|research-now|blacklist|sniper|operator-call|operator-sell|positions|callout-entry|facts|kol-roster|kol-pool)/;
 function hasAdminKey(req: express.Request): boolean {
   const c = String(req.headers.cookie ?? "");
   const cookieKey = c.match(/(?:^|;\s*)qk=([^;]+)/)?.[1];
@@ -290,6 +290,22 @@ app.get("/admin/positions", async (_req, res) => {
       kind: p.strategyId === "hold" ? "LONG HOLD" : p.strategyId ?? "trade",
     })),
   });
+});
+
+// correct a call's ENTRY market cap (USD). Older calls recorded a broken AMM
+// figure, and some recorded none — this overrides whatever is stored.
+//   POST /admin/callout-entry?mint=..&usd=5500   (usd=0 clears the override)
+app.post("/admin/callout-entry", async (req, res) => {
+  const mint = String(req.query.mint ?? "").trim();
+  const usd = Number(req.query.usd);
+  if (mint.length < 32) return res.json({ ok: false, why: "that's not a mint" });
+  if (!Number.isFinite(usd) || usd <= 0) return res.json({ ok: false, why: "usd must be a positive number" });
+  store.fixCalloutEntry(mint, usd);
+  const { refreshPerformance } = await import("./callout/performance.js");
+  const rows = await refreshPerformance(true);
+  const row = rows.find((r) => r.mint === mint);
+  log.info("callout", `entry corrected: ${mint.slice(0, 8)}… → $${usd}`);
+  res.json({ ok: true, mint, entryMcUsd: usd, symbol: row?.symbol, multiplier: row?.multiplier ?? null });
 });
 
 // research a freshly-discovered coin right now (trending + fresh launch pool)
