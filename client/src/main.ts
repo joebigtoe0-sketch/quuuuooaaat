@@ -7,6 +7,7 @@ import { buildStage } from "./stage/room.js";
 import { Screens } from "./stage/screens.js";
 import { Conveyor } from "./stage/conveyor.js";
 import { Subtitles } from "./ui/subtitles.js";
+import { Music } from "./ui/music.js";
 import { mountDebug } from "./ui/debug.js";
 import { Fx } from "./stage/fx.js";
 import { StageRecorder } from "./media/recorder.js";
@@ -79,6 +80,9 @@ camera.position.copy(CAM.wide.pos);
 
 const conveyor = new Conveyor(scene);
 const subtitles = new Subtitles(stageEl);
+// background bed. The mute button is hidden in OBS (?auto=1) so it can never
+// appear on the broadcast — viewers on /live and the producer locally get it.
+const music = new Music(stageEl, !new URLSearchParams(location.search).has("auto"));
 const fx = new Fx(stageEl);
 const recorder = new StageRecorder(renderer.domElement, subtitles.audioElement, httpBase, stageEl);
 const terminal = new AgentTerminal(stageEl, httpBase);
@@ -366,6 +370,7 @@ let stageStarted = false;
 function startStage(): void {
   if (stageStarted) return;
   stageStarted = true;
+  music.start(); // same gesture that unlocked audio starts the bed
   frame(); // start rendering IMMEDIATELY — never block on the room load
   net.connect();
   buildAll().catch((err) => {
