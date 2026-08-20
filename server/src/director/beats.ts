@@ -682,7 +682,11 @@ export class Beats {
       ? { ok: true, dry: false }
       : await Promise.race([executeCallout(a.mint, text), realSleep(30000).then(() => null)]);
     const ok = res?.ok ?? false;
-    const entryMc = a.state.kind === "curve" || a.state.kind === "amm" ? a.state.mcSol : null;
+    // pump.fun's mc, not our AMM maths — the entry is the basis of the whole
+    // track record and ours reads badly low on graduated coins
+    const entryMc =
+      (await import("../chain/marketcap.js").then((m) => m.marketCap(a.mint)).then((m) => m.mcSol).catch(() => null)) ??
+      (a.state.kind === "curve" || a.state.kind === "amm" ? a.state.mcSol : null);
     if (ok) {
       store.addCallout({
         mint: a.mint,

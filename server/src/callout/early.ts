@@ -46,10 +46,8 @@ export async function earlyCallout(mint: string, symbol: string, why: string): P
     // the call can never be scored, so capture it at post time
     const entryMcSol = await (async () => {
       try {
-        const { PublicKey } = await import("@solana/web3.js");
-        const { getTokenState } = await import("../chain/pump.js");
-        const st = await getTokenState(new PublicKey(mint));
-        return st.kind === "curve" || st.kind === "amm" ? st.mcSol : null;
+        const { marketCap } = await import("../chain/marketcap.js");
+        return (await marketCap(mint)).mcSol;
       } catch {
         return null;
       }

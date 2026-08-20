@@ -51,9 +51,11 @@ export async function snapshotKPIs(): Promise<KPIs> {
   if (cfg.simMode) {
     ownMcUsd = simOwnMc();
   } else if (cfg.ownMint) {
+    // pump.fun's figure, not ours — our AMM maths reads ~40% low on $RIKU
     try {
-      const st = await getTokenState(new PublicKey(cfg.ownMint));
-      if (st.kind === "curve" || st.kind === "amm") ownMcUsd = st.mcSol * solUsd;
+      const { marketCap } = await import("../chain/marketcap.js");
+      const mc = await marketCap(cfg.ownMint);
+      ownMcUsd = mc.mcUsd ?? (mc.mcSol != null ? mc.mcSol * solUsd : null);
     } catch {}
   }
   const pos = await positionsSummary();

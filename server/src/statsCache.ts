@@ -24,6 +24,7 @@ async function buildWallet(): Promise<any> {
   const [sol, solUsd, real] = await Promise.all([solBalance(), getSolUsd(), walletHoldings()]);
   const priced = new Map<string, number>();
   const dexSymbol = new Map<string, string>(); // reliable ticker from the market
+  const dexImage = new Map<string, string>(); // fallback art when ipfs metadata had none
   if (real.length) {
     try {
       const r = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${real.map((h: any) => h.mint).join(",")}`);
@@ -34,8 +35,32 @@ async function buildWallet(): Promise<any> {
         if (m && Number.isFinite(pr) && !priced.has(m)) priced.set(m, pr);
         const sym = p?.baseToken?.symbol;
         if (m && sym && !dexSymbol.has(m)) dexSymbol.set(m, String(sym));
+        const img = p?.info?.imageUrl;
+        if (m && img && !dexImage.has(m)) dexImage.set(m, String(img));
       }
     } catch {}
+  }
+  // dexscreener only indexes coins with a real pool, so bonding-curve tokens —
+  // gifts, and $RIKU itself — came back priceless and imageless. pump.fun knows
+  // both: price = market cap / the standard 1B supply.
+  const PUMP_SUPPLY = 1_000_000_000;
+  const unpriced = real.filter((h: any) => !priced.has(h.mint)).slice(0, 12);
+  for (const h of unpriced) {
+    try {
+      const controller = new AbortController();
+      const t = setTimeout(() => controller.abort(), 4000);
+      const res = await fetch(`https://frontend-api-v3.pump.fun/coins/${h.mint}`, {
+        signal: controller.signal,
+        headers: { accept: "application/json", origin: "https://pump.fun" },
+      });
+      clearTimeout(t);
+      if (!res.ok) continue;
+      const j: any = await res.json();
+      const mcUsd = Number(j?.usd_market_cap);
+      if (Number.isFinite(mcUsd) && mcUsd > 0) priced.set(h.mint, mcUsd / PUMP_SUPPLY);
+      if (j?.image_uri && !dexImage.has(h.mint)) dexImage.set(h.mint, String(j.image_uri));
+      if (j?.symbol && !dexSymbol.has(h.mint)) dexSymbol.set(h.mint, String(j.symbol));
+    } catch { /* leave unpriced */ }
   }
   // entry/PnL per token — only tokens he BOUGHT have a cost basis; gifted
   // bags show value only. Basis = cost minus what partial exits already took.
@@ -57,7 +82,7 @@ async function buildWallet(): Promise<any> {
     if (valueUsd == null && p) {
       try { valueUsd = (await estimateSellSolFor(new PublicKey(p.mint), BigInt(p.tokensRaw))) * solUsd; } catch {}
     }
-    const it: any = { symbol: dexSymbol.get(h.mint) ?? h.symbol, amount: h.amount, image: h.image, valueUsd, paper: false };
+    const it: any = { symbol: dexSymbol.get(h.mint) ?? h.symbol, amount: h.amount, image: h.image ?? dexImage.get(h.mint) ?? null, valueUsd, paper: false };
     if (p) attachPnl(it, p);
     items.push(it);
   }
@@ -73,7 +98,21 @@ async function buildWallet(): Promise<any> {
     }
   }
   items.sort((a, b) => (b.valueUsd ?? -1) - (a.valueUsd ?? -1));
-  return { address: walletPubkey()?.toBase58() ?? null, sol, solUsd, solValueUsd: sol * solUsd, paperBankSol: await bankSol(), paperMode: cfg.tradeDryRun, items };
+  // everything he owns, in one number — SOL plus every priced bag
+  const tokensUsd = items.filter((i: any) => !i.paper).reduce((s: number, i: any) => s + (i.valueUsd ?? 0), 0);
+  const solValueUsd = sol * solUsd;
+  return {
+    address: walletPubkey()?.toBase58() ?? null,
+    sol,
+    solUsd,
+    solValueUsd,
+    tokensUsd,
+    totalUsd: solValueUsd + tokensUsd,
+    unpricedCount: items.filter((i: any) => !i.paper && i.valueUsd == null).length,
+    paperBankSol: await bankSol(),
+    paperMode: cfg.tradeDryRun,
+    items,
+  };
 }
 
 async function buildStats(): Promise<any> {

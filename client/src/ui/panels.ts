@@ -184,6 +184,13 @@ export function mountPanels(stageEl: HTMLElement, httpBase: string, toggleLog?: 
           })
           .join("");
         bodyEl.innerHTML =
+          (w.totalUsd != null
+            ? `<div style="display:flex;align-items:baseline;gap:10px;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid #12324a">` +
+              `<span style="color:#7d8aa5;font-size:11px;letter-spacing:2px">TOTAL</span>` +
+              `<span style="color:#39ff88;font-size:20px;font-weight:bold">${fmtUsd(w.totalUsd)}</span>` +
+              `<span style="color:#5a7290;font-size:11px;margin-left:auto">${fmtUsd(w.solValueUsd)} SOL · ${fmtUsd(w.tokensUsd)} tokens` +
+              `${w.unpricedCount ? ` · ${w.unpricedCount} unpriced` : ""}</span></div>`
+            : "") +
           `<div class="prow" style="margin-bottom:10px">` +
           `<div style="width:22px;height:22px;border-radius:50%;background:#9945FF"></div>` +
           `<span style="font-weight:bold;font-size:15px">SOL</span>` +
