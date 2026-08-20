@@ -42,10 +42,22 @@ export async function earlyCallout(mint: string, symbol: string, why: string): P
     ]);
     const line = (text ?? "").trim().replace(/^["']|["']$/g, "").slice(0, 190) ||
       `just took a position in $${symbol}. the tape made me do it.`;
+    // the ENTRY market cap is the whole basis of the track record — without it
+    // the call can never be scored, so capture it at post time
+    const entryMcSol = await (async () => {
+      try {
+        const { PublicKey } = await import("@solana/web3.js");
+        const { getTokenState } = await import("../chain/pump.js");
+        const st = await getTokenState(new PublicKey(mint));
+        return st.kind === "curve" || st.kind === "amm" ? st.mcSol : null;
+      } catch {
+        return null;
+      }
+    })();
     const res = await executeCallout(mint, line);
     if (res.ok) {
       store.kvSet(KEY(mint), String(Date.now()));
-      store.addCallout({ mint, symbol, text: line, tier: "CALL", at: Date.now(), dry: res.dry, entryMcSol: null });
+      store.addCallout({ mint, symbol, text: line, tier: "CALL", at: Date.now(), dry: res.dry, entryMcSol });
       log.info("callout", `EARLY callout on $${symbol}${res.dry ? " [dry]" : ""}: ${line.slice(0, 80)}`);
     } else {
       log.warn("callout", `early callout failed on $${symbol}: ${res.why}`);

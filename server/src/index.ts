@@ -374,6 +374,11 @@ armDevSniper(director);
 // the agent brain (plans its own tweets/films/trades/scouts)
 if (cfg.agentEnabled) director.planner.start();
 startStatsCache();
+// keep the callout track record warm so the stats window never waits on it
+void import("./callout/performance.js").then(({ refreshPerformance }) => {
+  void refreshPerformance();
+  setInterval(() => void refreshPerformance(true), 6 * 60_000).unref?.();
+});
 if (cfg.simMode) startMockChat();
 // live pump.fun coin chat -> his facecam reactions (once the token exists)
 if (!cfg.simMode && cfg.ownMint) {
@@ -791,6 +796,21 @@ app.get("/public/wallet", (_req, res) => res.json(cachedWallet()));
 
 /** Viewer-facing stats: the scoreboard behind the character. */
 app.get("/public/stats", (_req, res) => res.json(cachedStats()));
+
+/** THE TRACK RECORD — every callout with entry mc, peak mc and the multiple,
+ *  plus the averages, windowed: ?range=today|7d|30d|all */
+app.get("/public/callouts", async (req, res) => {
+  try {
+    const { refreshPerformance, board } = await import("./callout/performance.js");
+    const range = (["today", "7d", "30d", "all"].includes(String(req.query.range))
+      ? String(req.query.range)
+      : "all") as "today" | "7d" | "30d" | "all";
+    const rows = await refreshPerformance();
+    res.json({ ok: true, ...board(rows, range) });
+  } catch (e) {
+    res.json({ ok: false, why: String(e).slice(0, 120), rows: [], calls: 0 });
+  }
+});
 
 app.get("/admin/agent-status", async (_req, res) => {
   res.json({

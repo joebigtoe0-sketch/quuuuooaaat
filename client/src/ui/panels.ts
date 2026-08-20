@@ -8,6 +8,74 @@ const fmtUsd = (v: number | null | undefined) =>
 const fmtAmt = (n: number) =>
   n >= 1e9 ? `${(n / 1e9).toFixed(1)}B` : n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}k` : n.toFixed(n < 10 ? 2 : 0);
 
+/**
+ * THE CALL RECORD — every callout with entry mc, the peak it reached and the
+ * multiple, windowed today / 7d / 30d / all, with the averages on top. This is
+ * the number people actually judge a caller by, so it leads the section.
+ */
+type CallRange = "today" | "7d" | "30d" | "all";
+let callRange: CallRange = "all";
+const mult = (m: number | null | undefined) =>
+  m == null ? "—" : m >= 10 ? `${m.toFixed(0)}x` : `${m.toFixed(1)}x`;
+const multColor = (m: number | null | undefined) =>
+  m == null ? "#5a7290" : m >= 2 ? "#39ff88" : m >= 1 ? "#e8f0ff" : "#ff4d6d";
+
+async function callRecordHtml(httpBase: string): Promise<string> {
+  let d: any;
+  try {
+    d = await (await fetch(`${httpBase}/public/callouts?range=${callRange}`)).json();
+  } catch {
+    return "";
+  }
+  const tabs = (["today", "7d", "30d", "all"] as CallRange[])
+    .map(
+      (r) =>
+        `<button data-range="${r}" style="background:${r === callRange ? "#16324c" : "transparent"};` +
+        `border:1px solid ${r === callRange ? "#2affd4" : "#1c2740"};color:${r === callRange ? "#2affd4" : "#7d8aa5"};` +
+        `border-radius:6px;padding:3px 9px;font:11px 'Consolas',monospace;cursor:pointer;margin-right:4px">${r}</button>`,
+    )
+    .join("");
+  const rows = (d.rows ?? [])
+    .map(
+      (r: any) =>
+        `<div class="prow" style="font-size:12px">` +
+        `<span style="color:#e8f0ff;font-weight:bold;min-width:78px">$${String(r.symbol).slice(0, 10)}</span>` +
+        `<span style="color:#5a7290;min-width:62px">${ago(r.at)}</span>` +
+        `<span style="color:#7d8aa5;margin-left:auto">${fmtUsd(r.entryMcUsd)} → ${fmtUsd(r.peakMcUsd)}</span>` +
+        `<span style="color:${multColor(r.multiplier)};width:46px;text-align:right;font-weight:bold">${mult(r.multiplier)}</span>` +
+        `</div>`,
+    )
+    .join("");
+  return (
+    `<div style="margin-top:16px;border-top:1px solid #12324a;padding-top:12px">` +
+    `<div style="display:flex;align-items:center;margin-bottom:8px">` +
+    `<span style="color:#2affd4;font-size:11px;letter-spacing:2px">CALL RECORD</span>` +
+    `<span style="margin-left:auto">${tabs}</span></div>` +
+    `<div class="pkv"><span>calls</span><span>${d.calls ?? 0}</span></div>` +
+    `<div class="pkv"><span>avg peak multiple</span><span style="color:${multColor(d.avgMultiplier)};font-weight:bold">${mult(d.avgMultiplier)}</span></div>` +
+    `<div class="pkv"><span>2x or better</span><span>${d.winners2x ?? 0}</span></div>` +
+    (d.best ? `<div class="pkv"><span>best call</span><span style="color:#39ff88">$${d.best.symbol} ${mult(d.best.multiplier)}</span></div>` : "") +
+    (rows ? `<div style="margin-top:10px;max-height:190px;overflow-y:auto">${rows}</div>` : `<div style="color:#5a7290;margin-top:8px;font-size:12px">no calls in this window yet</div>`) +
+    `</div>`
+  );
+}
+
+function ago(ts: number): string {
+  const m = Math.max(0, (Date.now() - ts) / 60000);
+  if (m < 60) return `${Math.round(m)}m ago`;
+  if (m < 1440) return `${Math.round(m / 60)}h ago`;
+  return `${Math.round(m / 1440)}d ago`;
+}
+
+function wireRangeButtons(bodyEl: HTMLElement, _httpBase: string, rerender: () => void): void {
+  bodyEl.querySelectorAll<HTMLButtonElement>("button[data-range]").forEach((b) => {
+    b.onclick = () => {
+      callRange = (b.dataset.range as CallRange) ?? "all";
+      rerender();
+    };
+  });
+}
+
 const ICONS: Record<string, string> = {
   wallet: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
     <path d="M20 7H5a2 2 0 0 1 0-4h13v4"/><path d="M20 7a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5"/>
@@ -144,7 +212,8 @@ export function mountPanels(stageEl: HTMLElement, httpBase: string, toggleLog?: 
           ["unrealized PnL", pnl(Number(s.trading?.unrealizedPnlSol ?? 0))],
         ]
           .map(([k, v]) => `<div class="pkv"><span>${k}</span><span>${v}</span></div>`)
-          .join("");
+          .join("") + await callRecordHtml(httpBase);
+        wireRangeButtons(bodyEl, httpBase, () => void render());
       }
     } catch {
       bodyEl.innerHTML = `<div style="color:#ff4d6d">signal lost — server offline?</div>`;
