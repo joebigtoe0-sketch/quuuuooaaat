@@ -179,6 +179,26 @@ export function scoreToken(i: Inputs): {
       ds.vol24Usd >= 5000 ? "pass" : "warn",
       `${fmtUsd(ds.vol24Usd)}${ds.chg24Pct != null ? ` — price ${ds.chg24Pct >= 0 ? "+" : ""}${ds.chg24Pct.toFixed(0)}% 24h` : ""}`,
     );
+  // THE DEAD-MARKET TELL: a coin under a day old whose market cap exceeds its
+  // entire 24h volume has been valued without being traded — the supply sits
+  // with whoever printed it and nobody is actually buying. On a fresh launch
+  // that is a rug pattern, not a slow start. Hard reject, score zero.
+  // (Only judged when volume is actually known; a missing feed proves nothing.)
+  {
+    const ageMinNow = i.ageMin ?? (i.coin?.createdTs ? (Date.now() - i.coin.createdTs) / 60000 : null);
+    const fresh = ageMinNow !== null && ageMinNow < 24 * 60;
+    if (fresh && mcUsd !== null && ds?.vol24Usd != null && mcUsd > ds.vol24Usd) {
+      row(
+        "MARKET vs TAPE",
+        "fail",
+        `${fmtUsd(mcUsd)} market cap on only ${fmtUsd(ds.vol24Usd)} of 24h volume, and it's ${
+          ageMinNow < 60 ? `${Math.round(ageMinNow)} min` : `${Math.round(ageMinNow / 60)}h`
+        } old — priced like a winner, traded like a ghost. Nobody is buying this; someone is holding it up.`,
+      );
+      reject("no-tape");
+    }
+  }
+
   // liquidity judged relative to mc, CALIBRATED FOR MEMECOINS — single-digit
   // liq/mc is the norm on pump.fun; only genuinely shallow books get flagged
   if (ds?.liqUsd != null) {
@@ -268,7 +288,7 @@ export function scoreToken(i: Inputs): {
   score = Math.round(Math.min(100, score));
   // MAYHEM MODE = automatic rock-bottom. A rigged casino curve earns nothing;
   // it doesn't get a number, it gets zero and a roasting.
-  if (hardReject === "mayhem") score = 0;
+  if (hardReject === "mayhem" || hardReject === "no-tape") score = 0;
 
   return { rows, score, tier: tierFor(score, isSent, hardReject), hardReject };
 }

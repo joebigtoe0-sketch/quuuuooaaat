@@ -87,6 +87,7 @@ export function verdictPrompt(a: Analysis, hold = false): { system: string; user
       `Narrate your verdict in character using the data. Also produce the short public callout text ` +
       `(only meaningful when tier is CALL or STRONG CALL — for other tiers return an empty string) ` +
       `and a screen headline.\n\nDATA:\n${analysisPayload(a)}\n\n` +
+      `NEVER CLAIM A POSITION YOU WERE NOT GIVEN. You are GRADING this coin, not trading it. Do not say you bought it, are buying it, are "in", took a bag, sized it, or hold it — no entry, no size, no fill, not even hedged ("might grab a bit"). If a position exists, the desk announces it separately in its own beat; inventing one is lying to the audience about real money. Speak only about what the checks show.\n` +
       `CALLOUT RULES — callout_text posts PUBLICLY on the coin's pump.fun page. It is a HOOK, not a report: scrollers should laugh, get curious, and CLICK. Lead with one sharp joke, absurd image, or unhinged confession; back it with exactly ONE concrete detail from the data (dev's bond record, mc, holder shape — whichever is spiciest). Degen-native voice. BANNED: dry stat dumps, "solid fundamentals", hashtags, DYOR, financial advice, emoji spam (1 max). Think shitpost with receipts.\n` +
       `Reply as JSON: {"speech": "...", "callout_text": "... (<=200 chars, the HOOK described above)", "headline": "... (<=40 chars)"}`,
   };

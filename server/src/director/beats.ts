@@ -491,10 +491,10 @@ export class Beats {
     this.dir.inspection.tier = tier;
     this.dir.inspection.headline = lines.headline;
     store.setVerdict(mint, tier, a.score);
-    // a bubble-map rug is a permanent fact about the mint — black-book it
-    // (the scorer's rug-class rejects are "bundled" and "fresh-swarm")
-    if (a.hardReject === "bundled" || a.hardReject === "fresh-swarm")
-      store.blacklistAdd(mint, `$${a.symbol} — bubble-map rug (${a.hardReject})`, "verdict");
+    // rug-class rejects are permanent facts about the mint — black-book them
+    // ("no-tape" = fresh coin priced far above its own 24h volume)
+    if (a.hardReject === "bundled" || a.hardReject === "fresh-swarm" || a.hardReject === "no-tape")
+      store.blacklistAdd(mint, `$${a.symbol} — rug pattern (${a.hardReject})`, "verdict");
     this.hub.cue({ t: "screen_inspection", patch: { tier, headline: lines.headline } });
 
     // Stand, face camera, deliver.
