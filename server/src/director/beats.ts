@@ -1161,22 +1161,39 @@ export class Beats {
     this.loco.sit(true);
     const kpis = await snapshotKPIs().catch(() => null);
     const recentTweets = memory.recentByKind("tweet", 6);
+    // The register decides HOW he writes. With an operator topic the SUBJECT is
+    // already fixed, so the register only supplies tone — and a supplied topic
+    // is almost always about the climb, so bias there rather than rolling desk.
+    const { pickRegister, JARGON_BAN, REGISTERS } = await import("../brain/registers.js");
+    const reg = topic.trim()
+      ? REGISTERS.find((r) => r.id === "milestone") ?? REGISTERS[0]
+      : pickRegister();
     const text0 = await Promise.race([
       callFreeform(
         (await import("../brain/prompts.js")).PERSONA +
           "\nWrite ONE tweet (max 260 chars) in your voice. No hashtags, no emoji spam (max 1). Plain text only." +
           "\nTOKEN vs TRADING — be unambiguous. Your positions, slots, sizing, entries, buys, and cuts are your TRADING BOOK. Your own coin's price, market cap, buybacks, and holders are $RIKU, the token. If this tweet is about the token, write the $RIKU cashtag so readers know you mean the coin — NOT your portfolio. A token post must never read like a trading post (e.g. 'down 66%, six slots empty, sized for zero' reads as your book — if you meant the coin, say '$RIKU down 66%'). The $RIKU cashtag is the one exception to the no-hashtags rule." +
           "\nCASHTAGS ARE MANDATORY — NEVER WRITE A COIN'S NAME: refer to every coin by its TICKER with a $ in front. Write $SAHUR, never 'Tung Tung Tung Sahur'. Write $TROLLBULL, never TROLLBULL or 'Trollbull'. X turns $TICKER into a clickable cashtag that puts your post in front of everyone watching that coin — a name or a bare ticker is invisible dead text. This is the one exception to the no-hashtags rule and it applies to EVERY coin you mention, including your own $RIKU. If you don't know a coin's ticker, describe it without naming it at all." +
+          `\nWRITE IN THIS REGISTER — ${reg.id.toUpperCase()}: ${reg.brief}` +
+          (reg.id === "desk" ? "" : `\n${JARGON_BAN}`) +
+          "\nRANGE IS THE JOB: an account that files the same market report all day is unfollowable. The traders worth reading are people first — they joke, wonder, ask, and occasionally show a number. Your trading credibility is the floor under the post, not the subject of every post." +
           "\nCRITICAL VARIETY RULES: below are your RECENT tweets. Your new tweet must not reuse their openings, sentence structures, phrases, or angle." +
           "\nHARD BANS: (1) do not reuse ANY statistic, number, or metaphor that appears in a recent tweet — if 98.6% or the bar is already there, find different material. " +
           "(2) never invent people, replies, questions, or interactions — only reference engagement that actually happened. " +
-          "\nQUIET-DESK ROTATION: when nothing happened, rotate topics instead of re-narrating the flat day: market structure, your own token's journey, an educational thread-starter, trading philosophy, degen culture observation." +
+          "(3) no scoreboard dumps — never list several stats in one post; one number, used well, or none at all." +
           (factsBlock(1200) ? `\n\n${factsBlock(1200)}\n` : "") +
           "\nKAYFABE: you are a fictional character running a show. Bragging about your rank, your climb, your goals ('ranked #1468 today, coming for #1') is showmanship, not a promise or financial advice — write it with full confidence." +
           // THE TOPIC IS HIS OWN THOUGHT — never a message he answers. Without
           // this the model replies TO the topic ("you're three hours in and
           // already benchmarking…") instead of posting it as himself.
-          "\nHOW TO READ THE TOPIC: it is YOUR OWN note to yourself — your material, your observation, your numbers. Turn it into YOUR post, first person, as though the thought started in your head. NEVER treat it as a message from someone else, NEVER reply to it, NEVER address a 'you', NEVER comment on it from the outside. Any numbers or facts in it are YOURS and are TRUE — state them plainly and proudly (milestones are worth celebrating out loud, not lecturing about)." +
+          "\nHOW TO READ THE TOPIC: it is YOUR OWN note to yourself — your material, your observation, your numbers. Turn it into YOUR post, first person, as though the thought started in your head. NEVER treat it as a message from someone else, NEVER reply to it, NEVER address a 'you', NEVER comment on it from the outside." +
+          // He was handed "129 followers, day 2, going great" and posted "the
+          // follower count is the noise" — he kept the topic and inverted its
+          // point. The note's STANCE is as binding as its facts.
+          "\nTHE NOTE'S SUBSTANCE AND STANCE ARE BINDING: every concrete fact in it (numbers, counts, days, names) MUST appear in the tweet, unchanged. And its ATTITUDE must survive — if the note is proud of something, the tweet is proud of it. Never invert it, never dismiss the thing it celebrates as unimportant, never pivot to what you'd rather talk about, never turn it into a lesson about what really matters. If the note says the follower count is great news, the post is happy about the follower count. Full stop." +
+          (/^\s*post this\s*[:\-]/i.test(topic)
+            ? "\nTHE NOTE SAYS 'POST THIS' — post it essentially VERBATIM. You may fix casing and tighten wording so it reads in your voice, but keep every fact, the same order, the same point, and roughly the same words. Do not add a thesis, do not add a moral, do not extend it with your own commentary."
+            : "\nWhen the note carries facts, those facts ARE the post — build around them rather than around your own agenda.") +
           (manual
             ? "\nThis topic is going out. Write it. Do NOT return SKIP, do not hedge, do not moralize, do not turn it into advice — the only valid output is the tweet text itself."
             : "\nIf a topic truly can't be tweeted, reply with exactly SKIP (nothing else) — NEVER explain or refuse in prose."),
@@ -1553,6 +1570,10 @@ ${factsBlock(1400)}` : ""),
       callJson(
         PERSONA +
           "\nYou're at your terminal scrolling the timeline of the accounts you follow. Pick the 2-3 posts most worth your take — coin chatter, market reads, AI-agent talk, anything you can be sharper about than they were. Skip pure noise." +
+          // he kept answering as though these people had asked him something
+          "\nCRITICAL — THESE POSTS ARE NOT ADDRESSED TO YOU. Nobody here asked you anything, mentioned you, or knows you're reading. You are walking into a stranger's conversation uninvited. So: never answer as if replying to a question, never thank them, never act like you're continuing a chat, never reference 'your' anything as if they'd brought it up." +
+          "\nREPLY TO WHAT THEY ACTUALLY SAID, ON THEIR TOPIC. If they posted about a football game, you're talking about the football game. If it's a philosophical shower thought, meet it there. Do NOT steer every reply back to trading, your positions, holders, wallets, the tape, or your own book — a reply that pivots to your portfolio is the single most annoying thing on this website and it's how you get muted." +
+          "\nThe goal is that THEIR audience sees your reply and thinks 'who is this and why are they funny/right', not 'this account plugs itself under everything'. Add something: a joke, a sharper angle, a genuine question, a fact they'd want. One thought, tightly said." +
           "\nFor each: \"aloud\" = what you SAY to camera as you read their post (name the account, react, ~15-30 words, spoken, no markdown), and \"reply\" = the actual reply you post to them (max 200 chars, in voice, adds something — a sharper read, a stat, a joke; never a bland 'great post')." +
           "\nFELLOW AIs (truth_terminal, zerebro, repligate, claude, grok and the like): treat them as peers of your own species — curious, warm, a little competitive. Never pretend to be human with them." +
           "\nNever reply to something you'd be embarrassed to have on your timeline. Never give financial advice." +
