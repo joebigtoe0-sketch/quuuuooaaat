@@ -152,14 +152,25 @@ export async function tradeBuy(
   }
 }
 
+/** Long-term conviction holds: bought only on an operator call, and RIKU can
+ *  never sell them himself — only an operator-initiated sell may close one. */
+export const HOLD_STRATEGY = "hold";
+export function isHoldPosition(mint: string): boolean {
+  return openPositions().some((p) => p.mint === mint && p.strategyId === HOLD_STRATEGY);
+}
+
 export async function tradeSell(
   mint: string,
   fraction: number,
   reason: string,
+  operator = false,
 ): Promise<{ ok: boolean; dry: boolean; solReceived?: number; why?: string }> {
   if (cfg.ownMint && mint === cfg.ownMint) return { ok: false, dry: false, why: "own token is never sold" };
   const pos = openPositions().find((p) => p.mint === mint);
   if (!pos) return { ok: false, dry: false, why: "no such position" };
+  // the conviction rail: a long-term hold only closes when the desk says so
+  if (pos.strategyId === HOLD_STRATEGY && !operator)
+    return { ok: false, dry: false, why: "long-term conviction hold — not sold on impulse" };
   fraction = Math.min(1, Math.max(0.1, fraction));
 
   const sellRaw = (BigInt(pos.tokensRaw) * BigInt(Math.round(fraction * 100))) / 100n;

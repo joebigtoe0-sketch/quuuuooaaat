@@ -39,7 +39,7 @@ const hub = new Hub(server);
 // Control endpoints need the admin key (query ?key=, x-admin-key header, or
 // the qk cookie set by /admin login). Read-only + stage-internal endpoints
 // (feed, layout, clip upload, agent-status, health) stay open.
-const PROTECTED = /^\/admin\/(directive|reset|restart|agent$|fake-send|fake-buyback|pause|resume|goto|anim|camera|fx|tts-test|selfie-take|selfie-last|chat$|chat-add|go-live|syslog|record$|say|queue|clips|clip-file|research-now|blacklist|sniper|operator-call|facts|kol-roster|kol-pool)/;
+const PROTECTED = /^\/admin\/(directive|reset|restart|agent$|fake-send|fake-buyback|pause|resume|goto|anim|camera|fx|tts-test|selfie-take|selfie-last|chat$|chat-add|go-live|syslog|record$|say|queue|clips|clip-file|research-now|blacklist|sniper|operator-call|operator-sell|positions|facts|kol-roster|kol-pool)/;
 function hasAdminKey(req: express.Request): boolean {
   const c = String(req.headers.cookie ?? "");
   const cookieKey = c.match(/(?:^|;\s*)qk=([^;]+)/)?.[1];
@@ -224,19 +224,59 @@ app.post("/admin/operator-call", async (req, res) => {
     const sol = Math.round(
       Math.max(minSol, Math.min(Number.isFinite(asked) && asked > 0 ? asked : (minSol + 0.8 * (maxSol - minSol)) * (0.88 + Math.random() * 0.24), maxSol, cfg.maxTradeSol)) * 1000,
     ) / 1000;
+    // hold=1 => LONG-TERM CONVICTION HOLD: he can never sell it himself; only
+    // an operator sell closes it. Everything else about the call is identical.
+    const hold = /^(1|true|yes)$/i.test(String(req.query.hold ?? ""));
+    const strategyId = hold ? "hold" : "opcall";
+    const thesis = hold
+      ? "this one isn't a trade, it's a position — I'm holding it out"
+      : "saw the setup early, took the entry before the checklist";
     // fresh quote each try — a moving price can blow the slippage window once
-    let r = await tradeBuy(mint, mint.slice(0, 6), sol, "saw the setup early, took the entry before the checklist", null, "opcall");
+    let r = await tradeBuy(mint, mint.slice(0, 6), sol, thesis, null, strategyId);
     if (!r.ok && !/cap|holding|blacklist|already played/i.test(r.why ?? "")) {
       await new Promise((rs) => setTimeout(rs, 1200));
-      r = await tradeBuy(mint, mint.slice(0, 6), sol, "saw the setup early, took the entry before the checklist", null, "opcall");
+      r = await tradeBuy(mint, mint.slice(0, 6), sol, thesis, null, strategyId);
     }
     if (!r.ok) return res.json({ ok: false, why: (r.why ?? "").slice(0, 400) });
-    director.queueReveal(mint, sol, "call");
+    director.queueReveal(mint, sol, hold ? "hold" : "call");
     log.info("admin", `operator call filled: ${mint.slice(0, 8)}… ${sol} SOL${r.dry ? " [dry]" : ""} — staged discovery queued`);
     res.json({ ok: true, sol, dry: r.dry });
   } catch (e) {
     res.json({ ok: false, why: String(e).slice(0, 140) });
   }
+});
+
+// OPERATOR SELL — the only way a long-term conviction hold ever closes. Runs
+// as a normal on-stream sell beat, so it reads as his own decision.
+app.post("/admin/operator-sell", async (req, res) => {
+  const mint = String(req.query.mint ?? "").trim();
+  const fraction = Math.min(1, Math.max(0.1, Number(req.query.fraction) || 1));
+  if (mint.length < 32) return res.json({ ok: false, why: "that's not a mint" });
+  const { openPositions } = await import("./chain/trader.js");
+  const pos = openPositions().find((p) => p.mint === mint);
+  if (!pos) return res.json({ ok: false, why: "no open position in that mint" });
+  const reason = String(req.query.reason ?? "").trim() || "thesis played out — taking it off the book";
+  const r = director.onAgentAction(
+    { action: { do: "trade_sell", mint, fraction, reason }, plannedAt: Date.now(), manual: true },
+    true,
+  );
+  log.info("admin", `operator sell queued: ${mint.slice(0, 8)}… ${Math.round(fraction * 100)}%`);
+  res.json({ ok: r.ok, symbol: pos.symbol, fraction, hold: pos.strategyId === "hold", depth: r.depth, why: r.why });
+});
+
+// what's on the book right now (open positions, holds flagged)
+app.get("/admin/positions", async (_req, res) => {
+  const { openPositions } = await import("./chain/trader.js");
+  res.json({
+    ok: true,
+    positions: openPositions().map((p) => ({
+      mint: p.mint,
+      symbol: p.symbol,
+      costSol: p.costSol,
+      openedAt: p.openedAt,
+      kind: p.strategyId === "hold" ? "LONG HOLD" : p.strategyId ?? "trade",
+    })),
+  });
 });
 
 // research a freshly-discovered coin right now (trending + fresh launch pool)

@@ -32,7 +32,7 @@ type Job =
   | { kind: "buyback"; p: PendingBuyback; at: number }
   | { kind: "agent"; qa: QueuedAction; at: number }
   | { kind: "conveyor"; item: ConveyorItem; at: number }
-  | { kind: "reveal"; mint: string; sol: number; revealKind: "snipe" | "call"; at: number }
+  | { kind: "reveal"; mint: string; sol: number; revealKind: "snipe" | "call" | "hold"; at: number }
   | { kind: "kolfeed"; at: number }
   | { kind: "replyx"; at: number }
   | { kind: "commentary"; at: number };
@@ -231,8 +231,8 @@ export class Director {
 
   // a filled quiet-edge entry waiting for its on-stream "discovery" — top
   // priority, the reveal must land while the coin is still fresh
-  private revealQ: { mint: string; sol: number; revealKind: "snipe" | "call" }[] = [];
-  queueReveal(mint: string, sol: number, revealKind: "snipe" | "call" = "snipe"): void {
+  private revealQ: { mint: string; sol: number; revealKind: "snipe" | "call" | "hold" }[] = [];
+  queueReveal(mint: string, sol: number, revealKind: "snipe" | "call" | "hold" = "snipe"): void {
     if (this.revealQ.length < 4 && !this.revealQ.some((r) => r.mint === mint)) this.revealQ.push({ mint, sol, revealKind });
   }
 

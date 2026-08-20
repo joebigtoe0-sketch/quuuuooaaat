@@ -166,7 +166,7 @@ export class Beats {
     // staged on-stream discovery: marks land high, the position gets revealed,
     // the callout follows. The audience just sees an organic find. kind
     // "snipe" = dev-launch entry; "call" = operator call (no launch claims).
-    reveal?: { sol: number; kind?: "snipe" | "call" },
+    reveal?: { sol: number; kind?: "snipe" | "call" | "hold" },
   ): Promise<Analysis | null> {
     // HIS OWN COIN is never researched, never graded, never roasted. Someone
     // sending him $RIKU (or the launch allocation landing) gets the doctrine.
@@ -471,7 +471,14 @@ export class Beats {
     await this.speak(lines.speech, mood);
 
     if (tier === "CALL" || tier === "STRONG CALL") {
-      if (reveal && reveal.kind !== "call") {
+      if (reveal && reveal.kind === "hold") {
+        // a conviction position, framed as the rare thing it is
+        this.hub.cue({ t: "anim", clip: "hand_on_heart" });
+        await this.speak(
+          `And this one doesn't go on the trading book. ${reveal.sol} SOL, and it sits in the vault — no stop, no target, no itchy finger. I trade a hundred names a week; I take a POSITION maybe never. This is a never.`,
+          "excited",
+        );
+      } else if (reveal && reveal.kind !== "call") {
         // the position reveal — the audience learns he was already in. Operator
         // calls skip it: straight to the callout, no preamble.
         this.hub.cue({ t: "anim", clip: "finger_guns" });
@@ -960,7 +967,8 @@ export class Beats {
         }
         return this.tradeBuyBeat(action.mint, action.sol, action.thesis);
       case "trade_sell":
-        return this.tradeSellBeat(action.mint, action.fraction, action.reason);
+        // `manual` = the desk called it; only then may a conviction hold close
+        return this.tradeSellBeat(action.mint, action.fraction, action.reason, manual);
       case "blacklist": {
         const a = action as { mint: string; why: string };
         if (cfg.ownMint && a.mint === cfg.ownMint) {
@@ -1344,7 +1352,7 @@ export class Beats {
     this.loco.stateName = "IDLE";
   }
 
-  private async tradeSellBeat(mint: string, fraction: number, reason: string): Promise<void> {
+  private async tradeSellBeat(mint: string, fraction: number, reason: string, operator = false): Promise<void> {
     this.loco.stateName = "TRADING";
     await this.loco.walkTo("terminal");
     this.loco.sit(true);
@@ -1352,7 +1360,7 @@ export class Beats {
     this.hub.cue({ t: "camera", preset: "terminal" });
     this.hub.cue({ t: "takeover", view: { kind: "trade", side: "SELL", symbol: sellSym, sol: 0, thesis: reason, state: "working" } });
     await sleep(1200);
-    const res = await Promise.race([tradeSell(mint, fraction, reason), realSleep(120_000).then(() => null)]);
+    const res = await Promise.race([tradeSell(mint, fraction, reason, operator), realSleep(120_000).then(() => null)]);
     this.hub.cue({ t: "takeover", view: { kind: "trade", side: "SELL", symbol: sellSym, sol: res?.solReceived ?? 0, thesis: reason, state: res?.ok ? "filled" : "failed" } });
     await sleep(2000);
     this.hub.cue({ t: "takeover", view: null });

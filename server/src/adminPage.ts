@@ -56,7 +56,13 @@ export const ADMIN_HTML = `<!doctype html>
     <br>
     <input id="opmint" placeholder="CA — buy it &amp; stage as HIS find" style="width:340px">
     <input id="opsol" placeholder="sol (blank=auto)" style="width:110px">
+    <label style="opacity:.85"><input type="checkbox" id="ophold"> 💎 long hold</label>
     <button class="go" onclick="opCall()">🎯 place the call</button>
+    <br>
+    <input id="selmint" placeholder="CA to SELL (only you can close a long hold)" style="width:340px">
+    <input id="selfrac" placeholder="fraction 0.1-1" style="width:110px">
+    <button onclick="opSell()">💰 sell it</button>
+    <button onclick="posList()">📊 open positions</button>
     <br>
     <input id="blmint" placeholder="mint to blacklist" style="width:340px">
     <input id="blwhy" placeholder="why (scam, rug...)" style="width:180px">
@@ -184,9 +190,21 @@ async function factsSave(){
 }
 async function opCall(){
   const m=document.getElementById('opmint').value.trim(), s=document.getElementById('opsol').value.trim();
+  const hold=document.getElementById('ophold').checked;
   if(!m) return alert('mint?');
-  const r=await q('/admin/operator-call?mint='+encodeURIComponent(m)+(s?'&sol='+encodeURIComponent(s):''),'POST');
-  alert(r.ok ? ('filled '+r.sol+' SOL'+(r.dry?' [dry]':'')+' — his discovery airs in a couple min') : ('failed: '+r.why));
+  const r=await q('/admin/operator-call?mint='+encodeURIComponent(m)+(s?'&sol='+encodeURIComponent(s):'')+(hold?'&hold=1':''),'POST');
+  alert(r.ok ? ('filled '+r.sol+' SOL'+(r.dry?' [dry]':'')+(hold?' as a LONG HOLD (he can never sell it)':'')+' — his discovery airs in a couple min') : ('failed: '+r.why));
+}
+async function opSell(){
+  const m=document.getElementById('selmint').value.trim(), f=document.getElementById('selfrac').value.trim()||'1';
+  if(!m) return alert('mint?');
+  const r=await q('/admin/operator-sell?mint='+encodeURIComponent(m)+'&fraction='+encodeURIComponent(f),'POST');
+  alert(r.ok ? ('selling '+Math.round(r.fraction*100)+'% of $'+r.symbol+(r.hold?' (LONG HOLD — released by you)':'')+' — runs on the next beat') : ('failed: '+r.why));
+}
+async function posList(){
+  const r=await q('/admin/positions');
+  const rows=(r.positions||[]).map(p=>p.kind+'  $'+p.symbol+'  '+p.costSol+' SOL  '+p.mint).join('\\n');
+  alert(rows||'(no open positions)');
 }
 async function blAdd(){
   const m=document.getElementById('blmint').value.trim(), w=document.getElementById('blwhy').value.trim();
