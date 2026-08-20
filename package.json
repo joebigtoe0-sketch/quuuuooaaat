@@ -14,6 +14,8 @@
     "server": "npm run dev -w server",
     "client": "npm run dev -w client",
     "build": "npm run build -w client",
-    "start": "npm run start -w server"
+    "start": "npm run start -w server",
+    "puppet": "tsx server/src/puppet-server.ts",
+    "wardrobe": "tsx server/src/wardrobe-server.ts"
   }
 }
