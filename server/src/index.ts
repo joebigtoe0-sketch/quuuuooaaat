@@ -246,6 +246,11 @@ app.post("/admin/operator-call", async (req, res) => {
       r = await tradeBuy(mint, mint.slice(0, 6), sol, thesis, null, strategyId);
     }
     if (!r.ok) return res.json({ ok: false, why: (r.why ?? "").slice(0, 400) });
+    // CALL IT NOW, not when the ceremony airs — the paying window is the first
+    // minutes. The on-stream callout still plays later without re-posting.
+    void import("./callout/early.js").then(({ earlyCallout }) =>
+      earlyCallout(mint, mint.slice(0, 6), hold ? "long-term conviction position" : "took the entry before the checklist"),
+    );
     director.queueReveal(mint, sol, hold ? "hold" : "call");
     log.info("admin", `operator call filled: ${mint.slice(0, 8)}… ${sol} SOL${r.dry ? " [dry]" : ""} — staged discovery queued`);
     res.json({ ok: true, sol, asked: explicit ? asked : null, trimmed: explicit && sol < asked, hold, dry: r.dry });

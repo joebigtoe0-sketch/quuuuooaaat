@@ -147,6 +147,12 @@ export async function onSnipeLaunch(item: ConveyorItem): Promise<void> {
       note(item, `SNIPED ${sol} SOL @ ~$${Math.round(mcUsd)} mc (${record})${res.dry ? " [dry]" : ""}`);
       log.info("snipe", `IN: $${item.symbol} ${sol} SOL @ ~$${Math.round(mcUsd)} mc (${record})${res.dry ? " [dry]" : ""}`);
       memory.journal("trade", `${res.dry ? "[dry] " : ""}moved the second $${item.symbol} launched — I know this dev (${record}). ${sol} SOL at ~$${Math.round(mcUsd)} mc`);
+      // CALL IT NOW — the paying window is the first minutes, not when the
+      // ceremony airs. The on-stream callout still plays later, it just
+      // doesn't re-post.
+      void import("../callout/early.js").then(({ earlyCallout }) =>
+        earlyCallout(item.mint, item.symbol, record),
+      );
       // the show catches up in a couple of minutes: an "organic" launch-feed
       // find, researched on stream, position revealed, called out
       setTimeout(() => dir?.queueReveal(item.mint, sol), cfg.devsnipeRevealDelayMs);

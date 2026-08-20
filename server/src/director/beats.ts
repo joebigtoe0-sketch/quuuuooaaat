@@ -12,6 +12,7 @@ import { callJson, callFreeform, FRAGMENT_MODEL } from "../brain/adapter.js";
 import { factsFor as factsBlock } from "../agent/facts.js";
 import { mockVerdict, mockMutter, mockCommentary } from "../brain/mock.js";
 import { calloutPreflight, calloutCapReached, executeCallout } from "../callout/post.js";
+import { wasCalledEarly } from "../callout/early.js";
 import { doBuyback, unallocatedSol, ownMcStats } from "../chain/buyback.js";
 import type { TTSProvider } from "../voice/tts.js";
 import { cfg, simT } from "../config.js";
@@ -474,7 +475,10 @@ export class Beats {
         }
       }
     }
-    if ((tier === "CALL" || tier === "STRONG CALL") && store.callouts().some((c) => c.mint === a.mint && Date.now() - c.at < 7 * 86_400_000)) {
+    // an EARLY callout (fired at buy time) is this same entry, not a re-plug —
+    // the ceremony must still play as a CALL, it just won't post twice
+    const earlyCalled = wasCalledEarly(a.mint);
+    if (!earlyCalled && (tier === "CALL" || tier === "STRONG CALL") && store.callouts().some((c) => c.mint === a.mint && Date.now() - c.at < 7 * 86_400_000)) {
       // degrade BEFORE announcing — one plug per coin per week
       tier = "PASS";
       lines.speech += " One thing though — this coin's already on my board from this week. The call stands; I don't double-plug.";
@@ -660,7 +664,8 @@ export class Beats {
       // re-call the same coin within 7 days — one plug per coin per week
       const { touchBan } = await import("../agent/tokenguard.js");
       const ban = touchBan(a.mint);
-      const recalled = store.callouts().some((c) => c.mint === a.mint && Date.now() - c.at < 7 * 86_400_000);
+      const early = wasCalledEarly(a.mint);
+      const recalled = !early && store.callouts().some((c) => c.mint === a.mint && Date.now() - c.at < 7 * 86_400_000);
       if (ban || recalled) {
         memory.journal("callout", `skipped callout for $${a.symbol}: ${ban ?? "already called this coin this week"}`);
         return;
@@ -672,7 +677,10 @@ export class Beats {
     this.hub.cue({ t: "anim", clip: "point" });
     // 30s: postCallout backs off through CC rate-limit 429s (~15-18s worst case);
     // a 15s watchdog was killing it mid-retry. He stays animated at the screen.
-    const res = await Promise.race([executeCallout(a.mint, text), realSleep(30000).then(() => null)]);
+    // already posted at buy time? perform the ceremony, don't double-post.
+    const res = wasCalledEarly(a.mint)
+      ? { ok: true, dry: false }
+      : await Promise.race([executeCallout(a.mint, text), realSleep(30000).then(() => null)]);
     const ok = res?.ok ?? false;
     const entryMc = a.state.kind === "curve" || a.state.kind === "amm" ? a.state.mcSol : null;
     if (ok) {
