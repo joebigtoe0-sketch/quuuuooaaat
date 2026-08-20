@@ -143,8 +143,8 @@ export class Beats {
   }
 
   /** LLM with watchdog + mock fallback. */
-  private async verdictLines(a: Analysis): Promise<{ speech: string; callout_text: string; headline: string }> {
-    const p = verdictPrompt(a);
+  private async verdictLines(a: Analysis, hold = false): Promise<{ speech: string; callout_text: string; headline: string }> {
+    const p = verdictPrompt(a, hold);
     const j = await Promise.race([callJson(p.system, p.user, 500), realSleep(20000).then(() => null)]);
     if (j && typeof j.speech === "string" && j.speech.length > 10) {
       return {
@@ -390,7 +390,7 @@ export class Beats {
     }
 
     // Verdict narration starts only now — the tier is final at this point.
-    const linesP = this.verdictLines(a);
+    const linesP = this.verdictLines(a, reveal?.kind === "hold");
     const ccOkP = a.tier === "CALL" || a.tier === "STRONG CALL" ? calloutPreflight() : Promise.resolve(true);
 
     // Score + tier reveal
@@ -472,10 +472,11 @@ export class Beats {
 
     if (tier === "CALL" || tier === "STRONG CALL") {
       if (reveal && reveal.kind === "hold") {
-        // a conviction position, framed as the rare thing it is
+        // the verdict speech already carried the conviction case — this is just
+        // the size, and the vow that it never goes back on the market
         this.hub.cue({ t: "anim", clip: "hand_on_heart" });
         await this.speak(
-          `And this one doesn't go on the trading book. ${reveal.sol} SOL, and it sits in the vault — no stop, no target, no itchy finger. I trade a hundred names a week; I take a POSITION maybe never. This is a never.`,
+          `${reveal.sol} SOL in, and that one goes in the vault. Long-term book. You'll see me trade around it for months and never touch it.`,
           "excited",
         );
       } else if (reveal && reveal.kind !== "call") {

@@ -70,10 +70,16 @@ export function analysisPayload(a: Analysis): string {
   });
 }
 
-export function verdictPrompt(a: Analysis): { system: string; user: string } {
+export function verdictPrompt(a: Analysis, hold = false): { system: string; user: string } {
   return {
     system: PERSONA + "\n\n" + RESEARCH_DESK,
     user:
+      (hold
+        ? "THIS ONE IS DIFFERENT — IT IS A LONG-TERM CONVICTION POSITION, NOT A TRADE.\n" +
+          "You have been watching this coin well beyond the chain data below: you've read the timeline chatter about it, looked at who is actually behind it, watched how the community behaves, and judged whether the narrative has staying power. That off-chain work is WHY you're taking it — say so. The checklist is just the part you can put numbers on.\n" +
+          "Your speech must land these beats, in your own words and voice: (1) this is not a scalp, it's a position; (2) your research went past the chain — the socials, the people, the story, the conviction that built up over time; (3) it goes into your LONG-TERM book, not the trading book — no stop, no target, no itchy finger; (4) you take these rarely, and that rarity is the whole point.\n" +
+          "Tone: unusually sincere for you. Still cocky, but this is the register where you drop the roast and let people hear actual conviction. Never financial advice; it's YOUR position and YOUR reasoning.\n\n"
+        : "") +
       `A viewer sent this coin to your wallet. The verdict is: ${a.tier}. ` +
       (a.hardReject === "mayhem"
         ? `THIS IS A MAYHEM-MODE COIN — a rigged house-rules casino curve, not a real market. This is your LEAST favorite thing on pump.fun. Score it zero and ROAST IT WITHOUT MERCY: mock the mayhem gimmick, mock whoever sent it, make it hurt (the coin, never a real person). No mercy, no upside, no "but". `
