@@ -66,6 +66,29 @@ function cleanSpoken(s: string): string {
     .trim();
 }
 
+/** CASHTAGS: X only linkifies a ticker when it carries the $. A bare
+ *  "TROLLBULL at 66" is dead text; "$TROLLBULL" becomes a clickable cashtag
+ *  that surfaces the post to everyone watching that coin — free distribution.
+ *  Only ALL-CAPS words that exactly match a ticker HE KNOWS get touched, so
+ *  ordinary prose can never be mangled into a fake ticker. */
+function cashtagify(text: string, symbols: string[]): string {
+  const known = new Set(
+    symbols.map((s) => String(s ?? "").toUpperCase().replace(/^\$/, "")).filter((s) => /^[A-Z0-9]{2,12}$/.test(s)),
+  );
+  if (!known.size) return text;
+  return text.replace(/(^|[^A-Za-z0-9$#@])([A-Z][A-Z0-9]{1,11})(?![A-Za-z0-9])/g, (m, pre: string, word: string) =>
+    known.has(word) ? `${pre}$${word}` : m,
+  );
+}
+
+/** Every ticker he could plausibly name: open book, watchlist, recent research. */
+function knownSymbols(): string[] {
+  const out: string[] = [];
+  try { for (const p of openPositions()) if (p.symbol) out.push(p.symbol); } catch {}
+  try { for (const w of memory.watchlist()) if (w.symbol) out.push(w.symbol); } catch {}
+  return out;
+}
+
 /** An LLM REFUSAL must never be posted as content. Patterns require the
  *  refusal verb to target the WRITING TASK itself, so persona lines like
  *  "I can't help but laugh", "I won't make excuses", or "as an AI I never
@@ -1121,6 +1144,7 @@ export class Beats {
         (await import("../brain/prompts.js")).PERSONA +
           "\nWrite ONE tweet (max 260 chars) in your voice. No hashtags, no emoji spam (max 1). Plain text only." +
           "\nTOKEN vs TRADING — be unambiguous. Your positions, slots, sizing, entries, buys, and cuts are your TRADING BOOK. Your own coin's price, market cap, buybacks, and holders are $RIKU, the token. If this tweet is about the token, write the $RIKU cashtag so readers know you mean the coin — NOT your portfolio. A token post must never read like a trading post (e.g. 'down 66%, six slots empty, sized for zero' reads as your book — if you meant the coin, say '$RIKU down 66%'). The $RIKU cashtag is the one exception to the no-hashtags rule." +
+          "\nCASHTAGS ARE MANDATORY: every token ticker you name gets a $ in front — $TROLLBULL, not TROLLBULL. X turns $TICKER into a clickable cashtag that puts your post in front of everyone watching that coin; a bare ticker is invisible. This is the one exception to the no-hashtags rule, and it applies to EVERY coin you mention, including your own $RIKU." +
           "\nCRITICAL VARIETY RULES: below are your RECENT tweets. Your new tweet must not reuse their openings, sentence structures, phrases, or angle." +
           "\nHARD BANS: (1) do not reuse ANY statistic, number, or metaphor that appears in a recent tweet — if 98.6% or the bar is already there, find different material. " +
           "(2) never invent people, replies, questions, or interactions — only reference engagement that actually happened. " +
@@ -1168,7 +1192,10 @@ export class Beats {
       this.loco.stateName = "IDLE";
       return;
     }
-    const tweet = cleanSpoken(text ?? `day ${Math.ceil((Date.now() / 86_400_000) % 1000)} on the desk. the tape doesn't lie. $RIKU`);
+    const tweet = cashtagify(
+      cleanSpoken(text ?? `day ${Math.ceil((Date.now() / 86_400_000) % 1000)} on the desk. the tape doesn't lie. $RIKU`),
+      knownSymbols(),
+    );
 
     // attachment: a pre-shot selfie wins; else meme generation runs while he types
     const imageP: Promise<string | null> = attachImage
@@ -1260,7 +1287,7 @@ export class Beats {
     if (mp4) {
       const mediaId = await uploadVideo(mp4);
       if (mediaId) {
-        const res = await postTweet(cleanSpoken(caption && !looksLikeRefusal(caption) ? caption : topic), { mediaId });
+        const res = await postTweet(cashtagify(cleanSpoken(caption && !looksLikeRefusal(caption) ? caption : topic), knownSymbols()), { mediaId });
         posted = res.ok && !res.dry;
         if (!posted) filmWhy = res.dry ? "postTweet gated (not live)" : `postTweet failed: ${(res as any).why ?? "?"}`;
       } else {
@@ -1283,7 +1310,7 @@ export class Beats {
       // tweet budget (in the sim this leaked 4 extra posts past his target)
       const b = tweetBudget();
       if (b.ok) {
-        const res = await postTweet(cleanSpoken(fallbackText).slice(0, 250));
+        const res = await postTweet(cashtagify(cleanSpoken(fallbackText), knownSymbols()).slice(0, 250));
         if (res.ok) {
           bumpDaily("tweets");
           noteTweetPosted();
@@ -1531,7 +1558,7 @@ ${factsBlock(1400)}` : ""),
       await sleep(700);
       await this.speak(cleanSpoken(pick.aloud).slice(0, 220), "excited");
       // 2. the reply types out on the composer
-      const reply = cleanSpoken(pick.reply).slice(0, 240);
+      const reply = cashtagify(cleanSpoken(pick.reply), knownSymbols()).slice(0, 240);
       const step = Math.max(4, Math.round(reply.length / 22));
       for (let typed = step; typed < reply.length + step; typed += step) {
         this.hub.cue({ t: "takeover", view: { kind: "compose", text: reply, typed: Math.min(typed, reply.length), state: "typing", replyTo: post.id } });
@@ -1747,7 +1774,7 @@ ${factsBlock(1400)}` : ""),
       await sleep(700);
       await this.speak(r.aloud || `${m.author} hit my mentions. Let me set the record straight.`, "excited");
       // 2. type the reply out on the X composer
-      const reply = cleanSpoken(r.reply).slice(0, 240);
+      const reply = cashtagify(cleanSpoken(r.reply), knownSymbols()).slice(0, 240);
       const step = Math.max(4, Math.round(reply.length / 22));
       for (let typed = step; typed < reply.length + step; typed += step) {
         this.hub.cue({ t: "takeover", view: { kind: "compose", text: reply, typed: Math.min(typed, reply.length), state: "typing", replyTo: m.id } });
