@@ -72,11 +72,22 @@ function cleanSpoken(s: string): string {
  *  Only ALL-CAPS words that exactly match a ticker HE KNOWS get touched, so
  *  ordinary prose can never be mangled into a fake ticker. */
 function cashtagify(text: string, symbols: string[]): string {
+  let out = text;
+  // 1) NAME -> $TICKER. He'd write "Tung Tung Tung Sahur" where the post needs
+  //    "$SAHUR". Longest names first so a name containing another still wins.
+  //    Skipped when the cashtag is already in the post (he got it right).
+  const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  for (const { name, symbol } of store.tokenDict().sort((a, b) => b.name.length - a.name.length)) {
+    if (new RegExp(`\\$${esc(symbol)}\\b`, "i").test(out)) continue;
+    const re = new RegExp(`(^|[^A-Za-z0-9$#@])${esc(name)}(?![A-Za-z0-9])`, "gi");
+    if (re.test(out)) out = out.replace(re, (_m, pre: string) => `${pre}$${symbol.toUpperCase()}`);
+  }
+  // 2) bare ALL-CAPS ticker -> $TICKER
   const known = new Set(
     symbols.map((s) => String(s ?? "").toUpperCase().replace(/^\$/, "")).filter((s) => /^[A-Z0-9]{2,12}$/.test(s)),
   );
-  if (!known.size) return text;
-  return text.replace(/(^|[^A-Za-z0-9$#@])([A-Z][A-Z0-9]{1,11})(?![A-Za-z0-9])/g, (m, pre: string, word: string) =>
+  if (!known.size) return out;
+  return out.replace(/(^|[^A-Za-z0-9$#@])([A-Z][A-Z0-9]{1,11})(?![A-Za-z0-9])/g, (m, pre: string, word: string) =>
     known.has(word) ? `${pre}$${word}` : m,
   );
 }
@@ -272,6 +283,9 @@ export class Beats {
       return null;
     }
 
+    // every coin he grades enters the NAME -> TICKER dictionary, so a later
+    // post about it can never spell the name where the cashtag belongs
+    store.noteToken(a.name, a.symbol);
     this.dir.inspection.name = a.name;
     this.dir.inspection.symbol = a.symbol;
     this.dir.inspection.image = a.image;
@@ -1144,7 +1158,7 @@ export class Beats {
         (await import("../brain/prompts.js")).PERSONA +
           "\nWrite ONE tweet (max 260 chars) in your voice. No hashtags, no emoji spam (max 1). Plain text only." +
           "\nTOKEN vs TRADING — be unambiguous. Your positions, slots, sizing, entries, buys, and cuts are your TRADING BOOK. Your own coin's price, market cap, buybacks, and holders are $RIKU, the token. If this tweet is about the token, write the $RIKU cashtag so readers know you mean the coin — NOT your portfolio. A token post must never read like a trading post (e.g. 'down 66%, six slots empty, sized for zero' reads as your book — if you meant the coin, say '$RIKU down 66%'). The $RIKU cashtag is the one exception to the no-hashtags rule." +
-          "\nCASHTAGS ARE MANDATORY: every token ticker you name gets a $ in front — $TROLLBULL, not TROLLBULL. X turns $TICKER into a clickable cashtag that puts your post in front of everyone watching that coin; a bare ticker is invisible. This is the one exception to the no-hashtags rule, and it applies to EVERY coin you mention, including your own $RIKU." +
+          "\nCASHTAGS ARE MANDATORY — NEVER WRITE A COIN'S NAME: refer to every coin by its TICKER with a $ in front. Write $SAHUR, never 'Tung Tung Tung Sahur'. Write $TROLLBULL, never TROLLBULL or 'Trollbull'. X turns $TICKER into a clickable cashtag that puts your post in front of everyone watching that coin — a name or a bare ticker is invisible dead text. This is the one exception to the no-hashtags rule and it applies to EVERY coin you mention, including your own $RIKU. If you don't know a coin's ticker, describe it without naming it at all." +
           "\nCRITICAL VARIETY RULES: below are your RECENT tweets. Your new tweet must not reuse their openings, sentence structures, phrases, or angle." +
           "\nHARD BANS: (1) do not reuse ANY statistic, number, or metaphor that appears in a recent tweet — if 98.6% or the bar is already there, find different material. " +
           "(2) never invent people, replies, questions, or interactions — only reference engagement that actually happened. " +

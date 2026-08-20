@@ -112,6 +112,28 @@ export const store = {
   },
   blacklistGet: (mint: string): BlacklistEntry | undefined => state.blacklist[mint],
   blacklistAll: (): Record<string, BlacklistEntry> => state.blacklist,
+  // ---- token dictionary: NAME -> TICKER, so a post can never say
+  // "Tung Tung Tung Sahur" where it should say "$SAHUR" ----
+  noteToken: (name: string, symbol: string): void => {
+    const n = String(name ?? "").trim();
+    const s = String(symbol ?? "").trim().replace(/^\$/, "");
+    if (n.length < 4 || !/^[A-Za-z0-9]{2,12}$/.test(s)) return;
+    if (n.toUpperCase() === s.toUpperCase()) return; // name IS the ticker
+    const d = (() => { try { return JSON.parse(state.kv["tokens:dict"] ?? "{}"); } catch { return {}; } })();
+    if (d[n] === s) return;
+    d[n] = s;
+    const keys = Object.keys(d);
+    if (keys.length > 400) for (const k of keys.slice(0, keys.length - 400)) delete d[k];
+    state.kv["tokens:dict"] = JSON.stringify(d);
+    save();
+  },
+  tokenDict: (): { name: string; symbol: string }[] => {
+    try {
+      return Object.entries(JSON.parse(state.kv["tokens:dict"] ?? "{}")).map(([name, symbol]) => ({ name, symbol: String(symbol) }));
+    } catch {
+      return [];
+    }
+  },
   // ---- X replies: never answer the same tweet twice ----
   xRepliedAt: (tweetId: string): number | undefined => state.xReplied[tweetId],
   markXReplied: (tweetId: string): void => {
