@@ -239,17 +239,21 @@ app.post("/admin/operator-call", async (req, res) => {
     const thesis = hold
       ? "this one isn't a trade, it's a position — I'm holding it out"
       : "saw the setup early, took the entry before the checklist";
+    // the REAL ticker, never a slice of the mint — he once called a coin
+    // "$HRSEcn" because that's how the address starts. It was $BULLMOOSE.
+    const { resolveSymbol } = await import("./chain/marketcap.js");
+    const symbol = await resolveSymbol(mint);
     // fresh quote each try — a moving price can blow the slippage window once
-    let r = await tradeBuy(mint, mint.slice(0, 6), sol, thesis, null, strategyId);
+    let r = await tradeBuy(mint, symbol, sol, thesis, null, strategyId);
     if (!r.ok && !/cap|holding|blacklist|already played/i.test(r.why ?? "")) {
       await new Promise((rs) => setTimeout(rs, 1200));
-      r = await tradeBuy(mint, mint.slice(0, 6), sol, thesis, null, strategyId);
+      r = await tradeBuy(mint, symbol, sol, thesis, null, strategyId);
     }
     if (!r.ok) return res.json({ ok: false, why: (r.why ?? "").slice(0, 400) });
     // CALL IT NOW, not when the ceremony airs — the paying window is the first
     // minutes. The on-stream callout still plays later without re-posting.
     void import("./callout/early.js").then(({ earlyCallout }) =>
-      earlyCallout(mint, mint.slice(0, 6), hold ? "long-term conviction position" : "took the entry before the checklist"),
+      earlyCallout(mint, symbol, hold ? "long-term conviction position" : "took the entry before the checklist"),
     );
     director.queueReveal(mint, sol, hold ? "hold" : "call");
     log.info("admin", `operator call filled: ${mint.slice(0, 8)}… ${sol} SOL${r.dry ? " [dry]" : ""} — staged discovery queued`);

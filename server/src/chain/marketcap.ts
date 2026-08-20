@@ -19,7 +19,16 @@ import { getSolUsd } from "./solana.js";
 export interface Mc {
   mcSol: number | null;
   mcUsd: number | null;
+  symbol: string | null;
+  name: string | null;
   source: "pump" | "chain" | "none";
+}
+
+/** The coin's REAL ticker. Never slice a mint — "HRSEcnrQ…" is not a ticker,
+ *  and he once called a coin "$HRSEcn" when it was actually $BULLMOOSE. */
+export async function resolveSymbol(mint: string, fallback = ""): Promise<string> {
+  const mc = await marketCap(mint);
+  return mc.symbol || fallback || mint.slice(0, 6);
 }
 
 const cache = new Map<string, { at: number; mc: Mc }>();
@@ -28,7 +37,7 @@ const TTL = 30_000;
 export async function marketCap(mint: string): Promise<Mc> {
   const hit = cache.get(mint);
   if (hit && Date.now() - hit.at < TTL) return hit.mc;
-  let mc: Mc = { mcSol: null, mcUsd: null, source: "none" };
+  let mc: Mc = { mcSol: null, mcUsd: null, symbol: null, name: null, source: "none" };
   try {
     const controller = new AbortController();
     const t = setTimeout(() => controller.abort(), 5000);
@@ -41,7 +50,9 @@ export async function marketCap(mint: string): Promise<Mc> {
       const j: any = await res.json();
       const mcSol = typeof j.market_cap === "number" ? j.market_cap : null;
       const mcUsd = typeof j.usd_market_cap === "number" ? j.usd_market_cap : null;
-      if (mcSol || mcUsd) mc = { mcSol, mcUsd, source: "pump" };
+      const symbol = typeof j.symbol === "string" ? j.symbol : null;
+      const name = typeof j.name === "string" ? j.name : null;
+      if (mcSol || mcUsd || symbol) mc = { mcSol, mcUsd, symbol, name, source: "pump" };
     }
   } catch { /* fall through to chain */ }
   if (mc.source === "none") {
@@ -49,7 +60,7 @@ export async function marketCap(mint: string): Promise<Mc> {
       const st = await getTokenState(new PublicKey(mint));
       if (st.kind === "curve" || st.kind === "amm") {
         const solUsd = await getSolUsd().catch(() => 0);
-        mc = { mcSol: st.mcSol, mcUsd: solUsd ? st.mcSol * solUsd : null, source: "chain" };
+        mc = { mcSol: st.mcSol, mcUsd: solUsd ? st.mcSol * solUsd : null, symbol: null, name: null, source: "chain" };
       }
     } catch { /* leave as none */ }
   }

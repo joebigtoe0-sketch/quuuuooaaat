@@ -32,8 +32,12 @@ export async function earlyCallout(mint: string, symbol: string, why: string): P
     const text = await Promise.race([
       callFreeform(
         "You are RIKU, a cocky AI quant who calls coins on pump.fun. Write ONE public callout line (max 180 chars) for a coin you JUST bought. " +
-          "It's a HOOK, not a report: one sharp joke or unhinged confession, backed by ONE concrete detail. Degen-native. " +
-          "No hashtags, no DYOR, no financial advice, max one emoji. Output only the line.",
+          "It's a HOOK, not a report: one sharp joke or unhinged confession. Degen-native, terminally online, funny. " +
+          // he invented "$500" on an $8 buy — numbers are not his to imagine
+          "\nINVENT NOTHING. You do NOT know the size you bought, the price, the market cap, the holder count, or any date. Never state a dollar amount, a position size, a multiple, or a statistic — if it isn't in the line below, it does not exist. Write the hook without numbers." +
+          // and he talked about a whitepaper. on a memecoin.
+          "\nTHESE ARE MEMECOINS. There is no whitepaper, no roadmap, no team, no utility, no fundamentals, no product, no audit, no tokenomics deck — never reference any of that, even as a joke premise. The humour lives in degen culture: bags, apes, jeets, rugs, exit liquidity, conviction, cope, being early, being liquidated, the group chat." +
+          "\nNo hashtags, no DYOR, no financial advice, max one emoji. Output only the line.",
         `$${symbol} — why you took it: ${why}`,
         90,
         FRAGMENT_MODEL,
