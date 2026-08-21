@@ -39,7 +39,7 @@ const hub = new Hub(server);
 // Control endpoints need the admin key (query ?key=, x-admin-key header, or
 // the qk cookie set by /admin login). Read-only + stage-internal endpoints
 // (feed, layout, clip upload, agent-status, health) stay open.
-const PROTECTED = /^\/admin\/(directive|reset|restart|agent$|fake-send|fake-buyback|pause|resume|goto|anim|camera|fx|tts-test|selfie-take|selfie-last|chat$|chat-add|go-live|syslog|record$|say|queue|clips|clip-file|research-now|blacklist|sniper|operator-call|operator-sell|positions|callout-entry|facts|kol-roster|kol-pool)/;
+const PROTECTED = /^\/admin\/(directive|reset|restart|agent$|fake-send|fake-buyback|pause|resume|goto|anim|camera|fx|tts-test|selfie-take|selfie-last|chat$|chat-add|go-live|syslog|record$|say|queue|clips|clip-file|research-now|blacklist|sniper|operator-call|operator-sell|positions|callout-entry|producer-state|tweet-exact|reply-exact|planner|facts|kol-roster|kol-pool)/;
 function hasAdminKey(req: express.Request): boolean {
   const c = String(req.headers.cookie ?? "");
   const cookieKey = c.match(/(?:^|;\s*)qk=([^;]+)/)?.[1];
@@ -310,6 +310,106 @@ app.post("/admin/callout-entry", async (req, res) => {
   const row = rows.find((r) => r.mint === mint);
   log.info("callout", `entry corrected: ${mint.slice(0, 8)}… → $${usd}`);
   res.json({ ok: true, mint, entryMcUsd: usd, symbol: row?.symbol, multiplier: row?.multiplier ?? null });
+});
+
+// ---------------------------------------------------------------------------
+// PRODUCER SURFACE — everything an outside agent (Claude Code on the operator's
+// machine) needs to run the show: one read call for full situational awareness,
+// and write calls that post EXACT words rather than a topic for a small model
+// to interpret. This is why it beats the in-process brain: a producer can check
+// the real numbers before it writes, so it can't invent a follower count.
+// ---------------------------------------------------------------------------
+
+/** One call, the whole picture. */
+app.get("/admin/producer-state", async (_req, res) => {
+  const day = new Date().toISOString().slice(0, 10);
+  try {
+    const [{ openPositions, allPositions, bankSol, tradeSpentToday }, x, kols, perf] = await Promise.all([
+      import("./chain/trader.js"),
+      import("./social/x.js"),
+      import("./social/kols.js"),
+      import("./callout/performance.js"),
+    ]);
+    const mentions = await x.readMentions().catch(() => []);
+    const unanswered = mentions.filter((m: any) => !store.xRepliedAt(m.id));
+    const rows = await perf.refreshPerformance().catch(() => []);
+    const spent = tradeSpentToday();
+    res.json({
+      ok: true,
+      now: Date.now(),
+      live: isLive(),
+      show: { state: director.loco.stateName, paused: director.paused, watchers: hub.watchers, queue: director.queueSnapshot() },
+      brain: {
+        plannerRunning: cfg.agentEnabled && store.kvGet("planner:off") !== "1",
+        spendTodayUsd: Number(spendToday().toFixed(3)),
+        budgetUsd: dailyBudgetUsd(),
+        exhausted: budgetExhausted(),
+      },
+      x: {
+        handle: x.xHandle(),
+        followers: await x.xFollowers().catch(() => null),
+        postsToday: x.xPostsToday(),
+        repliesToday: Number(store.kvGet(`xreplies:${day}`) ?? 0),
+        replyCap: cfg.maxXRepliesPerDay,
+        tweetsToday: Number(store.kvGet(`tweets:${day}`) ?? 0),
+        tweetCap: cfg.maxTweetsPerDay,
+        lastError: lastXError(),
+        unansweredMentions: unanswered.slice(0, 12),
+      },
+      chat: { unread: unreadChat(), recent: allChat(15) },
+      wallet: { sol: Number((await bankSol()).toFixed(4)), spentTodaySol: spent.spent, dailyCapSol: spent.cap },
+      positions: openPositions().map((p) => ({
+        mint: p.mint, symbol: p.symbol, costSol: p.costSol, openedAt: p.openedAt,
+        kind: p.strategyId === "hold" ? "LONG HOLD" : p.strategyId ?? "trade", thesis: p.thesis,
+      })),
+      closedRecent: allPositions().filter((p) => p.closed).slice(-8).map((p) => ({
+        symbol: p.symbol, costSol: p.costSol, gotSol: p.soldSol ?? 0, reason: p.closed?.reason,
+      })),
+      callRecord: perf.board(rows, "all"),
+      kols: { roster: kols.roster().length },
+      memory: { board: memory.board(), journal: memory.recentByKind?.("", 12) ?? [], directives: memory.directives() },
+    });
+  } catch (e) {
+    res.json({ ok: false, why: String(e).slice(0, 200) });
+  }
+});
+
+/** Post EXACT words — no topic, no model in between. Firewalls still apply. */
+app.post("/admin/tweet-exact", async (req, res) => {
+  const text = String((req.body as any)?.text ?? req.query.text ?? "").trim();
+  if (text.length < 2) return res.json({ ok: false, why: "no text" });
+  const { postTweet } = await import("./social/x.js");
+  const r = await postTweet(text.slice(0, 270));
+  if (r.ok) {
+    store.kvSet(`tweets:${new Date().toISOString().slice(0, 10)}`, String(Number(store.kvGet(`tweets:${new Date().toISOString().slice(0, 10)}`) ?? 0) + 1));
+    memory.journal("tweet", `${r.dry ? "[dry] " : ""}${text.slice(0, 120)}`);
+  }
+  res.json({ ok: r.ok, dry: r.dry, id: r.id, why: r.why });
+});
+
+/** Reply to a specific tweet with EXACT words (uses the twex path when the
+ *  official tier refuses, same as everything else). */
+app.post("/admin/reply-exact", async (req, res) => {
+  const b: any = req.body ?? {};
+  const id = String(b.id ?? req.query.id ?? "").trim();
+  const text = String(b.text ?? req.query.text ?? "").trim();
+  if (!/^\d{5,25}$/.test(id)) return res.json({ ok: false, why: "id must be a tweet id" });
+  if (text.length < 2) return res.json({ ok: false, why: "no text" });
+  const { postTweet } = await import("./social/x.js");
+  const r = await postTweet(text.slice(0, 270), { replyTo: id });
+  if (r.ok) {
+    store.markXReplied(id);
+    memory.journal("x-chatter", `${r.dry ? "[dry] " : ""}replied to ${id}: ${text.slice(0, 100)}`);
+  }
+  res.json({ ok: r.ok, dry: r.dry, id: r.id, why: r.why });
+});
+
+/** Hand the wheel over (or take it back) without a redeploy. */
+app.post("/admin/planner", (req, res) => {
+  const on = /^(1|true|on)$/i.test(String(req.query.on ?? ""));
+  store.kvSet("planner:off", on ? "0" : "1");
+  log.warn("admin", `in-process planner ${on ? "RESUMED" : "STOPPED — producer has the wheel"}`);
+  res.json({ ok: true, plannerRunning: on });
 });
 
 // research a freshly-discovered coin right now (trending + fresh launch pool)

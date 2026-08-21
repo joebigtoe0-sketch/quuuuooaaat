@@ -124,7 +124,7 @@ export class Planner {
 
   private lastPosReview = new Map<string, number>();
   private async reviewPositions(): Promise<void> {
-    if (!cfg.agentEnabled) return;
+    if (!cfg.agentEnabled || store.kvGet("planner:off") === "1") return; // producer may hold the wheel
     for (const p of openPositions()) {
       if (p.strategyId === "hold") continue; // conviction holds are not his to cut
       const last = this.lastPosReview.get(p.mint) ?? 0;
@@ -218,7 +218,7 @@ export class Planner {
   }
 
   private async plan(): Promise<void> {
-    if (!cfg.agentEnabled) return;
+    if (!cfg.agentEnabled || store.kvGet("planner:off") === "1") return; // producer may hold the wheel
     const kpis = await snapshotKPIs();
     const pos = await positionsSummary();
     const researched = [...this.recentResearch.entries()]
