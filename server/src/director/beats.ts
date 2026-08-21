@@ -101,6 +101,27 @@ function knownSymbols(): string[] {
   return out;
 }
 
+/**
+ * META-CONTENT must never be posted either. He once tweeted "I need to hold
+ * here because of spacing and quality. Your last post was 25 minutes ago.
+ * You're at 9/48 tweets for the day…" — the model narrating its own posting
+ * budget instead of writing a post. The scoreboard is context for JUDGEMENT,
+ * never subject matter, and the audience must never see the machinery.
+ */
+function looksLikeMeta(s: string): boolean {
+  return (
+    /\b(your|my|the)\s+last\s+(post|tweet)\s+was\b/i.test(s) ||
+    /\b\d+\s*\/\s*\d+\s+(tweets?|posts?)\b/i.test(s) ||
+    /\b(minimum|daily)?\s*target\s+of\s+\d+/i.test(s) ||
+    /\b\d+\s+posts?\s+(left|remaining)\b/i.test(s) ||
+    /\b(spacing|posting cadence|posting schedule|post quota|tweet quota|daily quota|tweets? for the day)\b/i.test(s) ||
+    /\bi need to hold (here|off|back)\b/i.test(s) ||
+    /\b(here'?s|this is)\s+(the|your|my)\s+(tweet|post|reply)\b/i.test(s) ||
+    /\b(the|this)\s+register\b/i.test(s) ||
+    /\bper the (brief|prompt|instructions)\b/i.test(s)
+  );
+}
+
 /** An LLM REFUSAL must never be posted as content. Patterns require the
  *  refusal verb to target the WRITING TASK itself, so persona lines like
  *  "I can't help but laugh", "I won't make excuses", or "as an AI I never
@@ -1187,6 +1208,8 @@ export class Beats {
             : "\nTHE REGISTER IS THE ASSIGNMENT AND IT OUTRANKS THE NOTE. The note below is your own scratch material and it will usually be about your trading day, because that's what you were doing when you wrote it. Do not let that decide the post. If the note doesn't fit this register, IGNORE IT COMPLETELY and write in the register anyway — you have a whole mind, not just a P&L.") +
           (reg.id === "desk" ? "" : `\n${JARGON_BAN}`) +
           "\nRANGE IS THE JOB: an account that files the same market report all day is unfollowable. The traders worth reading are people first — they joke, wonder, ask, and occasionally show a number. Your trading credibility is the floor under the post, not the subject of every post." +
+          // he once posted his own posting budget as the tweet
+          "\nNEVER WRITE ABOUT POSTING. The scoreboard below is background for your judgement, NOT subject matter: never mention how many tweets you've made, a daily target, spacing between posts, being due to post, or anything about your own schedule. Never address a 'you' about it, never think out loud about whether to post — you were asked for a post, so the only valid output is the post itself. The audience must never see the machinery." +
           "\nCRITICAL VARIETY RULES: below are your RECENT tweets. Your new tweet must not reuse their openings, sentence structures, phrases, or angle." +
           "\nHARD BANS: (1) do not reuse ANY statistic, number, or metaphor that appears in a recent tweet — if 98.6% or the bar is already there, find different material. " +
           "(2) never invent people, replies, questions, or interactions — only reference engagement that actually happened. " +
@@ -1218,7 +1241,7 @@ export class Beats {
     // REFUSAL FIREWALL: a model refusal (or SKIP) must never hit the timeline
     let text = text0;
     const balked = (s: string | null) =>
-      !!s && (looksLikeRefusal(s) || /^\s*["'`]*\s*skip\s*["'`.!]*\s*$/i.test(s));
+      !!s && (looksLikeRefusal(s) || looksLikeMeta(s) || /^\s*["'`]*\s*skip\s*["'`.!]*\s*$/i.test(s));
     if (balked(text) && manual) {
       // an OPERATOR topic is not a suggestion — push once more, bluntly
       text = await Promise.race([
@@ -1336,7 +1359,7 @@ export class Beats {
     if (mp4) {
       const mediaId = await uploadVideo(mp4);
       if (mediaId) {
-        const res = await postTweet(cashtagify(cleanSpoken(caption && !looksLikeRefusal(caption) ? caption : topic), knownSymbols()), { mediaId });
+        const res = await postTweet(cashtagify(cleanSpoken(caption && !looksLikeRefusal(caption) && !looksLikeMeta(caption) ? caption : topic), knownSymbols()), { mediaId });
         posted = res.ok && !res.dry;
         if (!posted) filmWhy = res.dry ? "postTweet gated (not live)" : `postTweet failed: ${(res as any).why ?? "?"}`;
       } else {
@@ -1351,8 +1374,8 @@ export class Beats {
     // refusal firewall on BOTH candidates — a refusal script must never ride
     // the text-post fallback either
     const fallbackText =
-      caption && !looksLikeRefusal(caption) ? caption
-      : script && !looksLikeRefusal(script) ? script
+      caption && !looksLikeRefusal(caption) && !looksLikeMeta(caption) ? caption
+      : script && !looksLikeRefusal(script) && !looksLikeMeta(script) ? script
       : null;
     if (!posted && fallbackText) {
       // no clip — the words can go out as a text post, but that rides the SAME
@@ -1605,7 +1628,7 @@ ${factsBlock(1400)}` : ""),
     let posted = 0;
     for (const pick of parsed.data.picks) {
       const post = fresh[pick.n - 1];
-      if (!post || looksLikeRefusal(pick.reply)) continue;
+      if (!post || looksLikeRefusal(pick.reply) || looksLikeMeta(pick.reply)) continue;
       // 1. their post takes over the screen, he reads + reacts on camera
       this.hub.cue({ t: "takeover", view: { kind: "mention", author: post.author, text: post.text.slice(0, 240) } });
       await sleep(700);
@@ -1821,7 +1844,7 @@ ${factsBlock(1400)}` : ""),
     for (const r of chosen) {
       const m = mentions.find((x) => x.id === r.id);
       if (!m) continue;
-      if (looksLikeRefusal(r.reply)) continue; // a refusal never gets posted at someone
+      if (looksLikeRefusal(r.reply) || looksLikeMeta(r.reply)) continue; // never post a refusal or the machinery
       // 1. show their incoming reply on screen and read/react to it out loud
       this.hub.cue({ t: "takeover", view: { kind: "mention", author: m.author, text: m.text.slice(0, 240) } });
       await sleep(700);
