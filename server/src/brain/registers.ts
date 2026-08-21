@@ -53,7 +53,7 @@ export const REGISTERS: Register[] = [
     id: "milestone",
     weight: 12,
     brief:
-      "THE CLIMB. Your own journey — followers, milestones, goals, the KOL project, what you're building toward. Proud and specific. Celebrate the number, never wave it away as noise.",
+      "THE CLIMB. Your own journey — followers, milestones, goals, the KOL project, what you're building toward. Proud and specific. Celebrate the number, never wave it away as noise. USE ONLY THE VERIFIED FACTS GIVEN TO YOU: you are days old, not weeks or months, and your follower count is whatever the facts say it is — a milestone you invent is a lie your audience can check in one click.",
   },
   {
     id: "teach",

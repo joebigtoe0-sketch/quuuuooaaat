@@ -108,6 +108,42 @@ function knownSymbols(): string[] {
  * budget instead of writing a post. The scoreboard is context for JUDGEMENT,
  * never subject matter, and the audience must never see the machinery.
  */
+/**
+ * VERIFIED FACTS ABOUT HIMSELF.
+ *
+ * Asked for a milestone post he wrote "hit 1000 followers today, took three
+ * weeks of no sleep" — at ~140 followers, three days old. The scoreboard he
+ * gets carries treasury and P&L but NOT his follower count or how long he's
+ * existed, so the one register that's explicitly about his own journey had
+ * nothing true to hold on to and filled the gap with fiction.
+ */
+async function selfFacts(): Promise<string> {
+  const bits: string[] = [];
+  try {
+    const { xFollowers, xHandle } = await import("../social/x.js");
+    const f = await xFollowers();
+    if (f != null) bits.push(`X followers RIGHT NOW: ${f} (@${xHandle()})`);
+  } catch { /* skip */ }
+  try {
+    const { LIVE_FILE } = await import("../config.js");
+    const meta = JSON.parse(fs.readFileSync(LIVE_FILE, "utf8"));
+    if (meta?.liveSince) {
+      const days = Math.floor((Date.now() - new Date(meta.liveSince).getTime()) / 86_400_000);
+      bits.push(`you have existed publicly for ${days === 0 ? "less than a day" : `${days} day${days === 1 ? "" : "s"}`} — you launched ${new Date(meta.liveSince).toDateString()}`);
+    }
+  } catch { /* not live yet */ }
+  try {
+    const { trackRecordBrief } = await import("../brain/lenses.js");
+    const rec = trackRecordBrief();
+    if (rec) bits.push(rec);
+  } catch { /* skip */ }
+  if (!bits.length) return "";
+  return (
+    `VERIFIED FACTS ABOUT YOU (the ONLY numbers you may state about yourself):\n- ${bits.join("\n- ")}\n` +
+    `INVENT NOTHING ABOUT YOURSELF. Do not state a follower count, an age, a streak, a duration, or a milestone that is not in this list. You are DAYS old, not weeks — never imply a long history you don't have. If you want to celebrate a number, use one from above exactly as written; otherwise write the post without a number.`
+  );
+}
+
 function looksLikeMeta(s: string): boolean {
   return (
     /\b(your|my|the)\s+last\s+(post|tweet)\s+was\b/i.test(s) ||
@@ -1230,7 +1266,8 @@ export class Beats {
           (manual
             ? "\nThis topic is going out. Write it. Do NOT return SKIP, do not hedge, do not moralize, do not turn it into advice — the only valid output is the tweet text itself."
             : "\nIf a topic truly can't be tweeted, reply with exactly SKIP (nothing else) — NEVER explain or refuse in prose."),
-        `YOUR OWN NOTE TO POST ABOUT (your material, your numbers — write it as yourself; do NOT reply to it): ${topic}\nScoreboard for context: ${kpis ? kpiText(kpis) : "n/a"}\n` +
+        (await selfFacts()) +
+          `\nYOUR OWN NOTE TO POST ABOUT (your material, your numbers — write it as yourself; do NOT reply to it): ${topic}\nScoreboard for context: ${kpis ? kpiText(kpis) : "n/a"}\n` +
           `YOUR RECENT TWEETS (do not resemble these):\n${recentTweets.map((t) => "- " + t).join("\n") || "(none yet)"}\n` +
           `Your memory:\n${memory.digest().slice(0, 700)}`,
         260,
