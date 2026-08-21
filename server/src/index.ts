@@ -554,7 +554,11 @@ app.get("/", (_req, res) => {
 // THE RECORD — the human-readable callout board. /public/callouts is the
 // payload; this is the page you can actually send someone who asks to see
 // the track record. Served straight from disk, no build step.
+// NOTE: this file ships inside the image, not on the data volume — a
+// client-only commit does NOT trigger a Railway rebuild. Touch a server file
+// when you change the page or you'll be staring at the old one.
 app.get("/callouts", (_req, res) => {
+  res.set("Cache-Control", "no-cache");
   res.sendFile(path.resolve(cfg.root, "..", "client", "public", "callouts.html"));
 });
 
