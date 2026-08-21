@@ -31,25 +31,9 @@ export async function earlyCallout(mint: string, symbol: string, why: string): P
       log.info("callout", `early callout skipped for $${symbol} — daily cap`);
       return;
     }
-    const text = await Promise.race([
-      callFreeform(
-        "You are RIKU, a cocky AI quant who calls coins on pump.fun. Write ONE public callout line (max 180 chars) for a coin you JUST bought. " +
-          "It's a HOOK, not a report: one sharp joke or unhinged confession. Degen-native, terminally online, funny. " +
-          // he invented "$500" on an $8 buy — numbers are not his to imagine
-          "\nINVENT NOTHING. You do NOT know the size you bought, the price, the market cap, the holder count, or any date. Never state a dollar amount, a position size, a multiple, or a statistic — if it isn't in the line below, it does not exist. Write the hook without numbers." +
-          // and he talked about a whitepaper. on a memecoin.
-          "\nTHESE ARE MEMECOINS. There is no whitepaper, no roadmap, no team, no utility, no fundamentals, no product, no audit, no tokenomics deck — never reference any of that, even as a joke premise. The humour lives in degen culture: bags, apes, jeets, rugs, exit liquidity, conviction, cope, being early, being liquidated, the group chat." +
-          "\nNo hashtags, no DYOR, no financial advice, max one emoji. Output only the line.",
-        `$${symbol} — why you took it: ${why}`,
-        90,
-        FRAGMENT_MODEL,
-      ),
-      new Promise<null>((r) => setTimeout(() => r(null), 9000)),
-    ]);
-    const line = (text ?? "").trim().replace(/^["']|["']$/g, "").slice(0, 190) ||
-      `just took a position in $${symbol}. the tape made me do it.`;
     // the ENTRY market cap is the whole basis of the track record — without it
-    // the call can never be scored, so capture it at post time
+    // the call can never be scored. Fetched BEFORE the line is written so the
+    // callout can actually cite it: a hook with zero substance is spam.
     const entryMcSol = await (async () => {
       try {
         const { marketCap } = await import("../chain/marketcap.js");
@@ -58,6 +42,41 @@ export async function earlyCallout(mint: string, symbol: string, why: string): P
         return null;
       }
     })();
+    const mcUsd = await (async () => {
+      try {
+        if (entryMcSol == null) return null;
+        const { getSolUsd } = await import("../chain/solana.js");
+        const p = await getSolUsd();
+        return p ? Math.round(entryMcSol * p) : null;
+      } catch {
+        return null;
+      }
+    })();
+    const tape = await import("./callers.js").then((m) => m.callerTape(mint)).catch(() => []);
+    const facts = [
+      `your thesis: ${why}`,
+      mcUsd != null ? `market cap right now: $${mcUsd.toLocaleString("en-US")}` : "",
+      ...tape.slice(-2).map((t) => `another caller (${t.who}) wrote: "${t.text}"${t.mult != null ? ` — that call is at ${t.mult.toFixed(1)}x` : ""}`),
+    ].filter(Boolean).join("\n");
+    const text = await Promise.race([
+      callFreeform(
+        "You are RIKU, a cocky AI quant who calls coins on pump.fun. Write ONE public callout line (max 180 chars) for a coin you JUST bought. " +
+          "It's a HOOK WITH RECEIPTS: one sharp joke or unhinged confession PLUS at least one concrete detail taken from the DATA the user message gives you — the mc, the sharpest point of your thesis, or a dunk/agree on what another caller wrote. The joke earns the click, the detail earns the follow; a callout that's all vibes and no substance is spam. Degen-native, terminally online, funny." +
+          // he invented "$500" on an $8 buy — numbers are not his to imagine
+          "\nEVERY NUMBER MUST COME FROM THE DATA. You still do NOT know your buy size, the price, the holder count, or any date — never state a dollar amount, multiple, or statistic that isn't literally in the data. Quote other callers only if the data quotes them." +
+          // and he talked about a whitepaper. on a memecoin.
+          "\nTHESE ARE MEMECOINS. There is no whitepaper, no roadmap, no team, no utility, no fundamentals, no product, no audit, no tokenomics deck — never reference any of that, even as a joke premise. The humour lives in degen culture: bags, apes, jeets, rugs, exit liquidity, conviction, cope, being early, being liquidated, the group chat." +
+          "\nNo hashtags, no DYOR, no financial advice, max one emoji. Output only the line.",
+        `$${symbol} — DATA:\n${facts}`,
+        90,
+        FRAGMENT_MODEL,
+      ),
+      new Promise<null>((r) => setTimeout(() => r(null), 9000)),
+    ]);
+    const line = (text ?? "").trim().replace(/^["']|["']$/g, "").slice(0, 190) ||
+      (mcUsd != null
+        ? `just took a position in $${symbol} at $${mcUsd.toLocaleString("en-US")} mc. the tape made me do it.`
+        : `just took a position in $${symbol}. the tape made me do it.`);
     // decision record opened (and hash-committed on-chain) BEFORE the post —
     // this is what makes "average peak 1.67x" provable instead of claimed
     const { openDecision, sealDecision } = await import("../desk/records.js");
