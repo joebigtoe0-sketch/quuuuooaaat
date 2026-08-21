@@ -1,41 +1,14 @@
 wallet,tier
-4fZFcK8ms3bFMpo1ACzEUz8bH741fQW4zhAMGd5yZMHu,A
-79iC1835GFEruVVoh1tp6mcmAo3tVdR3V6TCs1BXBXWY,A
-5CAsV7RKewTkP2JFMHEnXPz1bDpcKyVNEpwhw21qtQpu,A
-2HzXFdfBV4ePj18am3y2gXRASHJG85QjBformmQ3WybK,A
-5fwyxrPSRPACpDQdv1z88PCQGmL2vxgzQfA9WEWdqQhn,A
-3FiWnNDTZrKPbjPeMiTe2r5m5zygxSu57ePck5LUQp7d,A
-5YrSPToJW3Q5TW6ppiSNduYTLF58GNr4j9yCefBP2xj9,A
-CiJSXoLCDJ2UHdRk4bTuXCESvrmjo27iD5NUQbMgiByg,A
-BmBpkdYtqADEo9SdEyMg7riQQvV3DiF7aeniv7t6zKG3,A
-DCWjW618t6x8djYrrCFDFLXYT6MHDDnjMbBK4CknWzdp,A
-hWGnzL3nnNvXcJrJXPEUebB8tabmAXRcPGvMATP8xLS,A
-ALDxDVTGczFZFTQNZnUjkg3M2DCMTr2AdpWZ931grDxV,A
-2syzfo53Bt2yvTezwZMMwnAqdL3xss6ZKcjQDtYV94y2,A
-FAX4qRQdiSj2iWDYvkJ21VieVCXGREtwMhEyAHSJ1aqp,A
-EUA3BRvTAWPKEcxhm7tCEppuNoevSBMCfKLaXAiAPNKA,A
-7zH6nQN4C8G1sH7LH1sz8ZKhTPmiA5wTbYcWkikUSKw,A
-HieXn5GgdKtXKa92WR3JuJPGyuR7pSMJTZw2KszQEPtJ,A
-AoGefnxF5CbZvbd2cvxv4Ex1E5j86dqEjehazRuMcMFe,A
-H5Wh4EDvWQT4mShH746V5VDqxHQkaQZyPWfuhy1PRVBg,A
-862TYSvRYoiHAK3F3WwTRYAfuGiQaGdxedN9AGvRGWo2,A
-8mnsJDikcq4gFQLQaP7GTiKpN6uw5oV3w2xUm3H4mvtc,B
-7g8N22zGBZA4wkT5jf5yQL2LMDDuEfSockJG7d1ND8DC,B
-Dp4JYka5crNMhUztbWwgvvzLLoK8gLSRewdTQWHRwKiU,B
-EYfdt8cNFyyTEJKp18dcoVbgUHDnM1SK3bT2uKj9XXHc,B
-B6QvkTWSqJZv5tK4AxFnJRy54Skrk4S1VH4QG2qqs66N,B
-JCgypzYgV9bpYp4bp3hcxS5ErkMR7kg9qyCW8RedEzUa,B
-5wHuMhntF2At2iWVCPm3Cj9H3ZJvZsWHWq4QvPmg5jMV,B
-3yKebvkagP4iokHryqnE5KnTQUSqdExvS3iFkGPXykLP,B
-F5tKFuiBmnsEtcLBkJAfZGRRJMcPRvJTQCX7ngbDKjB4,B
-qHN8kMdhSnkVosh7s9mTCANJenzkRqbivscd6q23XUx,B
-7ufmve7ZSFCzuNcKRunYrGtyb2Ka1MXzkWwf7jZhVsmL,B
-GihG1WciMf5JMmKBpkCiBqwYLvkX5D8Sayof2TQAB5GQ,B
-4DrtsW86GarGJJeYrBwYCjoyMgDPG95QWSGhFHvCkU2s,B
-gVDXhoGbePACvSqN7CZBtQXFW9eyJwsgudPEwSydAkx,B
-Eh3q5AXnopCFULMLGv6QeVqpZhRvPgkWHBMKqNGQvQTX,B
-4LXAFVZUUTdcqLCmgHq2NZmgLB2arRxp9wuYVa6rnx5C,B
-9ChWUUbP2NgvmzCS419FAhV6XiUG7ggU6U5QtS32bH9q,B
-Hcrr3q7o4PkBF2dvt1xc4VZCDHVbDvkmZ2gHeeb3JDVz,B
-Annrq7emdUhy6CjB15SmvAfeRJAQk6PQ6aTZ1JB51vDu,B
-6h4Mk1hhuQpUxSKZaSEX6RC23C77Bpi3ZvWmdLQkEMyv,B
+# EMPTY ON PURPOSE — automatic dev-launch buying is retired.
+#
+# This file used to hold the money bot's 40 elite wallets, and any launch from
+# one of them was bought instantly by the sniper. That is off: DEVSNIPE_ENABLED
+# defaults to false, and with no wallets here nothing would match even if it
+# were switched back on.
+#
+# The wallet lists that REMAIN are research-only and never trigger a buy:
+#   dev_watchlist_std.csv  + creator_stats.json  -> the "DEV RECORD" check and
+#   his on-stream commentary about who launched a coin.
+#
+# To bring sniping back: paste wallets below (one per line, "wallet,tier") and
+# set DEVSNIPE_ENABLED=true.

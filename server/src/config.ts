@@ -111,7 +111,7 @@ export const cfg = {
   // instant entries on launches from PROVEN devs while mc is still under the
   // ceiling; exit at 95% bonding or after maxHold. Sizing follows his own book
   // (0.05 min .. 6% of wallet). The stream sees an organic launch-feed find.
-  devsnipeEnabled: bool("DEVSNIPE_ENABLED", true),
+  devsnipeEnabled: bool("DEVSNIPE_ENABLED", false),
   devsnipeMaxMcUsd: num("DEVSNIPE_MAX_MC_USD", 7000),
   // archive criteria calibrated to the SAME bar as the curated watchlist —
   // its members run ~0.23 bond-rate; 0.5 was fantasy and matched nobody
