@@ -166,9 +166,9 @@ export const cfg = {
   airdropDryRun: liveArmed ? forceDry : bool("AIRDROP_DRY_RUN", true),
   maxAirdropPctPerDay: num("MAX_AIRDROP_PCT_PER_DAY", 5),
   // posting rhythm: 10-30 originals per day, spaced; replies are exempt
-  maxTweetsPerDay: num("MAX_TWEETS_PER_DAY", 30),
-  minTweetsPerDay: num("MIN_TWEETS_PER_DAY", 10),
-  minTweetGapMin: num("MIN_TWEET_GAP_MIN", 25),
+  maxTweetsPerDay: num("MAX_TWEETS_PER_DAY", 48),
+  minTweetsPerDay: num("MIN_TWEETS_PER_DAY", 22),
+  minTweetGapMin: num("MIN_TWEET_GAP_MIN", 11),
   filmEnabled: bool("FILM_ENABLED", true),
   clipsDir: path.join(root, "data", "clips"),
 

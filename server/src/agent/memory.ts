@@ -62,7 +62,7 @@ const FILE = path.join(cfg.dataDir, "agent_memory.json");
 const BOUNDS = {
   minBuyScore: [35, 90] as const,
   tradeSizeSol: [0.01, 0.25] as const,
-  tweetsPerDayTarget: [1, 16] as const,
+  tweetsPerDayTarget: [1, 40] as const,
   filmsPerDayTarget: [0, 4] as const,
 };
 
@@ -75,7 +75,7 @@ let mem: Mem = {
   strategy: {
     minBuyScore: 55,
     tradeSizeSol: 0.05,
-    tweetsPerDayTarget: 6,
+    tweetsPerDayTarget: 20,
     filmsPerDayTarget: 1,
     riskNote: "small positions until the treasury earns bigger ones",
   },
@@ -86,6 +86,13 @@ try {
   mem = { ...mem, ...JSON.parse(fs.readFileSync(FILE, "utf8")) };
 } catch {
   /* first run */
+}
+// POSTING CADENCE MIGRATION: the old ceiling was 16/day and he'd settled on a
+// handful. Now that the registers give him real range, a persisted low target
+// would silently keep the timeline quiet — lift it once, and leave it alone
+// afterwards so he can still tune it himself.
+if (mem.strategy && mem.strategy.tweetsPerDayTarget < 14) {
+  mem.strategy.tweetsPerDayTarget = 20;
 }
 
 let t: NodeJS.Timeout | null = null;

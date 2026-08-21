@@ -56,7 +56,7 @@ function v2Texts(j: any): { author: string; text: string; id: string }[] {
 let lastPostError: { at: number; kind: string; status: number; detail: string } | null = null;
 export const lastXError = () => lastPostError;
 const MAX_POST_LEN = Number(process.env.X_MAX_POST_LEN ?? 272);
-const MAX_POSTS_PER_DAY = Number(process.env.X_MAX_POSTS_PER_DAY ?? 80); // hard rail incl. replies; originals capped at cfg.maxTweetsPerDay in beats
+const MAX_POSTS_PER_DAY = Number(process.env.X_MAX_POSTS_PER_DAY ?? 130); // hard rail incl. replies; originals capped at cfg.maxTweetsPerDay in beats
 
 export function xReady(): boolean {
   return Boolean(CONSUMER_KEY && CONSUMER_SECRET && ACCESS_TOKEN && ACCESS_SECRET);
