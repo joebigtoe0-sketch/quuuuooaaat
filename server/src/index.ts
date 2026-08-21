@@ -429,13 +429,9 @@ app.get("/admin/cc-probe", async (req, res) => {
   const p = String(req.query.path ?? "");
   if (!p.startsWith("/api/")) return res.json({ ok: false, why: "path must start with /api/" });
   try {
-    const { getAccessToken } = await import("./callout/cc.js");
-    const tok = await getAccessToken();
-    const r = await fetch("https://api.coincommunities.org" + p, {
-      headers: { authorization: `Bearer ${tok}`, accept: "application/json", origin: "https://pump.fun", referer: "https://pump.fun/" },
-    });
-    const text = await r.text();
-    res.json({ ok: r.ok, status: r.status, body: text.slice(0, 4000) });
+    const { ccGet } = await import("./callout/cc.js");
+    const j = await ccGet(p);
+    res.json({ ok: true, body: JSON.stringify(j).slice(0, 6000) });
   } catch (e) {
     res.json({ ok: false, why: String(e).slice(0, 200) });
   }

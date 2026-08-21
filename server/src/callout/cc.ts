@@ -105,6 +105,12 @@ export async function getAccessToken(): Promise<string> {
   throw new Error(`token refresh failed: ${lastErr}`);
 }
 
+/** Authenticated GET with the SAME headers the posting path uses (the API
+ *  needs x-api-key as well as the bearer — a probe without it 401s). */
+export async function ccGet(apiPath: string): Promise<any> {
+  return request("GET", apiPath, undefined, await getAccessToken());
+}
+
 export async function whoAmI(): Promise<any> {
   return request("GET", "/api/v1/users/me", undefined, await getAccessToken());
 }
