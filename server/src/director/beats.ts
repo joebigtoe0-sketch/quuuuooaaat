@@ -552,6 +552,17 @@ export class Beats {
     this.dir.inspection.tier = tier;
     this.dir.inspection.headline = lines.headline;
     store.setVerdict(mint, tier, a.score);
+    // the desk ledger: every verdict on record with the checks that produced it
+    // (fail/warn rows only — the actor narrates records, it never authors facts)
+    void import("../desk/records.js").then((m) => m.recordDecision({
+      kind: "verdict", mint, symbol: a.symbol,
+      entryMcUsd: a.state.kind === "curve" || a.state.kind === "amm" ? Math.round(a.state.mcSol * a.solUsd) : null,
+      sizeSol: null, tier, score: a.score, hardReject: a.hardReject,
+      reason: lines.headline.slice(0, 200),
+      checks: a.rows.filter((r) => r.verdict !== "pass").slice(0, 12)
+        .map((r) => ({ label: r.label, verdict: r.verdict, detail: r.detail.slice(0, 120) })),
+      dry: false,
+    })).catch(() => {});
     // rug-class rejects are permanent facts about the mint — black-book them
     // ("no-tape" = fresh coin priced far above its own 24h volume)
     if (["bundled","fresh-swarm","no-tape","wash","paper-float","one-sided"].includes(a.hardReject ?? ""))
@@ -732,18 +743,29 @@ export class Beats {
     this.hub.cue({ t: "camera", preset: "bigscreen" });
     this.loco.sit(true); // the station point IS the chair — always sit here
     this.hub.cue({ t: "anim", clip: "point" });
-    // 30s: postCallout backs off through CC rate-limit 429s (~15-18s worst case);
-    // a 15s watchdog was killing it mid-retry. He stays animated at the screen.
-    // already posted at buy time? perform the ceremony, don't double-post.
-    const res = wasCalledEarly(a.mint)
-      ? { ok: true, dry: false }
-      : await Promise.race([executeCallout(a.mint, text), realSleep(30000).then(() => null)]);
-    const ok = res?.ok ?? false;
     // pump.fun's mc, not our AMM maths — the entry is the basis of the whole
     // track record and ours reads badly low on graduated coins
     const entryMc =
       (await import("../chain/marketcap.js").then((m) => m.marketCap(a.mint)).then((m) => m.mcSol).catch(() => null)) ??
       (a.state.kind === "curve" || a.state.kind === "amm" ? a.state.mcSol : null);
+    // decision record before the post (early calls already recorded at buy time)
+    const wasEarly = wasCalledEarly(a.mint);
+    const entryMcUsd = entryMc != null
+      ? await import("../chain/solana.js").then((s) => s.getSolUsd()).then((p) => (p ? Math.round(entryMc * p) : null)).catch(() => null)
+      : null;
+    const rec = wasEarly ? null : await import("../desk/records.js").then((m) => m.openDecision({
+      kind: "call", mint: a.mint, symbol: a.symbol, entryMcUsd,
+      sizeSol: null, tier, score: a.score ?? null, hardReject: null,
+      reason: text.slice(0, 200), checks: [], dry: false,
+    })).catch(() => null);
+    // 30s: postCallout backs off through CC rate-limit 429s (~15-18s worst case);
+    // a 15s watchdog was killing it mid-retry. He stays animated at the screen.
+    // already posted at buy time? perform the ceremony, don't double-post.
+    const res = wasEarly
+      ? { ok: true, dry: false }
+      : await Promise.race([executeCallout(a.mint, text), realSleep(30000).then(() => null)]);
+    const ok = res?.ok ?? false;
+    if (rec) void import("../desk/records.js").then((m) => m.sealDecision(rec, { dry: res?.dry ?? false }));
     if (ok) {
       store.addCallout({
         mint: a.mint,

@@ -172,6 +172,10 @@ export async function tradeBuy(
     paperAdjust(-sol);
     store.kvSet(dayKey(), String(spentToday() + sol));
     log.info("trade", `[DRY] bought ${symbol} for ${sol} SOL (bankroll ${paperBank().toFixed(3)})`);
+    void import("../desk/records.js").then((m) => m.recordDecision({
+      kind: "buy", mint, symbol, entryMcUsd: null, sizeSol: sol,
+      tier: null, score: null, hardReject: null, reason: thesis.slice(0, 200), checks: [], dry: true,
+    }));
     return { ok: true, dry: true };
   }
 
@@ -179,6 +183,13 @@ export async function tradeBuy(
   if (!payer) return { ok: false, dry: false, why: "no wallet" };
   const bal = await solBalance();
   if (bal - sol < cfg.floatSol) return { ok: false, dry: false, why: "would breach float" };
+  // DECISION RECORD, opened (and hash-committed on-chain) BEFORE the buy —
+  // the commitment must predate the fill or it proves nothing
+  const { openDecision, sealDecision } = await import("../desk/records.js");
+  const rec = await openDecision({
+    kind: "buy", mint, symbol, entryMcUsd: null, sizeSol: sol,
+    tier: null, score: null, hardReject: null, reason: thesis.slice(0, 200), checks: [], dry: false,
+  });
   try {
     const res = await executeBuy(payer, new PublicKey(mint), sol);
     const tokensRaw = await getTokenBalanceRaw(new PublicKey(mint), payer.publicKey);
@@ -196,8 +207,10 @@ export async function tradeBuy(
     save();
     store.kvSet(dayKey(), String(spentToday() + sol));
     log.info("trade", `bought ${symbol} for ${sol} SOL — ${res.sig}`);
+    sealDecision(rec, { txSig: res.sig });
     return { ok: true, dry: false, sig: res.sig };
   } catch (e) {
+    sealDecision(rec, { txSig: null }); // committed but unfilled — honesty includes the misses
     return { ok: false, dry: false, why: String(e).slice(0, 120) };
   }
 }
@@ -255,13 +268,25 @@ export async function tradeSell(
     save();
     paperAdjust(solReceived);
     log.info("trade", `[DRY] sold ${Math.round(fraction * 100)}% of ${pos.symbol} ≈ ${solReceived.toFixed(4)} SOL (bankroll ${paperBank().toFixed(3)})`);
+    void import("../desk/records.js").then((m) => m.recordDecision({
+      kind: "sell", mint, symbol: pos.symbol, entryMcUsd: null, sizeSol: null,
+      tier: null, score: null, hardReject: null,
+      reason: `${Math.round(fraction * 100)}%: ${reason}`.slice(0, 200), checks: [], dry: true,
+    }));
     return { ok: true, dry: true, solReceived };
   }
 
   const payer = loadWallet();
   if (!payer) return { ok: false, dry: false, why: "no wallet" };
+  const { openDecision, sealDecision } = await import("../desk/records.js");
+  const rec = await openDecision({
+    kind: "sell", mint, symbol: pos.symbol, entryMcUsd: null, sizeSol: null,
+    tier: null, score: null, hardReject: null,
+    reason: `${Math.round(fraction * 100)}%: ${reason}`.slice(0, 200), checks: [], dry: false,
+  });
   try {
     const res = await executeSell(payer, new PublicKey(mint), sellRaw);
+    sealDecision(rec, { txSig: res.sig });
     pos.soldSol = (pos.soldSol ?? 0) + res.solReceived;
     if (sellRaw >= BigInt(pos.tokensRaw)) {
       pos.closed = { at: Date.now(), solReceived: res.solReceived, reason };
@@ -271,6 +296,7 @@ export async function tradeSell(
     log.info("trade", `sold ${Math.round(fraction * 100)}% of ${pos.symbol} → ${res.solReceived.toFixed(4)} SOL — ${res.sig}`);
     return { ok: true, dry: false, solReceived: res.solReceived };
   } catch (e) {
+    sealDecision(rec, { txSig: null });
     return { ok: false, dry: false, why: String(e).slice(0, 120) };
   }
 }

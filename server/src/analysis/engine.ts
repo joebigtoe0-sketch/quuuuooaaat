@@ -88,9 +88,14 @@ export async function analyze(mint: string, sentAmountRaw: bigint | null): Promi
   const paid = dexPaid === true || dexStats?.hasInfo === true ? true : dexPaid;
 
   const sentPct = sentAmountRaw === null ? null : (Number(sentAmountRaw) / 1e6 / 1e9) * 100;
+  // caller intel: sync cache read only (never a network call in the hot path);
+  // queue the mint so the background harvester fills the cache for next time
+  const { callerSignal, requestHarvest } = await import("../callout/callers.js");
+  requestHarvest(mint);
+  const callerIntel = callerSignal(mint);
   const scored = scoreToken({
     state, coin, holders: holdersRaw, dev, smart, ageMin, sentUsd, sentPct,
-    dexPaid: paid ?? null, bubble, dexStats: dexStats ?? null,
+    dexPaid: paid ?? null, bubble, dexStats: dexStats ?? null, callerIntel,
   });
   // SKIN IN THE GAME: the more supply someone puts on the desk, the better the
   // hearing. Bonus scales with sent %, auto-call past the threshold — but the
@@ -114,7 +119,7 @@ export async function analyze(mint: string, sentAmountRaw: bigint | null): Promi
       ? scored
       : scoreToken({
           state, coin, holders: holdersRaw, dev, smart, ageMin, sentUsd: null, sentPct: null,
-          dexPaid: paid ?? null, bubble, dexStats: dexStats ?? null,
+          dexPaid: paid ?? null, bubble, dexStats: dexStats ?? null, callerIntel,
         });
 
   log.info(

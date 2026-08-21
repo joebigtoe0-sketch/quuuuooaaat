@@ -61,6 +61,16 @@ function jwtExpiryMs(token: string): number {
   }
 }
 
+// RATE AWARENESS — the API punishes bursts with long 429 penalty windows, and
+// posting callouts is revenue. Background consumers (the caller-intel
+// harvester) must yield to the posting path: check ccQuietOk() before any
+// non-revenue request.
+let lastPostAt = 0;
+let last429At = 0;
+export function ccQuietOk(): boolean {
+  return Date.now() - lastPostAt > 60_000 && Date.now() - last429At > 10 * 60_000;
+}
+
 async function request(method: string, apiPath: string, body?: unknown, auth?: string): Promise<any> {
   const res = await fetch(`${BASE}${apiPath}`, {
     method,
@@ -72,6 +82,8 @@ async function request(method: string, apiPath: string, body?: unknown, auth?: s
   try {
     json = text ? JSON.parse(text) : null;
   } catch {}
+  if (res.status === 429) last429At = Date.now();
+  if (method === "POST" && apiPath.includes("/callouts")) lastPostAt = Date.now();
   if (!res.ok) throw new Error(`${res.status} ${method} ${apiPath}: ${text.slice(0, 300)}`);
   return json;
 }

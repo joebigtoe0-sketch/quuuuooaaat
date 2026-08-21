@@ -24,6 +24,8 @@ export function wasCalledEarly(mint: string, withinMin = 90): boolean {
 /** Fire-and-forget: write the hook and post it immediately. Never throws. */
 export async function earlyCallout(mint: string, symbol: string, why: string): Promise<void> {
   try {
+    // coins he trades are exactly the ones worth knowing the caller crowd on
+    void import("./callers.js").then((m) => m.requestHarvest(mint)).catch(() => {});
     if (wasCalledEarly(mint)) return;
     if (calloutCapReached()) {
       log.info("callout", `early callout skipped for $${symbol} — daily cap`);
@@ -56,7 +58,19 @@ export async function earlyCallout(mint: string, symbol: string, why: string): P
         return null;
       }
     })();
+    // decision record opened (and hash-committed on-chain) BEFORE the post —
+    // this is what makes "average peak 1.67x" provable instead of claimed
+    const { openDecision, sealDecision } = await import("../desk/records.js");
+    const rec = await openDecision({
+      kind: "call", mint, symbol,
+      entryMcUsd: entryMcSol != null
+        ? await import("../chain/solana.js").then((m) => m.getSolUsd()).then((p) => (p ? entryMcSol * p : null)).catch(() => null)
+        : null,
+      sizeSol: null, tier: "CALL", score: null, hardReject: null,
+      reason: why.slice(0, 200), checks: [], dry: false,
+    });
     const res = await executeCallout(mint, line);
+    sealDecision(rec, { dry: res.dry ?? false });
     if (res.ok) {
       store.kvSet(KEY(mint), String(Date.now()));
       store.addCallout({ mint, symbol, text: line, tier: "CALL", at: Date.now(), dry: res.dry, entryMcSol });

@@ -34,6 +34,9 @@ interface Inputs {
   dexPaid: boolean | null;
   bubble: BubbleInfo | null;
   dexStats: DexStats | null;
+  /** Caller-intel cache read (callout/callers.ts) — who else called this coin
+   *  and how their past calls ran. null = not harvested yet. */
+  callerIntel?: import("../callout/callers.js").CallerSignal | null;
 }
 
 export function scoreToken(i: Inputs): {
@@ -312,6 +315,21 @@ export function scoreToken(i: Inputs): {
   if (i.bubble?.checked && !hardReject) {
     const freshPct = i.bubble.topChecked ? i.bubble.freshTop / i.bubble.topChecked : 0;
     if (freshPct < 0.3 && i.bubble.clusterMax < 3) score += 6;
+  }
+  // CALLER INTEL (0-8) — who ELSE called this coin, judged by pump.fun's own
+  // grading of their past calls. He judges other callers; a proven runner-
+  // caller showing up is signal, a crowd of nobodies is not.
+  const ci = i.callerIntel;
+  if (ci && ci.callers > 0) {
+    if (ci.scored > 0 && ci.bestAvg >= 2) {
+      score += 8;
+      row("CALLER INTEL", "pass", `${ci.callers} caller${ci.callers > 1 ? "s" : ""} on this — best is ${ci.bestName || "a proven one"} running ${ci.bestAvg.toFixed(1)}x avg over ${ci.bestCalls} calls`);
+    } else if (ci.scored > 0 && ci.bestAvg >= 1.3) {
+      score += 4;
+      row("CALLER INTEL", "pass", `${ci.callers} caller${ci.callers > 1 ? "s" : ""} on this, best avg ${ci.bestAvg.toFixed(1)}x — decent company`);
+    } else {
+      row("CALLER INTEL", "warn", `${ci.callers} caller${ci.callers > 1 ? "s" : ""} on this and none with a record — tourists, not signal`);
+    }
   }
 
   score = Math.round(Math.min(100, score));

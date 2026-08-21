@@ -107,6 +107,16 @@ export const cfg = {
   // a coin he already bought and EXITED is off the menu for this long —
   // no re-research, no re-buy. Blacklisted (scam/rug) coins are off forever.
   rebuyCooldownH: num("REBUY_COOLDOWN_H", 72),
+  // ---------- decision records + on-chain pre-commitment ----------
+  // every buy/sell/callout is hashed to a Solana memo BEFORE execution and the
+  // plaintext published at /public/decisions — a track record nobody has to
+  // trust us on. COMMIT_KINDS env narrows which kinds commit (default buy,sell,call).
+  commitOnchain: bool("COMMIT_ONCHAIN", true),
+  // ---------- caller intel (pump.fun callout reputation) ----------
+  // background harvester: one coin's callout list per interval, ALWAYS yielding
+  // to the posting path — reads must never starve the thing that earns.
+  callerHarvestS: num("CALLER_HARVEST_S", 90),
+  callerRefreshH: num("CALLER_REFRESH_H", 6),
   // ---------- dev-sniper (the quiet edge; the show never names it) ----------
   // instant entries on launches from PROVEN devs while mc is still under the
   // ceiling; exit at 95% bonding or after maxHold. Sizing follows his own book

@@ -39,7 +39,7 @@ const hub = new Hub(server);
 // Control endpoints need the admin key (query ?key=, x-admin-key header, or
 // the qk cookie set by /admin login). Read-only + stage-internal endpoints
 // (feed, layout, clip upload, agent-status, health) stay open.
-const PROTECTED = /^\/admin\/(directive|reset|restart|agent$|fake-send|fake-buyback|pause|resume|goto|anim|camera|fx|tts-test|selfie-take|selfie-last|chat$|chat-add|go-live|syslog|record$|say|queue|clips|clip-file|research-now|blacklist|sniper|operator-call|operator-sell|positions|callout-entry|producer-state|tweet-exact|reply-exact|planner|autoreply|cc-probe|facts|kol-roster|kol-pool)/;
+const PROTECTED = /^\/admin\/(directive|reset|restart|agent$|fake-send|fake-buyback|pause|resume|goto|anim|camera|fx|tts-test|selfie-take|selfie-last|chat$|chat-add|go-live|syslog|record$|say|queue|clips|clip-file|research-now|blacklist|sniper|operator-call|operator-sell|positions|callout-entry|producer-state|tweet-exact|reply-exact|planner|autoreply|cc-probe|callers|facts|kol-roster|kol-pool)/;
 function hasAdminKey(req: express.Request): boolean {
   const c = String(req.headers.cookie ?? "");
   const cookieKey = c.match(/(?:^|;\s*)qk=([^;]+)/)?.[1];
@@ -964,6 +964,35 @@ app.get("/public/callouts", async (req, res) => {
   }
 });
 
+/** CALLER LEADERBOARD — the reputation index the harvester has accumulated
+ *  so far (callers with ≥3 pump.fun-scored calls, ranked by avg peak). */
+app.get("/admin/callers", async (_req, res) => {
+  try {
+    const { topCallers } = await import("./callout/callers.js");
+    res.json({ ok: true, rows: topCallers(50) });
+  } catch (e) {
+    res.json({ ok: false, why: String(e).slice(0, 120) });
+  }
+});
+
+/** THE DECISION LEDGER — every buy/sell/call/verdict with its canonical string,
+ *  sha256 and the Solana memo tx that committed the hash BEFORE execution.
+ *  Verify any row: sha256(canonical) === commitHash, and the memo tx (commitSig)
+ *  carries `riku:commit:v1:{commitHash}` with a timestamp before txSig's.
+ *  ?kind=buy|sell|call|verdict  ?n=1..200 */
+app.get("/public/decisions", async (req, res) => {
+  try {
+    const { recentDecisions } = await import("./desk/records.js");
+    const kind = ["buy", "sell", "call", "verdict"].includes(String(req.query.kind))
+      ? String(req.query.kind)
+      : undefined;
+    const n = Math.min(200, Math.max(1, Number(req.query.n) || 50));
+    res.json({ ok: true, how_to_verify: "sha256(canonical) == commitHash; memo tx commitSig contains riku:commit:v1:{commitHash}", rows: recentDecisions(n, kind) });
+  } catch (e) {
+    res.json({ ok: false, why: String(e).slice(0, 120), rows: [] });
+  }
+});
+
 app.get("/admin/agent-status", async (_req, res) => {
   res.json({
     kpis: await snapshotKPIs().catch(() => null),
@@ -981,4 +1010,7 @@ server.listen(cfg.port, cfg.host, () => {
     `brain: ${hasApiKey() ? "LIVE" : "MOCK (no LLM_API_KEY)"} | tts: ${cfg.ttsProvider} | callouts: ${cfg.calloutDryRun ? "DRY RUN" : "LIVE"}`,
   );
   director.start();
+  // caller-intel harvester: one CC lookup / CALLER_HARVEST_S, always yields to
+  // callout posting (revenue first)
+  void import("./callout/callers.js").then((m) => m.startCallerHarvester());
 });
