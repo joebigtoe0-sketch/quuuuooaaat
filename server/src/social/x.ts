@@ -120,29 +120,33 @@ export function trimForX(text: string): string {
 
 export async function postTweet(
   text: string,
-  opts: { mediaId?: string; replyTo?: string } = {},
+  opts: { mediaId?: string; replyTo?: string; exact?: boolean } = {},
 ): Promise<{ ok: boolean; id?: string; dry: boolean; why?: string }> {
+  // The model gets a leash (MAX_POST_LEN) so it can't ramble. Words the
+  // producer wrote by hand are already deliberate — they go out whole, and
+  // the account is Premium, so long-form is allowed.
+  const trim = (t: string): string => (opts.exact ? t : trimForX(t));
   if (xPostsToday() >= MAX_POSTS_PER_DAY) return { ok: false, dry: false, why: "daily post cap" };
   // HARD GATE: nothing reaches the real timeline until GO LIVE is armed —
   // keys being present must never mean "start posting"
   if (!isLive() && !cfg.simMode) {
-    log.info("x", `[PRE-LIVE] composed, not posted: "${trimForX(text)}"`);
-    pushFeed("tweet-dry", `${trimForX(text)} [awaiting GO LIVE]`);
+    log.info("x", `[PRE-LIVE] composed, not posted: "${trim(text)}"`);
+    pushFeed("tweet-dry", `${trim(text)} [awaiting GO LIVE]`);
     return { ok: true, dry: true };
   }
   if (cfg.simMode) {
     store.kvSet(dayKey(), String(xPostsToday() + 1));
-    log.info("x", `[SIM] posted: "${trimForX(text)}"${opts.mediaId ? " +media" : ""}`);
-    pushFeed("tweet-sim", `${trimForX(text)}${opts.mediaId ? " [+media]" : ""}`);
+    log.info("x", `[SIM] posted: "${trim(text)}"${opts.mediaId ? " +media" : ""}`);
+    pushFeed("tweet-sim", `${trim(text)}${opts.mediaId ? " [+media]" : ""}`);
     return { ok: true, id: `sim_${Date.now()}`, dry: false };
   }
   if (!xReady()) {
-    log.info("x", `[DRY] would post: "${trimForX(text)}"${opts.mediaId ? " +video" : ""}`);
-    pushFeed("tweet-dry", `${trimForX(text)}${opts.mediaId ? " [+video]" : ""}`);
+    log.info("x", `[DRY] would post: "${trim(text)}"${opts.mediaId ? " +video" : ""}`);
+    pushFeed("tweet-dry", `${trim(text)}${opts.mediaId ? " [+video]" : ""}`);
     return { ok: true, dry: true };
   }
   const url = "https://api.x.com/2/tweets";
-  const body: Record<string, unknown> = { text: trimForX(text) };
+  const body: Record<string, unknown> = { text: trim(text) };
   if (opts.mediaId) body.media = { media_ids: [opts.mediaId] };
   if (opts.replyTo) body.reply = { in_reply_to_tweet_id: opts.replyTo };
   try {
@@ -158,10 +162,10 @@ export async function postTweet(
       if (res.status === 403 && opts.replyTo && /not-authorized-for-resource|only reply to or quote/i.test(t)) {
         const { twexReady, twexReply } = await import("./twex.js");
         if (twexReady()) {
-          const r = await twexReply(opts.replyTo, trimForX(text));
+          const r = await twexReply(opts.replyTo, trim(text));
           if (r.ok) {
             store.kvSet(dayKey(), String(xPostsToday() + 1));
-            pushFeed("tweet-live", `↩ @reply via session: ${trimForX(text)}`);
+            pushFeed("tweet-live", `↩ @reply via session: ${trim(text)}`);
             return { ok: true, id: r.id, dry: false };
           }
           lastPostError = { at: Date.now(), kind: "reply-twex", status: res.status, detail: r.why ?? "twex failed" };
@@ -176,7 +180,7 @@ export async function postTweet(
     const data = (await res.json()) as { data?: { id?: string } };
     store.kvSet(dayKey(), String(xPostsToday() + 1));
     log.info("x", `posted ${data.data?.id}`);
-    pushFeed("tweet-live", `${trimForX(text)}${opts.mediaId ? " [+video]" : ""} → https://x.com/${HANDLE}/status/${data.data?.id}`);
+    pushFeed("tweet-live", `${trim(text)}${opts.mediaId ? " [+video]" : ""} → https://x.com/${HANDLE}/status/${data.data?.id}`);
     return { ok: true, id: data.data?.id, dry: false };
   } catch (e) {
     lastPostError = { at: Date.now(), kind: opts.replyTo ? "reply" : "original", status: 0, detail: String(e).slice(0, 200) };

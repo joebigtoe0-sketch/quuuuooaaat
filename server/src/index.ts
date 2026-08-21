@@ -379,7 +379,7 @@ app.post("/admin/tweet-exact", async (req, res) => {
   const text = String((req.body as any)?.text ?? req.query.text ?? "").trim();
   if (text.length < 2) return res.json({ ok: false, why: "no text" });
   const { postTweet } = await import("./social/x.js");
-  const r = await postTweet(text.slice(0, 270));
+  const r = await postTweet(text, { exact: true });
   if (r.ok) {
     store.kvSet(`tweets:${new Date().toISOString().slice(0, 10)}`, String(Number(store.kvGet(`tweets:${new Date().toISOString().slice(0, 10)}`) ?? 0) + 1));
     memory.journal("tweet", `${r.dry ? "[dry] " : ""}${text.slice(0, 120)}`);
@@ -396,7 +396,7 @@ app.post("/admin/reply-exact", async (req, res) => {
   if (!/^\d{5,25}$/.test(id)) return res.json({ ok: false, why: "id must be a tweet id" });
   if (text.length < 2) return res.json({ ok: false, why: "no text" });
   const { postTweet } = await import("./social/x.js");
-  const r = await postTweet(text.slice(0, 270), { replyTo: id });
+  const r = await postTweet(text, { replyTo: id, exact: true });
   if (r.ok) {
     store.markXReplied(id);
     memory.journal("x-chatter", `${r.dry ? "[dry] " : ""}replied to ${id}: ${text.slice(0, 100)}`);
