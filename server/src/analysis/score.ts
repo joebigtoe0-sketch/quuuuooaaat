@@ -179,6 +179,35 @@ export function scoreToken(i: Inputs): {
       ds.vol24Usd >= 5000 ? "pass" : "warn",
       `${fmtUsd(ds.vol24Usd)}${ds.chg24Pct != null ? ` — price ${ds.chg24Pct >= 0 ? "+" : ""}${ds.chg24Pct.toFixed(0)}% 24h` : ""}`,
     );
+  // FAKE-CHART TELLS — ported from a live Solana trading bot's screener, whose
+  // thresholds have been ground against real memecoin tape. Each one describes
+  // a market that LOOKS traded but isn't: wash volume, one-sided books, paper
+  // float, or a corpse still twitching. Any single hit is a hard reject.
+  if (ds) {
+    const liq = ds.liqUsd ?? 0;
+    const v1h = ds.vol1hUsd;
+    const v24 = ds.vol24Usd;
+    const fdv = ds.fdvUsd ?? mcUsd;
+    const buys = ds.buys24;
+    const sells = ds.sells24;
+    const tell = (why: string, detail: string) => {
+      row("TAPE", "fail", detail);
+      reject(why);
+    };
+    if (liq > 0 && v1h != null && v1h > liq * 20)
+      tell("wash", `${fmtUsd(v1h)} traded in an hour against ${fmtUsd(liq)} of liquidity — that's the same money going in circles, not demand`);
+    else if (liq > 0 && v24 != null && v24 > liq * 150)
+      tell("wash", `${fmtUsd(v24)} of 24h volume on ${fmtUsd(liq)} of liquidity — wash trading, and not a subtle attempt`);
+    else if (fdv != null && liq > 0 && fdv / liq > 30)
+      tell("paper-float", `${fmtUsd(fdv)} "valuation" resting on ${fmtUsd(liq)} of real liquidity — paper float; the price is whatever the last buyer says it is`);
+    else if (buys != null && sells != null && buys + sells > 40 && (buys === 0 || sells === 0))
+      tell("one-sided", `${buys} buys, ${sells} sells — a one-sided book is somebody's script, not a market`);
+    else if (ds.chg1hPct != null && ds.chg6hPct != null && ds.chg1hPct < -25 && ds.chg6hPct < -40)
+      tell("collapsing", `down ${Math.abs(ds.chg1hPct).toFixed(0)}% this hour and ${Math.abs(ds.chg6hPct).toFixed(0)}% over six — I don't catch knives mid-fall`);
+    else if (liq > 0 && v1h != null && v24 != null && v1h < liq * 0.15 && v24 < liq * 3)
+      tell("dead-tape", `${fmtUsd(v1h)} in the last hour on ${fmtUsd(liq)} of liquidity — the chart has a pulse, the book doesn't`);
+  }
+
   // THE DEAD-MARKET TELL: a coin under a day old whose market cap exceeds its
   // entire 24h volume has been valued without being traded — the supply sits
   // with whoever printed it and nobody is actually buying. On a fresh launch
@@ -288,7 +317,7 @@ export function scoreToken(i: Inputs): {
   score = Math.round(Math.min(100, score));
   // MAYHEM MODE = automatic rock-bottom. A rigged casino curve earns nothing;
   // it doesn't get a number, it gets zero and a roasting.
-  if (hardReject === "mayhem" || hardReject === "no-tape") score = 0;
+  if (["mayhem","no-tape","wash","paper-float","one-sided","collapsing","dead-tape"].includes(hardReject ?? "")) score = 0;
 
   return { rows, score, tier: tierFor(score, isSent, hardReject), hardReject };
 }

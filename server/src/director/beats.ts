@@ -554,7 +554,7 @@ export class Beats {
     store.setVerdict(mint, tier, a.score);
     // rug-class rejects are permanent facts about the mint — black-book them
     // ("no-tape" = fresh coin priced far above its own 24h volume)
-    if (a.hardReject === "bundled" || a.hardReject === "fresh-swarm" || a.hardReject === "no-tape")
+    if (["bundled","fresh-swarm","no-tape","wash","paper-float","one-sided"].includes(a.hardReject ?? ""))
       store.blacklistAdd(mint, `$${a.symbol} — rug pattern (${a.hardReject})`, "verdict");
     this.hub.cue({ t: "screen_inspection", patch: { tier, headline: lines.headline } });
 

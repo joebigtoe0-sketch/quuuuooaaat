@@ -9,6 +9,15 @@ export interface DexStats {
   chg24Pct: number | null;
   liqUsd: number | null;
   hasInfo: boolean; // enhanced token info on dexscreener = a PAID profile
+  // the shorter windows and trade counts — a 24h average hides everything that
+  // matters on a memecoin, and the fake-chart tells all live in these
+  vol1hUsd: number | null;
+  vol5mUsd: number | null;
+  chg1hPct: number | null;
+  chg6hPct: number | null;
+  buys24: number | null;
+  sells24: number | null;
+  fdvUsd: number | null;
 }
 
 export async function fetchDexStats(mint: string): Promise<DexStats | null> {
@@ -33,6 +42,13 @@ export async function fetchDexStats(mint: string): Promise<DexStats | null> {
       chg24Pct: num(p?.priceChange?.h24),
       liqUsd: num(p?.liquidity?.usd),
       hasInfo: pairs.some((q) => q?.info != null),
+      vol1hUsd: num(p?.volume?.h1),
+      vol5mUsd: num(p?.volume?.m5),
+      chg1hPct: num(p?.priceChange?.h1),
+      chg6hPct: num(p?.priceChange?.h6),
+      buys24: num(p?.txns?.h24?.buys),
+      sells24: num(p?.txns?.h24?.sells),
+      fdvUsd: num(p?.fdv) ?? num(p?.marketCap),
     };
   } catch {
     return null;
