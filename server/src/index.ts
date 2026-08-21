@@ -551,6 +551,13 @@ app.get("/", (_req, res) => {
     res.sendFile(f);
   }
 });
+// THE RECORD — the human-readable callout board. /public/callouts is the
+// payload; this is the page you can actually send someone who asks to see
+// the track record. Served straight from disk, no build step.
+app.get("/callouts", (_req, res) => {
+  res.sendFile(path.resolve(cfg.root, "..", "client", "public", "callouts.html"));
+});
+
 app.get("/live", (_req, res) => {
   const f = path.resolve(cfg.root, "..", "client", "dist", "index.html");
   if (fs.existsSync(f)) res.sendFile(f);
