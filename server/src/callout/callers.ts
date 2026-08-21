@@ -57,6 +57,8 @@ const SEED_AT = Date.parse("2026-08-15T14:04:54.367Z");
 for (const s of CALLER_SEED) {
   if (!db.callers[s.w]) {
     db.callers[s.w] = { username: "", calls: s.n, sumMax: s.avg * s.n, best: s.best, coins: [], lastSeen: SEED_AT };
+  } else if (!db.callers[s.w].lastSeen) {
+    db.callers[s.w].lastSeen = SEED_AT; // rows seeded before this stamp existed
   }
 }
 function save(): void {
