@@ -39,7 +39,7 @@ const hub = new Hub(server);
 // Control endpoints need the admin key (query ?key=, x-admin-key header, or
 // the qk cookie set by /admin login). Read-only + stage-internal endpoints
 // (feed, layout, clip upload, agent-status, health) stay open.
-const PROTECTED = /^\/admin\/(directive|reset|restart|agent$|fake-send|fake-buyback|pause|resume|goto|anim|camera|fx|tts-test|selfie-take|selfie-last|chat$|chat-add|go-live|syslog|record$|say|queue|clips|clip-file|research-now|blacklist|sniper|operator-call|operator-sell|positions|callout-entry|producer-state|tweet-exact|reply-exact|planner|autoreply|facts|kol-roster|kol-pool)/;
+const PROTECTED = /^\/admin\/(directive|reset|restart|agent$|fake-send|fake-buyback|pause|resume|goto|anim|camera|fx|tts-test|selfie-take|selfie-last|chat$|chat-add|go-live|syslog|record$|say|queue|clips|clip-file|research-now|blacklist|sniper|operator-call|operator-sell|positions|callout-entry|producer-state|tweet-exact|reply-exact|planner|autoreply|cc-probe|facts|kol-roster|kol-pool)/;
 function hasAdminKey(req: express.Request): boolean {
   const c = String(req.headers.cookie ?? "");
   const cookieKey = c.match(/(?:^|;\s*)qk=([^;]+)/)?.[1];
@@ -420,6 +420,25 @@ app.post("/admin/planner", (req, res) => {
   store.kvSet("planner:off", on ? "0" : "1");
   log.warn("admin", `in-process planner ${on ? "RESUMED" : "STOPPED — producer has the wheel"}`);
   res.json({ ok: true, plannerRunning: on });
+});
+
+// DEV PROBE: authenticated GET against the Coin Communities API using the
+// server's live token (local copies go stale — the server rotates the refresh
+// token). Read-only, admin-gated, used to map the callout endpoints.
+app.get("/admin/cc-probe", async (req, res) => {
+  const p = String(req.query.path ?? "");
+  if (!p.startsWith("/api/")) return res.json({ ok: false, why: "path must start with /api/" });
+  try {
+    const { getAccessToken } = await import("./callout/cc.js");
+    const tok = await getAccessToken();
+    const r = await fetch("https://api.coincommunities.org" + p, {
+      headers: { authorization: `Bearer ${tok}`, accept: "application/json", origin: "https://pump.fun", referer: "https://pump.fun/" },
+    });
+    const text = await r.text();
+    res.json({ ok: r.ok, status: r.status, body: text.slice(0, 4000) });
+  } catch (e) {
+    res.json({ ok: false, why: String(e).slice(0, 200) });
+  }
 });
 
 // research a freshly-discovered coin right now (trending + fresh launch pool)
