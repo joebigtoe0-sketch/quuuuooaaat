@@ -253,11 +253,12 @@ export class Director {
       this.lastConveyorPick = Date.now();
       return { kind: "conveyor", item, at: Date.now() };
     }
-    if ((Date.now() - this.lastReplyX) / simT(60_000) >= cfg.replyXMin) {
+    const autoReplyOff = store.kvGet("autoreply:off") === "1";
+    if (!autoReplyOff && (Date.now() - this.lastReplyX) / simT(60_000) >= cfg.replyXMin) {
       this.lastReplyX = Date.now();
       return { kind: "replyx", at: Date.now() };
     }
-    if ((Date.now() - this.lastKolFeed) / simT(60_000) >= cfg.kolFeedMin) {
+    if (!autoReplyOff && (Date.now() - this.lastKolFeed) / simT(60_000) >= cfg.kolFeedMin) {
       this.lastKolFeed = Date.now();
       return { kind: "kolfeed", at: Date.now() };
     }

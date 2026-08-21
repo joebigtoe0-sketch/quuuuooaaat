@@ -39,7 +39,7 @@ const hub = new Hub(server);
 // Control endpoints need the admin key (query ?key=, x-admin-key header, or
 // the qk cookie set by /admin login). Read-only + stage-internal endpoints
 // (feed, layout, clip upload, agent-status, health) stay open.
-const PROTECTED = /^\/admin\/(directive|reset|restart|agent$|fake-send|fake-buyback|pause|resume|goto|anim|camera|fx|tts-test|selfie-take|selfie-last|chat$|chat-add|go-live|syslog|record$|say|queue|clips|clip-file|research-now|blacklist|sniper|operator-call|operator-sell|positions|callout-entry|producer-state|tweet-exact|reply-exact|planner|facts|kol-roster|kol-pool)/;
+const PROTECTED = /^\/admin\/(directive|reset|restart|agent$|fake-send|fake-buyback|pause|resume|goto|anim|camera|fx|tts-test|selfie-take|selfie-last|chat$|chat-add|go-live|syslog|record$|say|queue|clips|clip-file|research-now|blacklist|sniper|operator-call|operator-sell|positions|callout-entry|producer-state|tweet-exact|reply-exact|planner|autoreply|facts|kol-roster|kol-pool)/;
 function hasAdminKey(req: express.Request): boolean {
   const c = String(req.headers.cookie ?? "");
   const cookieKey = c.match(/(?:^|;\s*)qk=([^;]+)/)?.[1];
@@ -402,6 +402,16 @@ app.post("/admin/reply-exact", async (req, res) => {
     memory.journal("x-chatter", `${r.dry ? "[dry] " : ""}replied to ${id}: ${text.slice(0, 100)}`);
   }
   res.json({ ok: r.ok, dry: r.dry, id: r.id, why: r.why });
+});
+
+/** Auto-reply timers on/off. The producer writing every reply only works if
+ *  the 20-min mention sweep and 35-min KOL session stop writing their own —
+ *  otherwise the local model answers people first and the voice goes mixed. */
+app.post("/admin/autoreply", (req, res) => {
+  const on = /^(1|true|on)$/i.test(String(req.query.on ?? ""));
+  store.kvSet("autoreply:off", on ? "0" : "1");
+  log.warn("admin", `auto-reply beats ${on ? "RESUMED" : "PAUSED — producer owns X"}`);
+  res.json({ ok: true, autoReplyRunning: on });
 });
 
 /** Hand the wheel over (or take it back) without a redeploy. */
