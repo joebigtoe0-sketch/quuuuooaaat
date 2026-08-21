@@ -83,6 +83,19 @@ export async function reconcilePositions(): Promise<number> {
   let closed = 0;
   for (const p of openPositions()) {
     try {
+      // TICKERS TOO: operator calls once stored mint.slice(0,6) as the symbol,
+      // so positions read "$J8PSdN" where the coin is "$TripleT". pump.fun
+      // knows the real one — repair it here and teach the cashtag dictionary.
+      try {
+        const { marketCap } = await import("./marketcap.js");
+        const mc = await marketCap(p.mint);
+        if (mc.symbol && mc.symbol !== p.symbol && p.mint.startsWith(p.symbol)) {
+          log.info("trade", `symbol fixed: $${p.symbol} → $${mc.symbol}`);
+          p.symbol = mc.symbol;
+          save();
+        }
+        if (mc.name && mc.symbol) store.noteToken(mc.name, mc.symbol);
+      } catch { /* leave the label alone */ }
       const bal = await getTokenBalanceRaw(new PublicKey(p.mint), wallet.publicKey);
       // dust: below 1 whole token (6dp) it can't be sold and isn't a position
       if (bal >= 1_000_000n) continue;
