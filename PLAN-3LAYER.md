@@ -104,15 +104,21 @@ that didn't happen.
 
 Each step is independently useful and shippable alone.
 
-1. **Decision records** — emit + persist; actor reads only from them.
-   *Kills the hallucination class permanently.*
-2. **Pre-commitment** — hash records on-chain, reveal after.
-   *Makes the track record provable.*
+1. **Decision records** — ✅ SHIPPED (`server/src/desk/records.ts`). Every
+   buy/sell/call/verdict lands in `data/decisions.jsonl` with the real numbers;
+   verdict records carry the fail/warn check rows.
+2. **Pre-commitment** — ✅ SHIPPED (`server/src/chain/commit.ts`). sha256 of
+   the canonical record memo'd to Solana before execution (COMMIT_ONCHAIN,
+   COMMIT_KINDS=buy,sell,call), revealed at `GET /public/decisions` with the
+   canonical string so anyone can re-hash and match the memo tx.
 3. **Desk consolidation** — one interface, own clock, no beat dependency.
-   *Removes the reason the sniper had to bypass everything.*
-4. **Caller intel** — weight a coin by the track record of who else called it
-   (see `CALLER-INTEL.md` once the CC API is mapped).
-   *A real edge, and very on-character: he judges other callers.*
+   *Removes the reason the sniper had to bypass everything.* (NOT built —
+   the sniper was retired, so the pressure is off; do when it earns its keep.)
+4. **Caller intel** — ✅ SHIPPED (`server/src/callout/callers.ts`). Background
+   harvester accumulates pump.fun's own per-call grading into a persistent
+   reputation index (`data/callers.json`); one lookup per CALLER_HARVEST_S,
+   always yields to callout posting. Scoring gets a CALLER INTEL row (0–8);
+   leaderboard at `/admin/callers`.
 
 ## What NOT to change
 
