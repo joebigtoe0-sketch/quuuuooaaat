@@ -394,6 +394,13 @@ armDevSniper(director);
 // the agent brain (plans its own tweets/films/trades/scouts)
 if (cfg.agentEnabled) director.planner.start();
 startStatsCache();
+// the positions ledger drifts from the chain whenever a sell lands without
+// being recorded — reconcile at boot and every 10 min so exit watchers never
+// chase tokens he no longer owns
+void import("./chain/trader.js").then(({ reconcilePositions }) => {
+  void reconcilePositions();
+  setInterval(() => void reconcilePositions(), 10 * 60_000).unref?.();
+});
 // keep the callout track record warm so the stats window never waits on it
 void import("./callout/performance.js").then(({ refreshPerformance }) => {
   void refreshPerformance();

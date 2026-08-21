@@ -170,6 +170,12 @@ export async function onSnipeLaunch(item: ConveyorItem): Promise<void> {
 /** Exit discipline: 95% bonding (bank before migration) or the clock. */
 async function watchExits(): Promise<void> {
   if (!dir) return;
+  // with sniping retired the watcher has nothing legitimate to close, and it
+  // was still queueing sells for long-dead positions every minute
+  if (!cfg.devsnipeEnabled) return;
+  // the wallet is the truth — drop ghosts before deciding anything
+  const { reconcilePositions } = await import("../chain/trader.js");
+  await reconcilePositions().catch(() => 0);
   for (const [m, at] of exiting) if (Date.now() - at > 10 * 60_000) exiting.delete(m);
   for (const p of openPositions()) {
     if (p.strategyId !== STRAT_ID || exiting.has(p.mint)) continue;

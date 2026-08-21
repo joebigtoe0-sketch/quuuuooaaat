@@ -65,6 +65,40 @@ export async function bankSol(): Promise<number> {
 export function openPositions(): Position[] {
   return positions.filter((p) => !p.closed);
 }
+
+/**
+ * RECONCILE THE LEDGER AGAINST THE CHAIN.
+ *
+ * A position stays "open" in the ledger until a sell records against it, so any
+ * exit that landed on-chain without being written back leaves a ghost — and the
+ * exit watchers then queue sells forever for tokens he no longer owns ("EXIT
+ * queued: $VOLUME — held 37h", when $VOLUME left the wallet a day ago).
+ *
+ * The wallet is the truth. Anything the wallet doesn't hold gets closed.
+ */
+export async function reconcilePositions(): Promise<number> {
+  if (cfg.tradeDryRun) return 0; // paper positions have no on-chain balance
+  const wallet = loadWallet();
+  if (!wallet) return 0;
+  let closed = 0;
+  for (const p of openPositions()) {
+    try {
+      const bal = await getTokenBalanceRaw(new PublicKey(p.mint), wallet.publicKey);
+      // dust: below 1 whole token (6dp) it can't be sold and isn't a position
+      if (bal >= 1_000_000n) continue;
+      p.tokensRaw = "0";
+      p.closed = {
+        at: Date.now(),
+        solReceived: p.soldSol ?? 0,
+        reason: "no longer in the wallet — ledger reconciled to chain",
+      };
+      closed++;
+      log.info("trade", `reconciled: $${p.symbol} closed — wallet holds none`);
+    } catch { /* RPC hiccup: leave it open, next pass tries again */ }
+  }
+  if (closed) save();
+  return closed;
+}
 /** Gross SOL bought today vs the daily cap — for /health diagnostics. */
 export function tradeSpentToday(): { spent: number; cap: number } {
   return { spent: spentToday(), cap: cfg.maxDailyTradeSol };
@@ -174,6 +208,23 @@ export async function tradeSell(
   // the conviction rail: a long-term hold only closes when the desk says so
   if (pos.strategyId === HOLD_STRATEGY && !operator)
     return { ok: false, dry: false, why: "long-term conviction hold — not sold on impulse" };
+  // a ghost position: the ledger says he holds it, the wallet disagrees. Close
+  // it here rather than failing this sell and every future one.
+  if (!cfg.tradeDryRun) {
+    const w = loadWallet();
+    if (w) {
+      try {
+        const bal = await getTokenBalanceRaw(new PublicKey(mint), w.publicKey);
+        if (bal < 1_000_000n) {
+          pos.tokensRaw = "0";
+          pos.closed = { at: Date.now(), solReceived: pos.soldSol ?? 0, reason: "no longer in the wallet — ledger reconciled to chain" };
+          save();
+          log.info("trade", `reconciled on sell: $${pos.symbol} — wallet holds none`);
+          return { ok: false, dry: false, why: "position already gone from the wallet — ledger closed" };
+        }
+      } catch { /* RPC hiccup — fall through and let the sell try */ }
+    }
+  }
   fraction = Math.min(1, Math.max(0.1, fraction));
 
   const sellRaw = (BigInt(pos.tokensRaw) * BigInt(Math.round(fraction * 100))) / 100n;
