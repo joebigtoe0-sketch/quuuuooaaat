@@ -52,9 +52,11 @@ try {
 } catch { /* first run */ }
 const seenIds = new Set(db.seen ?? []);
 // warm start: seed wallets we have firehose history for but haven't met yet
+// (lastSeen = when the firehose harvest saw them; names backfill in the loop)
+const SEED_AT = Date.parse("2026-08-15T14:04:54.367Z");
 for (const s of CALLER_SEED) {
   if (!db.callers[s.w]) {
-    db.callers[s.w] = { username: "", calls: s.n, sumMax: s.avg * s.n, best: s.best, coins: [], lastSeen: 0 };
+    db.callers[s.w] = { username: "", calls: s.n, sumMax: s.avg * s.n, best: s.best, coins: [], lastSeen: SEED_AT };
   }
 }
 function save(): void {
@@ -168,18 +170,45 @@ export async function harvestMint(mint: string): Promise<HarvestedCall[]> {
   return out;
 }
 
+/** A caller's public pump.fun username — backfilled for callers who entered
+ *  the index without one (the warm-start seed carried only wallets). */
+async function backfillOneName(): Promise<void> {
+  const wallet = Object.entries(db.callers).find(([, c]) => c.calls >= 3 && !c.username)?.[0];
+  if (!wallet) return;
+  const res = await fetch(`https://frontend-api-v3.pump.fun/users/${wallet}`, {
+    headers: { "user-agent": UA, origin: "https://pump.fun", accept: "*/*" },
+  });
+  if (!res.ok) throw new Error(`users ${res.status}`);
+  const j: any = await res.json();
+  const name = String(j?.username ?? "").trim();
+  // never loop on the same nameless wallet — a wallet slice is an honest name
+  db.callers[wallet].username = name || wallet.slice(0, 6);
+  save();
+  log.info("callers", `named ${wallet.slice(0, 8)}… → ${db.callers[wallet].username}`);
+}
+
+/** Fresh callout read for the analysis hot path: harvest now unless this mint
+ *  was already harvested in the last 10 min. One public GET, sub-second. */
+export async function harvestFresh(mint: string): Promise<void> {
+  const h = db.mints[mint];
+  if (h && Date.now() - h.at < 10 * 60_000) return;
+  await harvestMint(mint);
+}
+
 let timer: ReturnType<typeof setInterval> | null = null;
 
 /** Start the slow background loop. One request per tick, revenue always first. */
 export function startCallerHarvester(): void {
   if (timer) return;
   timer = setInterval(async () => {
-    if (!queue.length) return;
-    const mint = queue.shift()!;
     try {
-      await harvestMint(mint);
+      if (queue.length) {
+        await harvestMint(queue.shift()!);
+      } else {
+        await backfillOneName(); // idle tick → give a graded caller their name
+      }
     } catch (e) {
-      log.warn("callers", `harvest ${mint.slice(0, 8)}… failed: ${String(e).slice(0, 100)}`);
+      log.warn("callers", `harvest tick failed: ${String(e).slice(0, 100)}`);
     }
   }, Math.max(30, cfg.callerHarvestS) * 1000);
   log.info("callers", `harvester on — one lookup / ${cfg.callerHarvestS}s, refresh ≥ ${cfg.callerRefreshH}h, index has ${Object.keys(db.callers).length} callers`);

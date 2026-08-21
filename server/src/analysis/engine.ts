@@ -91,10 +91,12 @@ export async function analyze(mint: string, sentAmountRaw: bigint | null): Promi
   const paid = dexPaid === true || dexStats?.hasInfo === true ? true : dexPaid;
 
   const sentPct = sentAmountRaw === null ? null : (Number(sentAmountRaw) / 1e6 / 1e9) * 100;
-  // caller intel: sync cache read only (never a network call in the hot path);
-  // queue the mint so the background harvester fills the cache for next time
-  const { callerSignal, requestHarvest } = await import("../callout/callers.js");
-  requestHarvest(mint);
+  // caller intel: harvest this coin's callout page NOW (one public GET) so the
+  // CALLER INTEL row and the tape exist on the FIRST research, not the next
+  // one — queueing it behind the research that needed it meant every verdict
+  // ran on an empty cache
+  const { callerSignal, harvestFresh } = await import("../callout/callers.js");
+  await withTimeout(harvestFresh(mint), 6000);
   const callerIntel = callerSignal(mint);
   const scored = scoreToken({
     state, coin, holders: holdersRaw, dev, smart, ageMin, sentUsd, sentPct,

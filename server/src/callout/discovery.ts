@@ -86,9 +86,13 @@ export function startCalloutDiscovery(
           pool = next;
           cursor = 0;
           poolAt = Date.now();
+          log.info("discovery", `sweep pool refreshed — ${pool.length} trending coins`);
         }
       }
-      if (!pool.length) return;
+      if (!pool.length) {
+        log.warn("discovery", "sweep pool empty — both trending sources returned nothing");
+        return;
+      }
       const mint = pool[cursor++ % pool.length];
       const calls = await harvestMint(mint); // deposits reputation + tape as a side effect
       if (today() !== st.day) {
