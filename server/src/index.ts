@@ -562,6 +562,13 @@ app.get("/callouts", (_req, res) => {
   res.sendFile(path.resolve(cfg.root, "..", "client", "public", "callouts.html"));
 });
 
+// THE CALLER BOARD — the same treatment for everyone else's calls. Data comes
+// from /public/callers so the page can fetch it without the admin key.
+app.get("/callers", (_req, res) => {
+  res.set("Cache-Control", "no-cache");
+  res.sendFile(path.resolve(cfg.root, "..", "client", "public", "callers.html"));
+});
+
 app.get("/live", (_req, res) => {
   const f = path.resolve(cfg.root, "..", "client", "dist", "index.html");
   if (fs.existsSync(f)) res.sendFile(f);
@@ -980,6 +987,19 @@ app.get("/public/callouts", async (req, res) => {
 app.get("/admin/callers", async (_req, res) => {
   try {
     const { topCallers } = await import("./callout/callers.js");
+    res.json({ ok: true, rows: topCallers(50) });
+  } catch (e) {
+    res.json({ ok: false, why: String(e).slice(0, 120) });
+  }
+});
+
+/** THE CALLER BOARD, public — same rows /admin/callers returns, minus the key,
+ *  so the page at /callers can fetch it from a browser. Reputation grades on
+ *  public pump.fun callouts were never secret; only the admin surface was. */
+app.get("/public/callers", async (_req, res) => {
+  try {
+    const { topCallers } = await import("./callout/callers.js");
+    res.set("Cache-Control", "no-cache");
     res.json({ ok: true, rows: topCallers(50) });
   } catch (e) {
     res.json({ ok: false, why: String(e).slice(0, 120) });
