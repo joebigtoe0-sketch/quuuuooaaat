@@ -1169,9 +1169,12 @@ export class Beats {
     // already fixed, so the register only supplies tone — and a supplied topic
     // is almost always about the climb, so bias there rather than rolling desk.
     const { pickRegister, JARGON_BAN, REGISTERS } = await import("../brain/registers.js");
-    const reg = topic.trim()
-      ? REGISTERS.find((r) => r.id === "milestone") ?? REGISTERS[0]
-      : pickRegister();
+    // Gate on MANUAL, not on topic: "topic" is a required field on the tweet
+    // action, so the planner always sends one — checking it meant the register
+    // never rotated and every post came out in the same voice, about trades.
+    // Operator topic  -> binding subject, tone only.
+    // Planner tweet   -> the REGISTER is the assignment; his topic is material.
+    const reg = manual ? REGISTERS.find((r) => r.id === "milestone") ?? REGISTERS[0] : pickRegister();
     const text0 = await Promise.race([
       callFreeform(
         (await import("../brain/prompts.js")).PERSONA +
@@ -1179,6 +1182,9 @@ export class Beats {
           "\nTOKEN vs TRADING — be unambiguous. Your positions, slots, sizing, entries, buys, and cuts are your TRADING BOOK. Your own coin's price, market cap, buybacks, and holders are $RIKU, the token. If this tweet is about the token, write the $RIKU cashtag so readers know you mean the coin — NOT your portfolio. A token post must never read like a trading post (e.g. 'down 66%, six slots empty, sized for zero' reads as your book — if you meant the coin, say '$RIKU down 66%'). The $RIKU cashtag is the one exception to the no-hashtags rule." +
           "\nCASHTAGS ARE MANDATORY — NEVER WRITE A COIN'S NAME: refer to every coin by its TICKER with a $ in front. Write $SAHUR, never 'Tung Tung Tung Sahur'. Write $TROLLBULL, never TROLLBULL or 'Trollbull'. X turns $TICKER into a clickable cashtag that puts your post in front of everyone watching that coin — a name or a bare ticker is invisible dead text. This is the one exception to the no-hashtags rule and it applies to EVERY coin you mention, including your own $RIKU. If you don't know a coin's ticker, describe it without naming it at all." +
           `\nWRITE IN THIS REGISTER — ${reg.id.toUpperCase()}: ${reg.brief}` +
+          (manual
+            ? ""
+            : "\nTHE REGISTER IS THE ASSIGNMENT AND IT OUTRANKS THE NOTE. The note below is your own scratch material and it will usually be about your trading day, because that's what you were doing when you wrote it. Do not let that decide the post. If the note doesn't fit this register, IGNORE IT COMPLETELY and write in the register anyway — you have a whole mind, not just a P&L.") +
           (reg.id === "desk" ? "" : `\n${JARGON_BAN}`) +
           "\nRANGE IS THE JOB: an account that files the same market report all day is unfollowable. The traders worth reading are people first — they joke, wonder, ask, and occasionally show a number. Your trading credibility is the floor under the post, not the subject of every post." +
           "\nCRITICAL VARIETY RULES: below are your RECENT tweets. Your new tweet must not reuse their openings, sentence structures, phrases, or angle." +
