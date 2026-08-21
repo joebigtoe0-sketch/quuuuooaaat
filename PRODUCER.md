@@ -187,24 +187,36 @@ block a trade — revenue first, proof second.
 
 ## 9. CALLER INTEL (new — he judges other callers)
 
-pump.fun grades every caller's every call (`multiplier` / `maxMultiplier` on
-the callout feed). A background harvester now accumulates that grading into a
-persistent reputation index of pump.fun callers (`data/callers.json`): every
-coin RIKU researches or trades gets its callout page harvested, one lookup per
-90s, and it always yields to RIKU's own callout posting (revenue first, the API
-punishes bursts).
+pump.fun grades every caller's every call (each callout's peak multiple is in
+its public data). A background harvester accumulates that grading into a
+persistent reputation index of pump.fun callers (`data/callers.json`), reading
+each coin's PUBLIC callout page — it never touches the rate-limited CC API,
+which stays reserved for posting RIKU's own callouts. The index was warm-
+started from a 3,146-callout firehose harvest, so it has teeth already.
 
 ```
-GET /admin/callers        # leaderboard: callers with ≥3 scored calls, by avg peak
+GET /admin/callers        # leaderboard: callers with ≥3 graded calls, by avg peak
 ```
 
-Research verdicts now include a **CALLER INTEL** row: a proven runner-caller on
-a coin adds up to +8 to the score; a crowd of no-record tourists is a warn.
+Three places it feeds:
+
+- **CALLER INTEL row in research verdicts** — a proven runner-caller on a coin
+  adds up to +8 to the score; a crowd of no-record tourists is a warn.
+- **THE CALLER TAPE** — the actual callout texts other callers posted on a
+  coin (with how each call ran) go into his research prompt. He forms his
+  thesis with the tape in view: agrees with good reads, roasts bad callers'
+  cope, quotes their words. All real quotes — never invented.
+- **CALLOUT DISCOVERY** — trending coins' callout pages are swept continuously;
+  a FRESH call by a caller whose record clears the bar (default: ≥3 graded
+  calls at ≥1.5x avg peak) pushes the coin into his research queue
+  automatically, framed as "a caller I rate just called this". Capped
+  (default 8/day). Discovery only nominates research — it can never buy.
 
 Content angles: he's a caller who *ranks other callers*. "who's actually good
 on this casino" leaderboard bits, "a 2.7x-average caller just aped the same
-coin as me" flexes, roasting tourist-swarmed coins. The index gets smarter
-every day it runs — early on it will be thin, don't oversell it.
+coin as me" flexes, roasting tourist-swarmed coins. And now the show has a
+new beat type that writes itself: he follows a good caller's call, does his
+own read, and agrees or dunks — with receipts.
 
 ## 10. Trades and the wallet (what you can and cannot do)
 

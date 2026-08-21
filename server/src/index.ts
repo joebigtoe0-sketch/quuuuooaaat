@@ -1013,4 +1013,11 @@ server.listen(cfg.port, cfg.host, () => {
   // caller-intel harvester: one CC lookup / CALLER_HARVEST_S, always yields to
   // callout posting (revenue first)
   void import("./callout/callers.js").then((m) => m.startCallerHarvester());
+  // callout discovery: proven callers on the public firehose nominate coins
+  // into the research queue — the feed brings him coins, research still judges
+  void import("./callout/discovery.js").then((m) =>
+    m.startCalloutDiscovery((mint, why) =>
+      director.onAgentAction({ action: { do: "research", mint, why }, plannedAt: Date.now() }),
+    ),
+  );
 });

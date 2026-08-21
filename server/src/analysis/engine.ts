@@ -30,6 +30,9 @@ export interface Analysis {
   ageMin: number | null;
   sentUsd: number | null; // null = conveyor pick (nothing was sent)
   solUsd: number;
+  /** What other pump.fun callers actually wrote about this coin (their callout
+   *  texts + each call's multiple) — thesis material, and roast material. */
+  callerTape: { who: string; text: string; mult: number | null }[];
   rows: CheckRow[];
   score: number;
   tier: VerdictTier;
@@ -148,5 +151,7 @@ export async function analyze(mint: string, sentAmountRaw: bigint | null): Promi
     hardReject: scored.hardReject,
     buyScore: buyScored.score,
     buyReject: buyScored.hardReject,
+    callerTape: (await import("../callout/callers.js").then((m) => m.callerTape(mint)).catch(() => []))
+      .map((t) => ({ who: t.who, text: t.text, mult: t.mult })),
   };
 }

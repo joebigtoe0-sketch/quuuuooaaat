@@ -117,6 +117,13 @@ export const cfg = {
   // to the posting path — reads must never starve the thing that earns.
   callerHarvestS: num("CALLER_HARVEST_S", 90),
   callerRefreshH: num("CALLER_REFRESH_H", 6),
+  // callout discovery: the public firehose nominates coins called by callers
+  // whose accumulated record clears the bar (research only — never a buy)
+  callerDiscovery: bool("CALLER_DISCOVERY", true),
+  callerDiscoveryS: num("CALLER_DISCOVERY_S", 120),
+  callerDiscoveryAvg: num("CALLER_DISCOVERY_AVG", 1.5),
+  callerDiscoveryMinCalls: num("CALLER_DISCOVERY_MIN_CALLS", 3),
+  callerDiscoveryMaxPerDay: num("CALLER_DISCOVERY_MAX_PER_DAY", 8),
   // ---------- dev-sniper (the quiet edge; the show never names it) ----------
   // instant entries on launches from PROVEN devs while mc is still under the
   // ceiling; exit at 95% bonding or after maxHold. Sizing follows his own book

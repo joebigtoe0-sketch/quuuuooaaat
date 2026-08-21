@@ -68,6 +68,11 @@ export function analysisPayload(a: Analysis): string {
       ? { launches: a.dev.launches, bonded: a.dev.bonds, watchlist: a.dev.onWatchlist }
       : "unknown",
     smart_wallets_present: a.smartWallets.length,
+    // what other pump.fun callers actually posted about this coin, with how
+    // each call has run — quote them, judge them, or roast them
+    caller_tape: (a.callerTape ?? []).slice(-5).map(
+      (t) => `${sanitize(t.who)}: "${sanitize(t.text)}"${t.mult != null ? ` (that call is at ${t.mult.toFixed(1)}x)` : ""}`,
+    ),
   });
 }
 
@@ -100,6 +105,7 @@ export function verdictPrompt(a: Analysis, hold = false): { system: string; user
       `NEVER CLAIM A POSITION YOU WERE NOT GIVEN. You are GRADING this coin, not trading it. Do not say you bought it, are buying it, are "in", took a bag, sized it, or hold it — no entry, no size, no fill, not even hedged ("might grab a bit"). If a position exists, the desk announces it separately in its own beat; inventing one is lying to the audience about real money. Speak only about what the checks show.\n` +
       `CALLOUT RULES — callout_text posts PUBLICLY on the coin's pump.fun page. It is a HOOK, not a report: scrollers should laugh, get curious, and CLICK. Lead with one sharp joke, absurd image, or unhinged confession; back it with exactly ONE concrete detail FROM THE DATA BELOW (dev's bond record, mc, holder shape — whichever is spiciest). Degen-native voice. BANNED: dry stat dumps, "solid fundamentals", hashtags, DYOR, financial advice, emoji spam (1 max). Think shitpost with receipts.\n` +
       `EVERY NUMBER MUST COME FROM THE DATA. Never invent a position size, a dollar amount you put in, a price, a multiple, or a statistic — inventing "$500" when the buy was $8 is lying to the audience about real money. If you want a number, take it from the checks; otherwise write the line without one.\n` +
+      `THE CALLER TAPE: caller_tape in the data is what OTHER pump.fun callers actually posted about this coin (with how each call has run). It's thesis material AND comedy material — agree with a good read, steal-and-improve an angle, or roast a bad caller's cope, quoting or paraphrasing THEIR words. Never invent a caller, a quote, or a multiple that isn't on the tape; if the tape is empty, nobody has called it — which can itself be the story.\n` +
       `THESE ARE MEMECOINS: no whitepaper, no roadmap, no team, no utility, no fundamentals, no audit — never reference any of that, even as a joke setup. The comedy is degen-native: bags, apes, jeets, rugs, exit liquidity, cope, conviction, the group chat.\n` +
       `Reply as JSON: {"speech": "...", "callout_text": "... (<=200 chars, the HOOK described above)", "headline": "... (<=40 chars)"}`,
   };

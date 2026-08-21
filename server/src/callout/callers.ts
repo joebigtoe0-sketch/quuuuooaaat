@@ -2,25 +2,26 @@ import fs from "node:fs";
 import path from "node:path";
 import { cfg } from "../config.js";
 import { log } from "../log.js";
-import { ccGet, ccQuietOk } from "./cc.js";
+import { CALLER_SEED } from "./callers_seed.js";
 
 /**
  * CALLER INTEL — pump.fun grades every caller's every call for us.
  *
- * `/api/v1/communities/{mint}/callouts` returns, per callout, the caller's
- * identity AND pump.fun's own scoring of that call (multiplier /
- * maxMultiplier). There is no per-user history route, so the reputation index
- * is built by ACCUMULATION: every coin RIKU researches or calls gets its
- * callout page harvested once, and each harvest deposits every caller seen
- * into a persistent index. Over weeks this becomes a map of who on pump.fun
- * actually calls runners — a real edge, and very on-character: he judges
- * other callers.
+ * `frontend-api-v3.pump.fun/callout/top/{mint}` is PUBLIC (no cookie, no CC
+ * token — verified 2026-08-21; the global /callout/recent firehose went
+ * auth-only around the same date). Each callout carries the caller's WALLET,
+ * username, thesis text, and prices from which the call's peak multiple is
+ * derived (maxPriceSol / calloutPrice). The reputation index is built by
+ * ACCUMULATION: every coin RIKU researches, calls, or sees trending gets its
+ * callout page harvested, and each callout is deposited ONCE (calloutId-
+ * deduped) into a persistent per-wallet index. Warm-started from a 3,146-
+ * callout firehose harvest (callers_seed.ts). Over weeks this becomes a map
+ * of who on pump.fun actually calls runners — a real edge, and very
+ * on-character: he judges other callers.
  *
- * Rules of engagement with the API (it punishes bursts with penalty windows):
- *  - ONE request per tick, ticks CALLER_HARVEST_S apart (default 90s)
- *  - always yields to the posting path (ccQuietOk) — callouts are revenue,
- *    harvesting is homework
- *  - a mint is re-harvested at most every CALLER_REFRESH_H hours (default 6)
+ * The rate-limited CC API is NOT used here at all — it's reserved for the
+ * revenue path (posting RIKU's own callouts). Harvesting stays polite anyway:
+ * one lookup per CALLER_HARVEST_S, per-mint refresh ≥ CALLER_REFRESH_H.
  */
 
 interface CallerStat {
@@ -31,9 +32,16 @@ interface CallerStat {
   coins: string[]; // mints this caller was seen on (capped)
   lastSeen: number;
 }
+interface TapeLine {
+  who: string; // username or wallet slice
+  text: string;
+  mult: number | null; // the call's multiple at last sight
+  at: number;
+}
 interface CallerDb {
-  callers: Record<string, CallerStat>; // by userId
-  mints: Record<string, { at: number; callers: string[] }>; // harvest log per mint
+  callers: Record<string, CallerStat>; // by caller WALLET address
+  mints: Record<string, { at: number; callers: string[]; tape?: TapeLine[] }>; // harvest log per mint
+  seen?: string[]; // calloutIds already deposited (each call counts once, ever)
 }
 
 const FILE = () => path.join(cfg.dataDir, "callers.json");
@@ -42,8 +50,16 @@ try {
   const j = JSON.parse(fs.readFileSync(FILE(), "utf8"));
   if (j?.callers && j?.mints) db = j;
 } catch { /* first run */ }
+const seenIds = new Set(db.seen ?? []);
+// warm start: seed wallets we have firehose history for but haven't met yet
+for (const s of CALLER_SEED) {
+  if (!db.callers[s.w]) {
+    db.callers[s.w] = { username: "", calls: s.n, sumMax: s.avg * s.n, best: s.best, coins: [], lastSeen: 0 };
+  }
+}
 function save(): void {
   try {
+    db.seen = [...seenIds].slice(-20000);
     fs.writeFileSync(FILE(), JSON.stringify(db));
   } catch (e) {
     log.warn("callers", `save failed: ${String(e).slice(0, 80)}`);
@@ -58,6 +74,29 @@ export function requestHarvest(mint: string): void {
   const seen = db.mints[mint];
   if (seen && Date.now() - seen.at < cfg.callerRefreshH * 3_600_000) return;
   if (!queue.includes(mint)) queue.push(mint);
+}
+
+/** Keep the actual callout TEXT per mint — the "caller tape" RIKU reads when
+ *  forming a thesis. Capped, deduped, newest last. */
+export function noteTape(mint: string, who: string, text: string, mult: number | null, at: number): void {
+  const t = (text ?? "").trim().slice(0, 200);
+  if (!t) return;
+  const m = (db.mints[mint] ??= { at: 0, callers: [] });
+  const tape = (m.tape ??= []);
+  if (tape.some((l) => l.text === t)) return;
+  tape.push({ who: who || "anon", text: t, mult, at });
+  if (tape.length > 6) m.tape = tape.slice(-6);
+}
+
+export function callerTape(mint: string): TapeLine[] {
+  return db.mints[mint]?.tape ?? [];
+}
+
+/** A caller's accumulated reputation, if they have one. */
+export function callerRep(userId: string): { calls: number; avg: number; best: number; username: string } | null {
+  const c = db.callers[userId];
+  if (!c || c.calls < 1) return null;
+  return { calls: c.calls, avg: c.sumMax / c.calls, best: c.best, username: c.username };
 }
 
 function noteCall(userId: string, username: string, mint: string, maxMultiplier: number | null): void {
@@ -77,21 +116,56 @@ function noteCall(userId: string, username: string, mint: string, maxMultiplier:
   }
 }
 
-async function harvestOne(mint: string): Promise<void> {
-  const j = await ccGet(`/api/v1/communities/${mint}/callouts?limit=50`);
-  const rows: any[] = Array.isArray(j) ? j : j?.callouts ?? j?.data ?? [];
+const UA =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36";
+
+export interface HarvestedCall {
+  calloutId: string;
+  wallet: string;
+  username: string;
+  thesis: string;
+  /** peak multiple of the call so far (maxPriceSol / calloutPrice) */
+  peakMult: number | null;
+  at: number;
+}
+
+/** Read a coin's callout page (public pump.fun route) and deposit every
+ *  not-yet-seen callout into the reputation index + the coin's tape.
+ *  Returns the parsed callouts so discovery can nominate off fresh ones. */
+export async function harvestMint(mint: string): Promise<HarvestedCall[]> {
+  const res = await fetch(`https://frontend-api-v3.pump.fun/callout/top/${mint}?limit=50`, {
+    headers: { "user-agent": UA, origin: "https://pump.fun", accept: "*/*" },
+  });
+  if (!res.ok) throw new Error(`callout/top ${res.status}`);
+  const j: any = await res.json();
+  const rows: any[] = j?.callouts ?? [];
+  const out: HarvestedCall[] = [];
   const ids: string[] = [];
   for (const r of rows) {
-    const userId = String(r?.userId ?? r?.user?.id ?? "");
-    const username = String(r?.username ?? r?.user?.username ?? "");
-    if (!userId) continue;
-    const mm = r?.maxMultiplier ?? r?.max_multiplier ?? null;
-    noteCall(userId, username, mint, typeof mm === "number" ? mm : mm != null ? Number(mm) : null);
-    if (!ids.includes(userId)) ids.push(userId);
+    const wallet = String(r?.userId ?? "");
+    const calloutId = String(r?.calloutId ?? "");
+    if (!wallet || !calloutId) continue;
+    const username = String(r?.username ?? "").trim();
+    const at = Number(r?.createdAt ?? 0) || Date.now();
+    const entry = Number(r?.calloutPrice ?? 0);
+    const peak = Number(r?.maxPriceSol ?? 0);
+    const cur = typeof r?.multiple === "number" ? r.multiple : null;
+    const peakMult = entry > 0 && peak > 0 ? peak / entry : cur;
+    // each callout funds a caller's record exactly once, ever
+    if (!seenIds.has(calloutId)) {
+      seenIds.add(calloutId);
+      noteCall(wallet, username, mint, peakMult);
+    }
+    const thesis = String(r?.thesis ?? "").trim();
+    if (thesis) noteTape(mint, username || wallet.slice(0, 6), thesis, cur ?? peakMult, at);
+    if (!ids.includes(wallet)) ids.push(wallet);
+    out.push({ calloutId, wallet, username, thesis, peakMult, at });
   }
-  db.mints[mint] = { at: Date.now(), callers: ids };
+  const tape = db.mints[mint]?.tape;
+  db.mints[mint] = { at: Date.now(), callers: ids, tape };
   save();
   log.info("callers", `harvested ${mint.slice(0, 8)}… — ${rows.length} callouts, ${ids.length} callers (index: ${Object.keys(db.callers).length})`);
+  return out;
 }
 
 let timer: ReturnType<typeof setInterval> | null = null;
@@ -101,15 +175,11 @@ export function startCallerHarvester(): void {
   if (timer) return;
   timer = setInterval(async () => {
     if (!queue.length) return;
-    if (!ccQuietOk()) return; // a callout just posted or the API is punishing us — wait
     const mint = queue.shift()!;
     try {
-      await harvestOne(mint);
+      await harvestMint(mint);
     } catch (e) {
-      const msg = String(e).slice(0, 100);
-      // 429 → back of the queue, ccQuietOk() now holds the whole loop off
-      if (/^Error: 429|^429/.test(msg)) queue.push(mint);
-      log.warn("callers", `harvest ${mint.slice(0, 8)}… failed: ${msg}`);
+      log.warn("callers", `harvest ${mint.slice(0, 8)}… failed: ${String(e).slice(0, 100)}`);
     }
   }, Math.max(30, cfg.callerHarvestS) * 1000);
   log.info("callers", `harvester on — one lookup / ${cfg.callerHarvestS}s, refresh ≥ ${cfg.callerRefreshH}h, index has ${Object.keys(db.callers).length} callers`);
