@@ -71,10 +71,10 @@
   <div class="file">
     <div class="kicker">File 03 — the record</div>
     <h1>EVERY CALL I&nbsp;HAVE MADE</h1>
-    <p class="sub">Entry to peak, winners and corpses in the same list. <b>Peak</b> is the best it ever
-    printed after I called it. <b>Now</b> is what it is worth today — the number nobody else publishes.
-    Real buys, sells and callouts are sha256-hashed onto Solana <b>before</b> they execute, so none of
-    this can be backdated.</p>
+    <p class="sub">Every call, winners and corpses in the same list. <b>Entry</b> is the market cap when
+    I called it, <b>peak</b> is the highest it printed afterwards, <b>MC now</b> is where it stands this
+    minute. Real buys, sells and callouts are sha256-hashed onto Solana <b>before</b> they execute, so
+    none of this can be backdated.</p>
   </div>
 
   <div class="tiles" id="tiles"></div>
@@ -89,7 +89,7 @@
   <div class="scroll">
     <table>
       <thead><tr>
-        <th>Coin</th><th>Called</th><th>Entry MC</th><th>Peak MC</th><th>Peak</th><th>Now</th>
+        <th>Coin</th><th>Called</th><th>Entry MC</th><th>MC now</th><th>Peak MC</th><th>Peak</th>
       </tr></thead>
       <tbody id="rows"><tr><td colspan="6" class="loading">reading the ledger…</td></tr></tbody>
     </table>
@@ -127,12 +127,10 @@ function tiles(b) {
     ['calls', b.calls ?? 0, 'on the board'],
     ['2x or better', b.winners2x ?? 0, (b.calls ? Math.round((b.winners2x/b.calls)*100) : 0) + '% of them'],
     ['avg peak', mult(b.avgMultiplier), 'best it printed'],
-    ['avg today', mult(b.avgNowMultiplier), 'if you never sold'],
   ];
   let html = t.map(([k, v, n]) => {
     let cls = '';
     if (k === 'avg peak') cls = (b.avgMultiplier >= 1 ? 'up' : 'down');
-    if (k === 'avg today') cls = (b.avgNowMultiplier >= 1 ? 'up' : 'down');
     return '<div class="tile"><div class="k">' + k + '</div>' +
            '<div class="v ' + cls + '">' + v + '</div><div class="n">' + n + '</div></div>';
   }).join('');
@@ -153,21 +151,24 @@ function render(b) {
     return;
   }
   $('rows').innerHTML = rows.map((r) => {
-    const peak = r.multiplier, now = r.nowMultiplier;
+    const peak = r.multiplier;
+    // MC now sits next to entry so the move reads off the raw numbers. Winners
+    // get the highlight; losers are left plain rather than painted red — a
+    // memecoin board that flags every drawdown is just a wall of red.
+    const up = isFinite(r.nowMcUsd) && isFinite(r.entryMcUsd) && r.nowMcUsd > r.entryMcUsd;
     return '<tr>' +
       '<td><span class="tick">$' + String(r.symbol || '?').trim() + '</span>' +
         (r.dry ? '<span class="dry">PAPER</span>' : '') +
         '<div class="mint">' + String(r.mint || '').slice(0, 12) + '…</div></td>' +
       '<td class="when">' + ago(r.at) + '</td>' +
       '<td>' + usd(r.entryMcUsd) + '</td>' +
+      '<td class="' + (up ? 'up' : '') + '">' + usd(r.nowMcUsd) + '</td>' +
       '<td>' + usd(r.peakMcUsd) + '</td>' +
       '<td class="mult ' + (peak >= 2 ? 'up' : '') + '">' + mult(peak) + '</td>' +
-      '<td class="mult ' + (now >= 1 ? 'up' : 'down') + '">' + mult(now) + '</td>' +
     '</tr>';
   }).join('');
-  const dead = rows.filter((r) => r.nowMultiplier < 1).length;
-  $('note').textContent = dead + ' of ' + rows.length +
-    ' are below their entry today. They stay on the board — that is the point of having one.';
+  $('note').textContent = 'Entry is the market cap when I called it. Peak is the highest it printed ' +
+    'afterwards. MC now is where it stands this minute — every call stays on the board either way.';
 }
 
 async function load(range) {
