@@ -60,6 +60,21 @@ function today(): string {
 
 type OnFind = (mint: string, why: string) => { ok: boolean; why?: string };
 
+// gate telemetry: WHY candidates die, summarized every ~10 min — a silent
+// pipeline is undebuggable ("no nominations" must never require guesswork)
+const gateStats: Record<string, number> = {};
+let gateLogAt = 0;
+function gate(reason: string): false {
+  gateStats[reason] = (gateStats[reason] ?? 0) + 1;
+  if (Date.now() - gateLogAt > 10 * 60_000) {
+    gateLogAt = Date.now();
+    const parts = Object.entries(gateStats).map(([k, v]) => `${k}:${v}`).join(" ");
+    if (parts) log.info("discovery", `gate summary (10m): ${parts}`);
+    for (const k of Object.keys(gateStats)) delete gateStats[k];
+  }
+  return false;
+}
+
 // the nomination sink, captured at startup so the external ingest endpoint
 // (residential poller → /admin/feed-ingest) drives the SAME director queue
 let onFindRef: OnFind | null = null;
@@ -74,22 +89,23 @@ async function tryNominate(
   source: string,
   skinIn?: { costUsd: number; pnlPct: number | null } | null,
 ): Promise<boolean> {
-  if (Date.now() - c.at > freshMs) return false;
+  if (Date.now() - c.at > freshMs) return gate("stale");
   if (today() !== st.day) {
     st.day = today();
     st.dayCount = 0;
   }
-  if (st.dayCount >= cfg.callerDiscoveryMaxPerDay) return false;
-  if (st.discovered[c.mint]) return false;
+  if (st.dayCount >= cfg.callerDiscoveryMaxPerDay) return gate("day-cap");
+  if (st.discovered[c.mint]) return gate("already-nominated");
   if (cfg.ownMint && c.mint === cfg.ownMint) return false;
   const seenAt = store.seenAt(c.mint);
-  if (seenAt && Date.now() - seenAt < 86_400_000) return false; // already on the show
+  if (seenAt && Date.now() - seenAt < 86_400_000) return gate("seen-on-show");
   const rep = callerRep(c.wallet);
   // med floor alongside the avg bar: a lottery-only caller (one 100x, rest
   // dust) clears any avg bar but their TYPICAL call loses — median catches it
-  if (!rep || rep.calls < cfg.callerDiscoveryMinCalls || rep.avg < cfg.callerDiscoveryAvg || rep.med < 1.2) return false;
+  if (!rep || rep.calls < cfg.callerDiscoveryMinCalls) return gate("no-rep");
+  if (rep.avg < cfg.callerDiscoveryAvg || rep.med < 1.2) return gate("rep-below-bar");
   const { touchBan } = await import("../agent/tokenguard.js");
-  if (touchBan(c.mint)) return false;
+  if (touchBan(c.mint)) return gate("banned");
   // skin check: is the caller actually positioned in what they're calling?
   const skin =
     skinIn !== undefined
@@ -183,6 +199,7 @@ function startFastFeed(onFind: OnFind): void {
   let disabled = false;
   let failStreak = 0;
   let authFails = 0;
+  let emptyStreak = 0;
   fastTimer = setInterval(async () => {
     if (disabled) return;
     try {
@@ -209,6 +226,11 @@ function startFastFeed(onFind: OnFind): void {
       const j: any = await res.json();
       const items: any[] = j?.items ?? [];
       failStreak = 0;
+      // an always-empty feed means the account follows nobody — say so loudly
+      // instead of polling silence forever
+      emptyStreak = items.length ? 0 : emptyStreak + 1;
+      if (emptyStreak === 15)
+        log.warn("discovery", "follow feed has returned 0 items for ~5 min — does the account follow anyone? (boardsync on the other server may have failed)");
       for (const it of items) {
         const c = parseAlertItem(it);
         if (!c) continue;
