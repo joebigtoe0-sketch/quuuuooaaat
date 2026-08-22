@@ -39,7 +39,7 @@ const hub = new Hub(server);
 // Control endpoints need the admin key (query ?key=, x-admin-key header, or
 // the qk cookie set by /admin login). Read-only + stage-internal endpoints
 // (feed, layout, clip upload, agent-status, health) stay open.
-const PROTECTED = /^\/admin\/(directive|reset|restart|agent$|fake-send|fake-buyback|pause|resume|goto|anim|camera|fx|tts-test|selfie-take|selfie-last|chat$|chat-add|go-live|syslog|record$|say|queue|clips|clip-file|research-now|blacklist|sniper|operator-call|operator-sell|positions|callout-entry|producer-state|tweet-exact|reply-exact|planner|autoreply|cc-probe|callers|calls|facts|kol-roster|kol-pool)/;
+const PROTECTED = /^\/admin\/(directive|reset|restart|agent$|fake-send|fake-buyback|pause|resume|goto|anim|camera|fx|tts-test|selfie-take|selfie-last|chat$|chat-add|go-live|syslog|record$|say|queue|clips|clip-file|research-now|blacklist|sniper|operator-call|operator-sell|positions|callout-entry|producer-state|tweet-exact|reply-exact|planner|autoreply|cc-probe|callers|calls|feed-ingest|facts|kol-roster|kol-pool)/;
 function hasAdminKey(req: express.Request): boolean {
   const c = String(req.headers.cookie ?? "");
   const cookieKey = c.match(/(?:^|;\s*)qk=([^;]+)/)?.[1];
@@ -1000,6 +1000,21 @@ async function callerBoard(req: express.Request, res: express.Response): Promise
 }
 app.get("/admin/callers", callerBoard);
 app.get("/public/callers", callerBoard);
+
+/** BRIDGE INGEST — a residential poller forwards raw follow-feed items here
+ *  (pump.fun's authed feed 401s from datacenter IPs). Body: {items:[...]}. */
+app.post("/admin/feed-ingest", async (req, res) => {
+  try {
+    let body: any = req.body;
+    if (typeof body === "string") body = JSON.parse(body || "{}");
+    const items = Array.isArray(body?.items) ? body.items : [];
+    const { ingestAlertItems } = await import("./callout/discovery.js");
+    const r = await ingestAlertItems(items);
+    res.json({ ok: true, ...r });
+  } catch (e) {
+    res.json({ ok: false, why: String(e).slice(0, 150) });
+  }
+});
 
 /** RAW CALL ROWS — the backtest dataset: every observed callout with entry
  *  price, peak, time-to-peak and mc at call. ?since=<ms> ?wallet=<addr> */

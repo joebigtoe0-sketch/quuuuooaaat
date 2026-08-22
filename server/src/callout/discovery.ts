@@ -60,6 +60,10 @@ function today(): string {
 
 type OnFind = (mint: string, why: string) => { ok: boolean; why?: string };
 
+// the nomination sink, captured at startup so the external ingest endpoint
+// (residential poller → /admin/feed-ingest) drives the SAME director queue
+let onFindRef: OnFind | null = null;
+
 /** The nomination gate, shared by both speeds. Returns true if nominated.
  *  `skin` (the caller's own position on the coin): pass it when the feed
  *  already delivered it; leave undefined to fetch from the public PnL route. */
@@ -195,8 +199,25 @@ function startFastFeed(onFind: OnFind): void {
 // ---------- SLOW: the trending sweep ----------
 let timer: ReturnType<typeof setInterval> | null = null;
 
+/** Ingest raw follow-feed items forwarded from a residential poller (the
+ *  pump.fun authed feed 401s from datacenter IPs like Railway's, so it's
+ *  fetched elsewhere and shipped here). Same parse + nominate path as the
+ *  local fast feed. Returns how many it nominated. */
+export async function ingestAlertItems(items: any[]): Promise<{ seen: number; nominated: number }> {
+  if (!onFindRef) return { seen: 0, nominated: 0 };
+  let nominated = 0;
+  for (const it of items) {
+    const c = parseAlertItem(it);
+    if (!c) continue;
+    if (await tryNominate(c, onFindRef, FAST_FRESH_MS, "bridge", c.skin)) nominated++;
+  }
+  if (items.length) persistIntel();
+  return { seen: items.length, nominated };
+}
+
 export function startCalloutDiscovery(onFind: OnFind): void {
   if (!cfg.callerDiscovery || timer) return;
+  onFindRef = onFind;
 
   startFastFeed(onFind);
 
