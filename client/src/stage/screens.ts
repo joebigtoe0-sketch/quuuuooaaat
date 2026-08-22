@@ -183,52 +183,55 @@ export class Screens {
       }
     } else if (v.kind === "leaderboard") {
       // HIS caller index — shown when a caller-follow entry reveals
+      const PX = 56; // TV mesh crops the edges — safe margin
       g.fillStyle = "#2affd4";
       g.font = "bold 30px 'Consolas', monospace";
-      g.fillText("◢ THE CALLER INDEX", 28, 24);
+      g.fillText("◢ THE CALLER INDEX", PX, 32);
       g.fillStyle = "#5a7290";
       g.font = "18px 'Consolas', monospace";
-      g.fillText("graded by results — median peak · % hit 2x · calls", 28, 60);
+      g.fillText("graded by results — median peak · % hit 2x · calls", PX, 68);
       g.fillStyle = "#1c2740";
-      g.fillRect(28, 86, W - 56, 3);
+      g.fillRect(PX, 94, W - 2 * PX, 3);
       // column heads
       g.fillStyle = "#5a7290";
       g.font = "bold 18px 'Consolas', monospace";
-      g.fillText("#", 36, 100);
-      g.fillText("CALLER", 84, 100);
-      g.fillText("MED", 520, 100);
-      g.fillText("2X%", 660, 100);
-      g.fillText("CALLS", 790, 100);
-      let y = 134;
+      g.fillText("#", PX + 8, 108);
+      g.fillText("CALLER", PX + 52, 108);
+      g.fillText("MED", PX + 420, 108);
+      g.fillText("2X%", PX + 550, 108);
+      g.fillText("CALLS", PX + 660, 108);
+      let y = 142;
       v.rows.slice(0, 8).forEach((r, i) => {
         const hot = v.highlight && r.name === v.highlight;
         if (hot) {
           g.fillStyle = "rgba(42,255,212,0.12)";
-          g.fillRect(28, y - 6, W - 56, 46);
+          g.fillRect(PX - 12, y - 6, W - 2 * (PX - 12), 46);
           g.strokeStyle = "#2affd4";
           g.lineWidth = 2;
-          g.strokeRect(28, y - 6, W - 56, 46);
+          g.strokeRect(PX - 12, y - 6, W - 2 * (PX - 12), 46);
         }
         g.fillStyle = "#5a6680";
         g.font = "bold 24px 'Consolas', monospace";
-        g.fillText(String(i + 1), 36, y);
+        g.fillText(String(i + 1), PX + 8, y);
         g.fillStyle = hot ? "#eafffa" : "#dfe8fa";
-        g.fillText(r.name.slice(0, 20), 84, y);
+        g.fillText(r.name.slice(0, 16), PX + 52, y);
         g.fillStyle = r.med >= 1.8 ? "#39ff88" : r.med >= 1.3 ? "#7fffd4" : "#aab6d0";
-        g.fillText(`${r.med.toFixed(2)}x`, 520, y);
+        g.fillText(`${r.med.toFixed(2)}x`, PX + 420, y);
         g.fillStyle = "#aab6d0";
-        g.fillText(`${r.h2}%`, 660, y);
-        g.fillText(String(r.calls), 790, y);
+        g.fillText(`${r.h2}%`, PX + 550, y);
+        g.fillText(String(r.calls), PX + 660, y);
         if (hot) {
           g.fillStyle = "#2affd4";
           g.font = "bold 20px 'Consolas', monospace";
-          g.fillText("→ FOLLOWING", 866, y + 2);
+          g.textAlign = "right";
+          g.fillText("→ FOLLOWING", W - PX, y + 2);
+          g.textAlign = "left";
         }
-        y += 50;
+        y += 48;
       });
       g.fillStyle = "#5a7290";
       g.font = "italic 20px 'Consolas', monospace";
-      g.fillText("pump.fun grades every call. i read the grades.", 28, H - 46);
+      g.fillText("pump.fun grades every call. i read the grades.", PX, H - 72);
     } else {
       // trade ticket
       const buy = v.side === "BUY";
@@ -271,85 +274,89 @@ export class Screens {
     this.inspection.bg();
     g.textBaseline = "top";
 
+    // the TV mesh crops the canvas edges — everything lives inside a safe area
+    const PX = 56; // left/right safe margin
+    const PB = 40; // extra bottom margin
+
     // ---- header band: eyebrow, ticker + name on one line, source chip ----
     g.fillStyle = "#0b1524";
-    g.fillRect(8, 8, W - 16, 118);
+    g.fillRect(PX - 24, 20, W - 2 * (PX - 24), 118);
     g.fillStyle = "#2affd4";
     g.font = "bold 20px 'Consolas', monospace";
-    g.fillText("◢ RESEARCH TERMINAL", 30, 22);
+    g.fillText("◢ RESEARCH TERMINAL", PX, 34);
     g.fillStyle = "#3a4a66";
     g.font = "20px 'Consolas', monospace";
     const clock = new Date().toISOString().slice(11, 16) + " UTC";
     g.textAlign = "right";
-    g.fillText(clock, W - 30, 22);
+    g.fillText(clock, W - PX, 34);
     g.textAlign = "left";
     g.fillStyle = "#e8f0ff";
     g.font = "bold 44px 'Consolas', monospace";
     const sym = `$${(s.symbol || "—").slice(0, 12)}`;
-    g.fillText(sym, 30, 52);
+    g.fillText(sym, PX, 64);
     const symW = g.measureText(sym).width;
     g.fillStyle = "#66779a";
     g.font = "22px 'Consolas', monospace";
-    g.fillText((s.name || "").slice(0, Math.max(4, Math.floor((W - 90 - symW) / 13))), 44 + symW, 68);
+    g.fillText((s.name || "").slice(0, Math.max(4, Math.floor((W - 2 * PX - 40 - symW) / 13))), PX + 16 + symW, 80);
     if (s.source) {
       const sent = s.source.startsWith("SENT");
       g.fillStyle = sent ? "#89ddff" : "#ffd700";
       g.font = "bold 18px 'Consolas', monospace";
-      g.fillText(`● ${s.source.slice(0, 60)}`, 30, 100);
+      g.fillText(`● ${s.source.slice(0, 54)}`, PX, 112);
     }
 
     // ---- checks: zebra rows, aligned columns, color only where it means ----
-    let y = 142;
-    const rows = s.rows.slice(-11);
+    let y = 156;
+    const rows = s.rows.slice(-10);
     for (let i = 0; i < rows.length; i++) {
       const r = rows[i];
       if (i % 2 === 0) {
         g.fillStyle = "#0a111d";
-        g.fillRect(8, y - 4, W - 16, 30);
+        g.fillRect(PX - 24, y - 4, W - 2 * (PX - 24), 30);
       }
       g.font = "bold 22px 'Consolas', monospace";
       g.fillStyle = VERDICT_COLOR[r.verdict];
       const mark = r.verdict === "pass" ? "✓" : r.verdict === "fail" ? "✗" : r.verdict === "warn" ? "!" : "·";
-      g.fillText(mark, 32, y);
+      g.fillText(mark, PX, y);
       g.fillStyle = r.verdict === "fail" ? "#ff8ca0" : r.verdict === "warn" ? "#ffcf8a" : "#93a3c2";
       g.font = "bold 20px 'Consolas', monospace";
-      g.fillText(r.label.slice(0, 13), 66, y + 1);
+      g.fillText(r.label.slice(0, 13), PX + 34, y + 1);
       g.fillStyle = "#dfe8fa";
       g.font = "21px 'Consolas', monospace";
-      g.fillText(r.detail.slice(0, 55), 250, y + 1);
+      g.fillText(r.detail.slice(0, 47), PX + 214, y + 1);
       y += 30;
     }
     if (!rows.length) {
       g.fillStyle = "#3a4a66";
       g.font = "22px 'Consolas', monospace";
-      g.fillText("reading the chain" + ".".repeat(1 + (Math.floor(Date.now() / 400) % 3)), 32, y + 6);
+      g.fillText("reading the chain" + ".".repeat(1 + (Math.floor(Date.now() / 400) % 3)), PX, y + 6);
     }
 
     // ---- verdict band: score bar left, tier right ----
     g.fillStyle = "#0b1524";
-    g.fillRect(8, H - 92, W - 16, 84);
+    g.fillRect(PX - 24, H - PB - 92, W - 2 * (PX - 24), 92);
     if (s.score !== null) {
       g.fillStyle = "#66779a";
       g.font = "bold 18px 'Consolas', monospace";
-      g.fillText("SCORE", 30, H - 78);
+      g.fillText("SCORE", PX, H - PB - 76);
       g.fillStyle = "#101c2e";
-      g.fillRect(30, H - 52, 560, 22);
+      g.fillRect(PX, H - PB - 48, 480, 22);
       const col = s.score >= 55 ? "#39ff88" : s.score >= 35 ? "#ffb454" : "#ff4d6d";
       g.fillStyle = col;
-      g.fillRect(30, H - 52, Math.max(4, 5.6 * s.score), 22);
+      g.fillRect(PX, H - PB - 48, Math.max(4, 4.8 * s.score), 22);
       // threshold ticks at the tier lines
       g.fillStyle = "#22314a";
-      g.fillRect(30 + 5.6 * 35, H - 56, 2, 30);
-      g.fillRect(30 + 5.6 * 55, H - 56, 2, 30);
+      g.fillRect(PX + 4.8 * 35, H - PB - 52, 2, 30);
+      g.fillRect(PX + 4.8 * 55, H - PB - 52, 2, 30);
       g.fillStyle = col;
       g.font = "bold 30px 'Consolas', monospace";
-      g.fillText(String(s.score), 606, H - 58);
+      g.fillText(String(s.score), PX + 496, H - PB - 54);
     }
     if (s.tier) {
       g.fillStyle = TIER_COLOR[s.tier] ?? "#fff";
-      g.font = "bold 42px 'Consolas', monospace";
+      g.font = "bold 40px 'Consolas', monospace";
       g.textAlign = "right";
-      g.fillText(s.tier, W - 30, H - 66);
+      g.fillText(s.tier, W - PX, H - PB - 62);
       g.textAlign = "left";
     }
     this.inspection.done();
@@ -386,20 +393,22 @@ export class Screens {
     const g = this.callouts.ctx;
     this.callouts.bg();
     g.textBaseline = "top";
+    const PX = 56; // TV mesh crops the edges — safe margin
+    const PB = 36;
 
     // ---- header: title left, TODAY PNL right ----
     g.fillStyle = "#2affd4";
     g.font = "bold 30px 'Consolas', monospace";
-    g.fillText("◢ THE RECORD — TODAY", 28, 22);
+    g.fillText("◢ THE RECORD — TODAY", PX, 30);
     if (this.todayPnlSol != null) {
       const up = this.todayPnlSol >= 0;
       g.textAlign = "right";
       g.fillStyle = "#66779a";
       g.font = "bold 16px 'Consolas', monospace";
-      g.fillText("PNL TODAY", W - 30, 18);
+      g.fillText("PNL TODAY", W - PX, 26);
       g.fillStyle = up ? "#39ff88" : "#ff4d6d";
       g.font = "bold 28px 'Consolas', monospace";
-      g.fillText(`${up ? "+" : ""}${this.todayPnlSol.toFixed(3)} SOL`, W - 30, 38);
+      g.fillText(`${up ? "+" : ""}${this.todayPnlSol.toFixed(3)} SOL`, W - PX, 46);
       g.textAlign = "left";
     }
     const b = this.todayBoard;
@@ -409,11 +418,11 @@ export class Screens {
       b && b.calls
         ? `${b.calls} call${b.calls === 1 ? "" : "s"}  ·  avg peak ${b.avgMultiplier != null ? b.avgMultiplier.toFixed(2) + "x" : "—"}  ·  ${b.winners2x} hit 2x`
         : "no calls yet today — the tape decides when",
-      28,
-      64,
+      PX,
+      72,
     );
     g.fillStyle = "#1c2740";
-    g.fillRect(28, 94, W - 56, 3);
+    g.fillRect(PX, 102, W - 2 * PX, 3);
 
     // ---- the record table: SYM | ENTRY | PEAK | X ----
     const fmtMc = (n: number | null) =>
@@ -422,34 +431,35 @@ export class Screens {
       const m = Math.max(0, Math.round((Date.now() - at) / 60000));
       return m < 1 ? "now" : m < 60 ? `${m}m` : `${Math.floor(m / 60)}h`;
     };
+    const C = { sym: PX, entry: PX + 220, peak: PX + 370, x: PX + 520, age: PX + 640 };
     g.fillStyle = "#5a7290";
     g.font = "bold 17px 'Consolas', monospace";
-    g.fillText("CALL", 30, 108);
-    g.fillText("ENTRY", 260, 108);
-    g.fillText("PEAK", 420, 108);
-    g.fillText("X", 580, 108);
-    g.fillText("AGE", 700, 108);
-    let y = 138;
+    g.fillText("CALL", C.sym, 116);
+    g.fillText("ENTRY", C.entry, 116);
+    g.fillText("PEAK", C.peak, 116);
+    g.fillText("X", C.x, 116);
+    g.fillText("AGE", C.age, 116);
+    let y = 146;
     const rows = b?.rows ?? [];
-    for (const r of rows.slice(0, 7)) {
+    for (const r of rows.slice(0, 6)) {
       g.fillStyle = "#e8f0ff";
       g.font = "bold 23px 'Consolas', monospace";
-      g.fillText(`$${r.symbol.slice(0, 10)}${r.dry ? " ᴰ" : ""}`, 30, y);
+      g.fillText(`$${r.symbol.slice(0, 9)}${r.dry ? " ᴰ" : ""}`, C.sym, y);
       g.fillStyle = "#93a3c2";
       g.font = "22px 'Consolas', monospace";
-      g.fillText(fmtMc(r.entryMcUsd), 260, y);
-      g.fillText(fmtMc(r.peakMcUsd), 420, y);
+      g.fillText(fmtMc(r.entryMcUsd), C.entry, y);
+      g.fillText(fmtMc(r.peakMcUsd), C.peak, y);
       if (r.multiplier != null) {
         g.fillStyle = r.multiplier >= 2 ? "#39ff88" : r.multiplier >= 1.2 ? "#7fffd4" : "#ff8ca0";
         g.font = "bold 23px 'Consolas', monospace";
-        g.fillText(`${r.multiplier.toFixed(2)}x`, 580, y);
+        g.fillText(`${r.multiplier.toFixed(2)}x`, C.x, y);
       } else {
         g.fillStyle = "#5a6680";
-        g.fillText("…", 580, y);
+        g.fillText("…", C.x, y);
       }
       g.fillStyle = "#5a6680";
       g.font = "20px 'Consolas', monospace";
-      g.fillText(ago(r.at), 700, y);
+      g.fillText(ago(r.at), C.age, y);
       y += 36;
     }
 
@@ -457,20 +467,20 @@ export class Screens {
     const AK: Record<string, string> = {
       CALL: "#39ff88", BUY: "#7fffd4", SELL: "#ffb454", RECEIVED: "#89ddff", BUYBACK: "#ffd700", BURN: "#ff5c33",
     };
-    y = Math.max(y + 10, 408);
+    y = Math.max(y + 10, 396);
     g.fillStyle = "#5a7290";
     g.font = "bold 18px 'Consolas', monospace";
-    g.fillText("── DESK ACTIONS ──", 30, y);
+    g.fillText("── DESK ACTIONS ──", PX, y);
     y += 32;
     for (const a of this.lastActions.slice().reverse().slice(0, 5)) {
-      if (y > H - 30) break;
+      if (y > H - PB - 24) break;
       g.fillStyle = AK[a.kind] ?? "#c8d0e0";
       g.font = "bold 20px 'Consolas', monospace";
-      g.fillText(a.kind.padEnd(9), 30, y);
+      g.fillText(a.kind.padEnd(9), PX, y);
       g.fillStyle = "#dfe8fa";
-      g.fillText(`$${a.symbol.slice(0, 12)}`, 172, y);
+      g.fillText(`$${a.symbol.slice(0, 12)}`, PX + 142, y);
       g.fillStyle = "#5a6680";
-      g.fillText(ago(a.at), 360, y);
+      g.fillText(ago(a.at), PX + 330, y);
       y += 30;
     }
     this.callouts.done();
