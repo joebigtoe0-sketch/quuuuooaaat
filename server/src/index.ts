@@ -1090,4 +1090,14 @@ server.listen(cfg.port, cfg.host, () => {
       director.onAgentAction({ action: { do: "research", mint, why }, plannedAt: Date.now() }),
     ),
   );
+  // caller-follow: the executing strategy on top of caller intel — instant
+  // buys on graded callers' fresh calls, exit when their wallet sells; the
+  // stage replays both (position reveal + exit note)
+  void import("./callout/follower.js").then((m) =>
+    m.startCallerFollow({
+      reveal: (mint, sol) => director.queueReveal(mint, sol, "call"),
+      narrateExit: (_mint, symbol, reason, solReceived, costSol) =>
+        director.queueExitNote(symbol, reason, solReceived, costSol),
+    }),
+  );
 });

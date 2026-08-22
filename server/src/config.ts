@@ -124,6 +124,13 @@ export const cfg = {
   callerDiscoveryAvg: num("CALLER_DISCOVERY_AVG", 1.5),
   callerDiscoveryMinCalls: num("CALLER_DISCOVERY_MIN_CALLS", 3),
   callerDiscoveryMaxPerDay: num("CALLER_DISCOVERY_MAX_PER_DAY", 8),
+  // caller-follow: BUY when a graded caller with skin calls fresh and there's
+  // still room to their median; EXIT when their wallet sells (on-chain watch)
+  callerFollow: bool("CALLER_FOLLOW", true),
+  callerFollowSol: num("CALLER_FOLLOW_SOL", 0.05),
+  callerFollowRoom: num("CALLER_FOLLOW_ROOM", 2), // need med/premium ≥ this much upside left
+  callerFollowMaxPerDay: num("CALLER_FOLLOW_MAX_PER_DAY", 6),
+  callerFollowStopPct: num("CALLER_FOLLOW_STOP_PCT", 75), // rug guard: sell if down this %
   // ---------- dev-sniper (the quiet edge; the show never names it) ----------
   // instant entries on launches from PROVEN devs while mc is still under the
   // ceiling; exit at 95% bonding or after maxHold. Sizing follows his own book

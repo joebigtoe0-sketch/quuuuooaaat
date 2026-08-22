@@ -33,6 +33,7 @@ type Job =
   | { kind: "agent"; qa: QueuedAction; at: number }
   | { kind: "conveyor"; item: ConveyorItem; at: number }
   | { kind: "reveal"; mint: string; sol: number; revealKind: "snipe" | "call" | "hold"; at: number }
+  | { kind: "exitnote"; symbol: string; reason: string; solReceived: number; costSol: number; at: number }
   | { kind: "kolfeed"; at: number }
   | { kind: "replyx"; at: number }
   | { kind: "commentary"; at: number };
@@ -236,9 +237,18 @@ export class Director {
     if (this.revealQ.length < 4 && !this.revealQ.some((r) => r.mint === mint)) this.revealQ.push({ mint, sol, revealKind });
   }
 
+  // exits already HAPPENED (the desk sells instantly) — the stage narrates
+  // them right after any pending reveal, while the fill is still news
+  private exitQ: { symbol: string; reason: string; solReceived: number; costSol: number }[] = [];
+  queueExitNote(symbol: string, reason: string, solReceived: number, costSol: number): void {
+    if (this.exitQ.length < 4) this.exitQ.push({ symbol, reason, solReceived, costSol });
+  }
+
   private nextJob(): Job | null {
     const rv = this.revealQ.shift();
     if (rv) return { kind: "reveal", mint: rv.mint, sol: rv.sol, revealKind: rv.revealKind, at: Date.now() };
+    const ex = this.exitQ.shift();
+    if (ex) return { kind: "exitnote", ...ex, at: Date.now() };
     if (this.inboxQ.length) return this.inboxQ.shift()!;
     if (this.buybackQ.length) return this.buybackQ.shift()!;
     if (this.agentQ.length) return this.agentQ.shift()!;
@@ -289,6 +299,7 @@ export class Director {
           // launch-feed find — research, high marks, position reveal, callout
           await this.beats.researchBeat(job.mint, null, null, true, { sol: job.sol, kind: job.revealKind });
         }
+        else if (job.kind === "exitnote") { await this.beats.exitNoteBeat(job.symbol, job.reason, job.solReceived, job.costSol); }
         else if (job.kind === "replyx") { await this.beats.runReplyX(); }
         else if (job.kind === "kolfeed") { await this.beats.runKolFeed(); }
         else if (job.kind === "conveyor") {

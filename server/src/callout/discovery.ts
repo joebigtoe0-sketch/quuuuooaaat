@@ -90,8 +90,6 @@ async function tryNominate(
   if (!rep || rep.calls < cfg.callerDiscoveryMinCalls || rep.avg < cfg.callerDiscoveryAvg || rep.med < 1.2) return false;
   const { touchBan } = await import("../agent/tokenguard.js");
   if (touchBan(c.mint)) return false;
-  const who = c.username || rep.username || "a caller I track";
-  const mcNote = c.mcAtCall > 0 ? ` at $${Math.round(c.mcAtCall).toLocaleString("en-US")} mc` : "";
   // skin check: is the caller actually positioned in what they're calling?
   const skin =
     skinIn !== undefined
@@ -100,6 +98,21 @@ async function tryNominate(
           callerPnl(c.wallet, c.mint).then((p) => (p ? { costUsd: p.costUsd, pnlPct: p.pct } : null)),
           new Promise<null>((r) => setTimeout(() => r(null), 2500)),
         ]);
+  // THE STRATEGY: try the follow-buy FIRST (instant — the caller's move is
+  // burning while we deliberate). If it fills, the buy path queues its own
+  // position-reveal ceremony + instant callout; no separate research needed.
+  {
+    const { attemptFollowBuy } = await import("./follower.js");
+    if (await attemptFollowBuy({ ...c, skin }, rep)) {
+      st.discovered[c.mint] = Date.now();
+      st.dayCount++;
+      saveState();
+      log.info("discovery", `[${source}] BOUGHT via caller-follow: ${c.mint.slice(0, 8)}…`);
+      return true;
+    }
+  }
+  const who = c.username || rep.username || "a caller I track";
+  const mcNote = c.mcAtCall > 0 ? ` at $${Math.round(c.mcAtCall).toLocaleString("en-US")} mc` : "";
   const skinNote =
     skin == null
       ? "" // unknown ≠ not holding

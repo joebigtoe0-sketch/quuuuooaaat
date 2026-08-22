@@ -726,6 +726,31 @@ export class Beats {
     await this.tradeBuyBeat(a.mint, sol, thesis, a.symbol, best?.s.id, bar);
   }
 
+  /** Narrate an exit that ALREADY happened — caller-follow sells instantly
+   *  backstage, then the stage replays it. Numbers come from the real fill. */
+  async exitNoteBeat(symbol: string, reason: string, solReceived: number, costSol: number): Promise<void> {
+    try {
+      await this.loco.walkTo("bigscreen");
+      this.hub.cue({ t: "camera", preset: "bigscreen" });
+      this.loco.sit(true);
+      const pnl = solReceived - costSol;
+      const up = pnl >= 0;
+      this.hub.cue({ t: "anim", clip: up ? "clap" : "facepalm" });
+      await this.sayVaried(
+        `Position closed. $${symbol} is off the book — ${reason}. ` +
+          (up
+            ? `${solReceived.toFixed(3)} SOL out on ${costSol.toFixed(3)} in. The follow paid.`
+            : `${solReceived.toFixed(3)} SOL back from ${costSol.toFixed(3)} in. I trade the plan, not the hope.`),
+        up ? "excited" : "neutral",
+      );
+      this.dir.noteAction("SELL", symbol);
+    } catch (e) {
+      log.warn("beats", `exit note failed: ${String(e).slice(0, 80)}`);
+    } finally {
+      this.loco.sit(false);
+    }
+  }
+
   private async calloutSequence(a: Analysis, text: string, tier: string): Promise<void> {
     {
       // desk book + no repeat plugs: never call out a banned mint, and never

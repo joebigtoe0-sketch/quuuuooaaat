@@ -236,7 +236,10 @@ export function parseAlertItem(it: any): (HarvestedCall & { skin: { costUsd: num
   if (thesis) noteTape(mint, username || wallet.slice(0, 6), thesis, mult, at);
   const p = it?.position;
   const skin = p ? { costUsd: Number(p.costBasisUsd ?? 0), pnlPct: p.pnlPercentage != null ? Number(p.pnlPercentage) : null } : null;
-  return { calloutId, wallet, username, thesis, peakMult: maxMult ?? mult, at, mcAtCall, mint, skin };
+  return {
+    calloutId, wallet, username, thesis, peakMult: maxMult ?? mult, at, mcAtCall, mint,
+    symbol: String(it?.symbol ?? "").trim(), skin,
+  };
 }
 
 /** Does the caller have SKIN in the coin they called? Public pump.fun PnL
@@ -315,6 +318,8 @@ export interface HarvestedCall {
   /** market cap (USD) at call time — the basis for entry-premium checks */
   mcAtCall: number;
   mint: string;
+  /** coin ticker when the source carries it (the alerts feed does) */
+  symbol: string;
 }
 
 /** One callout item from EITHER public source (per-coin /callout/top page or
@@ -338,7 +343,7 @@ export function parseCalloutItem(r: any, mintHint?: string): HarvestedCall | nul
   const thesis = String(r?.thesis ?? "").trim();
   if (thesis) noteTape(mint, username || wallet.slice(0, 6), thesis, cur, at);
   const peakMult = entry > 0 && peak > 0 ? peak / entry : cur;
-  return { calloutId, wallet, username, thesis, peakMult, at, mcAtCall, mint };
+  return { calloutId, wallet, username, thesis, peakMult, at, mcAtCall, mint, symbol: "" };
 }
 
 /** Read a coin's callout page (public pump.fun route) and deposit every
