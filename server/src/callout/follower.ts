@@ -36,6 +36,7 @@ interface FollowState {
     boughtAt: number;
     callMcUsd: number;
     med: number;
+    fails?: number; // consecutive exit failures — bounded, never infinite
   };
 }
 const FILE = () => path.join(cfg.dataDir, "callerfollow.json");
@@ -94,6 +95,32 @@ export async function attemptFollowBuy(
       return false;
     }
 
+    // THE GAUNTLET — a good caller does not buy off a rug check. Full analysis
+    // before the SOL moves: wash/mayhem/bundle/no-tape hard rejects are
+    // absolute ($HOT taught us: bought at :09, scored 0/wash at :22).
+    try {
+      const { analyze } = await import("../analysis/engine.js");
+      const a = await Promise.race([
+        analyze(c.mint, null),
+        new Promise<null>((r) => setTimeout(() => r(null), 10_000)),
+      ]);
+      if (!a) {
+        log.info("follower", `pass ${c.mint.slice(0, 8)}… — chain unreadable in time, no blind buys`);
+        return false;
+      }
+      if (a.buyReject) {
+        log.info("follower", `pass ${c.mint.slice(0, 8)}… — hard reject: ${a.buyReject} (${c.username || "caller"}'s call doesn't outrank the rug check)`);
+        return false;
+      }
+      if (a.buyScore < 20) {
+        log.info("follower", `pass ${c.mint.slice(0, 8)}… — buy score ${a.buyScore} too weak to follow anyone into`);
+        return false;
+      }
+    } catch (e) {
+      log.warn("follower", `analysis failed for ${c.mint.slice(0, 8)}… — no blind buys: ${String(e).slice(0, 60)}`);
+      return false;
+    }
+
     // caller's balance BEFORE we buy — the exit baseline
     const { getTokenBalanceRaw } = await import("../chain/pump.js");
     let balAtEntry = 0n;
@@ -124,8 +151,12 @@ export async function attemptFollowBuy(
     st.count++;
     save();
     log.info("follower", `FOLLOWED ${who} into $${symbol} (${cfg.callerFollowSol} SOL, ${room.toFixed(1)}x room)${res.dry ? " [dry]" : ""}`);
-    // instant public callout — the first minutes pay; the show catches up
-    void import("./early.js").then((m) => m.earlyCallout(c.mint, symbol, thesis)).catch(() => {});
+    // public callout ~20s after the fill — near-instant for the reward window,
+    // but late enough that CC's holdings check can see the fresh tokens
+    void (async () => {
+      await new Promise((r) => setTimeout(r, 20_000));
+      await import("./early.js").then((m) => m.earlyCallout(c.mint, symbol, thesis));
+    })().catch(() => {});
     hooks.reveal(c.mint, cfg.callerFollowSol);
     return true;
   } catch (e) {
@@ -172,13 +203,27 @@ async function watchTick(): Promise<void> {
     }
     if (!reason) continue;
     const r = await tradeSell(mint, 1, reason);
-    if (r.ok || /no such position|already gone/.test(r.why ?? "")) {
+    if (r.ok) {
       log.info("follower", `EXITED $${pos.symbol}: ${reason}${r.dry ? " [dry]" : ""}`);
       hooks?.narrateExit(mint, pos.symbol, reason, r.solReceived ?? 0, pos.costSol);
       delete st.pos[mint];
       save();
+    } else if (/no such position|already gone|ledger closed/.test(r.why ?? "")) {
+      // the position is gone one way or another — stop watching, no ceremony
+      log.info("follower", `watch closed $${pos.symbol}: ${r.why}`);
+      delete st.pos[mint];
+      save();
     } else {
-      log.warn("follower", `exit failed $${pos.symbol}: ${r.why} — retrying next tick`);
+      // bounded retries — an exit that fails forever must scream, not spin
+      f.fails = (f.fails ?? 0) + 1;
+      save();
+      if (f.fails >= 8) {
+        log.warn("follower", `GIVING UP on $${pos.symbol} exit after ${f.fails} failures (${r.why}) — position needs an operator-sell`);
+        delete st.pos[mint];
+        save();
+      } else {
+        log.warn("follower", `exit failed $${pos.symbol}: ${r.why} — retry ${f.fails}/8`);
+      }
     }
   }
 }

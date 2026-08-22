@@ -192,7 +192,16 @@ export async function tradeBuy(
   });
   try {
     const res = await executeBuy(payer, new PublicKey(mint), sol);
-    const tokensRaw = await getTokenBalanceRaw(new PublicKey(mint), payer.publicKey);
+    // a FRESH token account often reads 0 for a few seconds after the fill
+    // (RPC lag) — recording 0 creates an unsellable ghost position ($Hallvard
+    // taught us). Retry until the tokens show, or the sell path can never work.
+    let tokensRaw = 0n;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      tokensRaw = await getTokenBalanceRaw(new PublicKey(mint), payer.publicKey).catch(() => 0n);
+      if (tokensRaw > 0n) break;
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+    if (tokensRaw === 0n) log.warn("trade", `bought ${symbol} but balance still reads 0 after retries — position recorded, sell path will self-heal from chain`);
     positions.push({
       mint,
       symbol,
@@ -253,7 +262,30 @@ export async function tradeSell(
   }
   fraction = Math.min(1, Math.max(0.1, fraction));
 
-  const sellRaw = (BigInt(pos.tokensRaw) * BigInt(Math.round(fraction * 100))) / 100n;
+  let sellRaw = (BigInt(pos.tokensRaw) * BigInt(Math.round(fraction * 100))) / 100n;
+  // SELF-HEAL a ghost ledger: tokensRaw 0 but the wallet may actually hold the
+  // tokens (the buy recorded a stale 0 balance). Chain is the truth — re-read;
+  // if the wallet is also empty, close the ledger instead of failing forever.
+  if (sellRaw <= 0n && !pos.dry && !cfg.tradeDryRun) {
+    const w = loadWallet();
+    if (w) {
+      try {
+        const bal = await getTokenBalanceRaw(new PublicKey(mint), w.publicKey);
+        if (bal >= 1_000_000n) {
+          pos.tokensRaw = bal.toString();
+          save();
+          sellRaw = (bal * BigInt(Math.round(fraction * 100))) / 100n;
+          log.info("trade", `healed ghost ledger for $${pos.symbol} — wallet holds ${bal}, selling`);
+        } else {
+          pos.closed = { at: Date.now(), solReceived: pos.soldSol ?? 0, reason: "ledger and wallet both empty — closed" };
+          save();
+          return { ok: false, dry: false, why: "nothing to sell anywhere — ledger closed" };
+        }
+      } catch {
+        return { ok: false, dry: false, why: "ledger empty and RPC unreadable — retry later" };
+      }
+    }
+  }
   if (pos.dry || cfg.tradeDryRun) {
     let solReceived = 0;
     try {
