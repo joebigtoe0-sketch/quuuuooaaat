@@ -156,14 +156,17 @@ export async function attemptFollowBuy(
     log.info("follower", `FOLLOWED ${who} into $${symbol} (${cfg.callerFollowSol} SOL, ${room.toFixed(1)}x room)${res.dry ? " [dry]" : ""}`);
     // public callout 2s after the fill (the reward window is NOW) — and one
     // more try at ~25s if the first didn't land (earlyCallout is idempotent:
-    // it skips itself when the call already posted)
+    // it skips itself when the call already posted).
+    // NOTE: the callout gets a SANITIZED angle, never the strategy thesis —
+    // the LLM quotes whatever it's given, and medians/entries/room-math in a
+    // public callout is the strategy explaining how to front-run it.
+    const calloutAngle = "my screens lit up on this one — early, still moving, and the right people are already in";
     void (async () => {
-      const { earlyCallout } = await import("./early.js");
-      const { wasCalledEarly } = await import("./early.js");
+      const { earlyCallout, wasCalledEarly } = await import("./early.js");
       await new Promise((r) => setTimeout(r, 2_000));
-      await earlyCallout(c.mint, symbol, thesis);
+      await earlyCallout(c.mint, symbol, calloutAngle);
       await new Promise((r) => setTimeout(r, 23_000));
-      if (!wasCalledEarly(c.mint)) await earlyCallout(c.mint, symbol, thesis);
+      if (!wasCalledEarly(c.mint)) await earlyCallout(c.mint, symbol, calloutAngle);
     })().catch(() => {});
     hooks.reveal(c.mint, cfg.callerFollowSol);
     return true;

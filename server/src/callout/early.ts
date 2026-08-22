@@ -65,6 +65,7 @@ export async function earlyCallout(mint: string, symbol: string, why: string): P
           // he invented "$500" on an $8 buy — numbers are not his to imagine
           "\nEVERY NUMBER MUST COME FROM THE DATA. You still do NOT know your buy size, the price, the holder count, or any date — never state a dollar amount, multiple, or statistic that isn't literally in the data. Quote other callers only if the data quotes them." +
           "\nNEVER NAME OR IDENTIFY ANOTHER CALLER OR TRADER. Your caller INDEX is yours to brag about ('my caller index lit up', 'graded callers are already on this') but individuals stay anonymous — no usernames, no handles, no 'X called this'. The edge is the index, and you don't hand out your sources." +
+          "\nNEVER EXPLAIN YOUR STRATEGY MATH. Banned in callouts: median stats, hit rates, 'x room', 'called at $', anyone's entry price, ceilings, targets. The ONLY number you may use is the CURRENT market cap (if it's in the data). A callout is a hook, not a quant memo — the audience gets the vibe and at most one market fact." +
           // and he talked about a whitepaper. on a memecoin.
           "\nTHESE ARE MEMECOINS. There is no whitepaper, no roadmap, no team, no utility, no fundamentals, no product, no audit, no tokenomics deck — never reference any of that, even as a joke premise. The humour lives in degen culture: bags, apes, jeets, rugs, exit liquidity, conviction, cope, being early, being liquidated, the group chat." +
           "\nNo hashtags, no DYOR, no financial advice, max one emoji. Output only the line.",
@@ -74,7 +75,15 @@ export async function earlyCallout(mint: string, symbol: string, why: string): P
       ),
       new Promise<null>((r) => setTimeout(() => r(null), 9000)),
     ]);
-    const line = (text ?? "").trim().replace(/^["']|["']$/g, "").slice(0, 190) ||
+    // trim at a word boundary — a callout that ends mid-word ("the narrati")
+    // reads like a bot glitch
+    const cutClean = (s: string, max: number): string => {
+      if (s.length <= max) return s;
+      const cut = s.slice(0, max);
+      const sp = cut.lastIndexOf(" ");
+      return (sp > max * 0.6 ? cut.slice(0, sp) : cut).trim();
+    };
+    const line = cutClean((text ?? "").trim().replace(/^["']|["']$/g, ""), 190) ||
       (mcUsd != null
         ? `just took a position in $${symbol} at $${mcUsd.toLocaleString("en-US")} mc. the tape made me do it.`
         : `just took a position in $${symbol}. the tape made me do it.`);
