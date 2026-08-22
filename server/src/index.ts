@@ -379,7 +379,9 @@ app.post("/admin/tweet-exact", async (req, res) => {
   const text = String((req.body as any)?.text ?? req.query.text ?? "").trim();
   if (text.length < 2) return res.json({ ok: false, why: "no text" });
   const { postTweet } = await import("./social/x.js");
-  const r = await postTweet(text, { exact: true });
+  // ?community=<id> posts into an X Community instead of the main timeline
+  const community = String((req.body as any)?.community ?? req.query.community ?? "").trim();
+  const r = await postTweet(text, { exact: true, ...(community ? { communityId: community } : {}) });
   if (r.ok) {
     store.kvSet(`tweets:${new Date().toISOString().slice(0, 10)}`, String(Number(store.kvGet(`tweets:${new Date().toISOString().slice(0, 10)}`) ?? 0) + 1));
     memory.journal("tweet", `${r.dry ? "[dry] " : ""}${text.slice(0, 120)}`);

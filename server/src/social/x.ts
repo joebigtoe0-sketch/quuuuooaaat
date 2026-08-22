@@ -120,7 +120,7 @@ export function trimForX(text: string): string {
 
 export async function postTweet(
   text: string,
-  opts: { mediaId?: string; replyTo?: string; exact?: boolean } = {},
+  opts: { mediaId?: string; replyTo?: string; exact?: boolean; communityId?: string } = {},
 ): Promise<{ ok: boolean; id?: string; dry: boolean; why?: string }> {
   // The model gets a leash (MAX_POST_LEN) so it can't ramble. Words the
   // producer wrote by hand are already deliberate — they go out whole, and
@@ -149,6 +149,10 @@ export async function postTweet(
   const body: Record<string, unknown> = { text: trim(text) };
   if (opts.mediaId) body.media = { media_ids: [opts.mediaId] };
   if (opts.replyTo) body.reply = { in_reply_to_tweet_id: opts.replyTo };
+  // Posting INTO an X Community. The account must already be a member;
+  // X silently routes it to the normal timeline if the id is wrong, so
+  // verify where a new community post actually landed before trusting it.
+  if (opts.communityId) body.community_id = opts.communityId;
   try {
     const res = await fetch(url, {
       method: "POST",
