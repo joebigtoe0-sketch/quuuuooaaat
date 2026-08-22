@@ -982,16 +982,22 @@ app.get("/public/callouts", async (req, res) => {
   }
 });
 
-/** CALLER LEADERBOARD — the reputation index the harvester has accumulated
- *  so far (callers with ≥3 pump.fun-scored calls, ranked by avg peak). */
-app.get("/admin/callers", async (_req, res) => {
+/** CALLER LEADERBOARD — the full reputation index, every caller RIKU has
+ *  graded (avg PEAK multiple per call, calloutId-deduped). pump.fun's own
+ *  board stops at top-50; this one doesn't stop.
+ *  ?n=0 (all, default) ?min=3 (min graded calls) */
+async function callerBoard(req: express.Request, res: express.Response): Promise<void> {
   try {
-    const { topCallers } = await import("./callout/callers.js");
-    res.json({ ok: true, rows: topCallers(50) });
+    const { topCallers, indexStats } = await import("./callout/callers.js");
+    const n = Math.max(0, Number(req.query.n) || 0);
+    const min = Math.max(1, Number(req.query.min) || 3);
+    res.json({ ok: true, ...indexStats(), rows: topCallers(n, min) });
   } catch (e) {
     res.json({ ok: false, why: String(e).slice(0, 120) });
   }
-});
+}
+app.get("/admin/callers", callerBoard);
+app.get("/public/callers", callerBoard);
 
 /** THE CALLER BOARD, public — same rows /admin/callers returns, minus the key,
  *  so the page at /callers can fetch it from a browser. Reputation grades on

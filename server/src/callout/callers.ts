@@ -243,11 +243,23 @@ export function callerSignal(mint: string): CallerSignal | null {
   return { callers: h.callers.length, scored, bestAvg, bestName, bestCalls };
 }
 
-/** Leaderboard for admin/producer visibility. */
-export function topCallers(n = 25): (CallerStat & { userId: string; avg: number })[] {
-  return Object.entries(db.callers)
-    .filter(([, c]) => c.calls >= 3)
+/** The full graded leaderboard — every caller the index has ever graded.
+ *  pump.fun caps its own board at top-50; ours shows everything we can prove.
+ *  n = 0 means no cap; minCalls guards against one-lucky-call rankings. */
+export function topCallers(n = 0, minCalls = 3): (CallerStat & { userId: string; avg: number })[] {
+  const rows = Object.entries(db.callers)
+    .filter(([, c]) => c.calls >= Math.max(1, minCalls))
     .map(([userId, c]) => ({ ...c, userId, avg: c.sumMax / c.calls }))
-    .sort((a, b) => b.avg - a.avg)
-    .slice(0, n);
+    .sort((a, b) => b.avg - a.avg);
+  return n > 0 ? rows.slice(0, n) : rows;
+}
+
+/** Index totals for the "we grade more than the house does" pitch. */
+export function indexStats(): { callers: number; graded: number; coinsSwept: number } {
+  const all = Object.values(db.callers);
+  return {
+    callers: all.length,
+    graded: all.filter((c) => c.calls >= 3).length,
+    coinsSwept: Object.keys(db.mints).length,
+  };
 }
