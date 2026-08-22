@@ -386,6 +386,8 @@ app.post("/admin/tweet-exact", async (req, res) => {
     store.kvSet(`tweets:${new Date().toISOString().slice(0, 10)}`, String(Number(store.kvGet(`tweets:${new Date().toISOString().slice(0, 10)}`) ?? 0) + 1));
     memory.journal("tweet", `${r.dry ? "[dry] " : ""}${text.slice(0, 120)}`);
   }
+  // depict it on stream (post already out — this is decoration, non-blocking)
+  director.showPost({ text, ok: r.ok });
   res.json({ ok: r.ok, dry: r.dry, id: r.id, why: r.why });
 });
 
@@ -403,6 +405,8 @@ app.post("/admin/reply-exact", async (req, res) => {
     store.markXReplied(id);
     memory.journal("x-chatter", `${r.dry ? "[dry] " : ""}replied to ${id}: ${text.slice(0, 100)}`);
   }
+  // depict it on stream (post already out — this is decoration, non-blocking)
+  director.showPost({ text, replyTo: id, ok: r.ok });
   res.json({ ok: r.ok, dry: r.dry, id: r.id, why: r.why });
 });
 

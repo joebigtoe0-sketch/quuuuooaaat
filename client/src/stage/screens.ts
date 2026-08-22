@@ -102,7 +102,7 @@ export class Screens {
       g.fillText("RIKU", 88, 112);
       g.fillStyle = "#5a7290";
       g.font = "20px 'Consolas', monospace";
-      g.fillText("@QuantRiku · drafting", 88, 140);
+      g.fillText(v.replyTo ? "@QuantRiku · replying ↩" : "@QuantRiku · drafting", 88, 140);
       // the tweet, typed so far, wrapped + caret
       const text = v.text.slice(0, v.typed);
       g.fillStyle = "#dfe8fa";

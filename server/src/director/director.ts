@@ -293,6 +293,7 @@ export class Director {
           await this.beats.ambientStep();
           continue;
         }
+        this.runningBeat = job.kind; // beats own the screen + camera while set
         if (job.kind === "inbox") await this.beats.researchBeat(job.ev.mint, job.ev.amountRaw, job.ev.sender, false);
         else if (job.kind === "reveal") {
           // a quiet-edge fill gets its on-stream discovery: staged as a normal
@@ -316,8 +317,67 @@ export class Director {
         log.error("director", `beat crashed: ${String(e).slice(0, 200)}`);
         this.loco.stateName = "RECOVER";
         await new Promise((r) => setTimeout(r, 2000));
+      } finally {
+        this.runningBeat = null;
       }
     }
+  }
+
+  // ---------- producer post visibility ----------
+  // beats own the terminal + camera; decoration must never steal them
+  private runningBeat: string | null = null;
+  private postAnimBusy = false;
+  private postAnimQueued = 0;
+
+  /** Animate a producer post/reply on the terminal — the post ALREADY went
+   *  out; this is pure depiction. Never blocks the caller, never interrupts a
+   *  beat, serialises with itself (extras beyond a short queue are dropped —
+   *  it's decoration), and skips when no stage page is connected. */
+  showPost(opts: { text: string; replyTo?: string; ok: boolean }): void {
+    if (this.hub.watchers === 0) return; // nobody's watching — don't perform
+    if (this.postAnimQueued >= 2) return; // three-in-a-row replies: drop extras
+    this.postAnimQueued++;
+    void (async () => {
+      try {
+        // wait briefly for the terminal to free up; give up rather than steal
+        const until = Date.now() + 20_000;
+        while ((this.postAnimBusy || this.runningBeat) && Date.now() < until)
+          await new Promise((r) => setTimeout(r, 500));
+        if (this.postAnimBusy || this.runningBeat) return;
+        this.postAnimBusy = true;
+        try {
+          const text = opts.text;
+          this.hub.cue({ t: "camera", preset: "terminal" });
+          // cap the animation: long-form (300-1000 chars) types in the same
+          // ~9s wall clock as a normal tweet, just with bigger chunks
+          const iterations = Math.min(22, Math.max(4, Math.ceil(text.length / 13)));
+          const step = Math.max(1, Math.ceil(text.length / iterations));
+          for (let typed = step; typed < text.length + step; typed += step) {
+            if (this.runningBeat) return; // a beat started — vanish quietly
+            this.hub.cue({
+              t: "takeover",
+              view: { kind: "compose", text, typed: Math.min(typed, text.length), state: "typing", ...(opts.replyTo ? { replyTo: opts.replyTo } : {}) },
+            });
+            await new Promise((r) => setTimeout(r, 420));
+          }
+          await new Promise((r) => setTimeout(r, 500));
+          this.hub.cue({
+            t: "takeover",
+            view: { kind: "compose", text, typed: text.length, state: opts.ok ? "posted" : "drafted", ...(opts.replyTo ? { replyTo: opts.replyTo } : {}) },
+          });
+          if (opts.ok) this.hub.cue({ t: "fx", kind: "ding" });
+          await new Promise((r) => setTimeout(r, 2200));
+        } finally {
+          this.postAnimBusy = false;
+          // release the screen — but never clobber a camera a beat just set
+          this.hub.cue({ t: "takeover", view: null });
+          if (!this.runningBeat) this.hub.cue({ t: "camera", preset: "wide" });
+        }
+      } catch { /* decoration must never throw into the void */ }
+      finally {
+        this.postAnimQueued--;
+      }
+    })();
   }
 
   // ---------- state for renderer ----------
