@@ -131,7 +131,9 @@ export const cfg = {
   callerFollowPct: num("CALLER_FOLLOW_PCT", 8), // % of spendable SOL at baseline quality
   callerFollowRoom: num("CALLER_FOLLOW_ROOM", 2), // need med/premium ≥ this much upside left
   callerFollowMaxPerDay: num("CALLER_FOLLOW_MAX_PER_DAY", 6),
-  callerFollowStopPct: num("CALLER_FOLLOW_STOP_PCT", 75), // rug guard: sell if down this %
+  callerFollowStopPct: num("CALLER_FOLLOW_STOP_PCT", 40), // full-position stop-loss %
+  callerFollowTpFraction: num("CALLER_FOLLOW_TP_FRACTION", 0.75), // sold at the median target
+  callerFollowRunnerStopPct: num("CALLER_FOLLOW_RUNNER_STOP_PCT", 15), // runner stop below the TP price
   // ---------- dev-sniper (the quiet edge; the show never names it) ----------
   // instant entries on launches from PROVEN devs while mc is still under the
   // ceiling; exit at 95% bonding or after maxHold. Sizing follows his own book

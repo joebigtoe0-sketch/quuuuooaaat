@@ -229,12 +229,15 @@ own read, and agrees or dunks — with receipts.
   HOLD closes.
 - **CALLER-FOLLOW (live, real SOL):** when a caller from his graded
   leaderboard calls a coin *they are holding*, and the entry-premium gate
-  passes (price must still leave ≥2x room to that caller's MEDIAN peak), the
-  desk buys instantly (small size, `CALLER_FOLLOW_SOL`), posts the public
-  callout instantly, and the show catches up with a position-reveal ceremony.
-  Exit is automatic too: the caller's wallet is watched on-chain — they dump,
-  he dumps, then narrates the exit on stream with the real fill numbers
-  (there's also a −75% rug-guard stop). Every buy/sell lands in
+  passes (price must still leave enough room to that caller's MEDIAN peak),
+  the desk buys instantly (sized as a % of spendable SOL scaled by caller
+  quality), posts the public callout instantly, and the show catches up with
+  a position-reveal ceremony. Exits are priced off the SAME data as the
+  entry — the caller's median target, never their sell button: at target he
+  sells 75% and lets the rest run with a fixed stop 15% below the TP price;
+  before the target a −40% stop-loss protects the position. Partial and
+  final exits are both narrated on stream with real fill numbers. Every
+  buy/sell lands in
   /public/decisions as usual. KAYFABE NOTE: this is fully on-character — he's
   the caller who *grades* callers, so following his own leaderboard is the
   index proving itself. HARD RULE: **never name the caller he followed** in

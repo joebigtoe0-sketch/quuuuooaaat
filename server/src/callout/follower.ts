@@ -15,12 +15,17 @@ import type { HarvestedCall } from "./callers.js";
  * (room to $30k ≈ 2.5x) but not at $20k (room only 1.5x). Their median is
  * the target the trade is priced against — never their lottery average.
  *
- * EXIT: when THEY exit. Their wallet is public — the watcher reads the
- * caller's token balance on-chain every ~30s; when it drops below half of
- * what they held at our entry, we're out. No skin, no trade: a caller who
- * isn't holding can never signal an exit, so we never follow those.
- * Rug guard: if our position marks below −CALLER_FOLLOW_STOP_PCT% we exit
- * regardless — a caller asleep at the wheel doesn't take us down with him.
+ * EXIT: priced off the SAME data as the entry — the caller's graded median,
+ * not their sell button (callers are often wrong about exits; their call
+ * data isn't). Three rules, checked every ~30s:
+ *   TP    — current mc ≥ call mc × caller median → sell CALLER_FOLLOW_TP_FRACTION
+ *           (75%), keep the rest as a runner ("the target the trade was
+ *           priced against just printed").
+ *   RUNNER— fixed stop CALLER_FOLLOW_RUNNER_STOP_PCT (15%) below the mc where
+ *           the TP fired; otherwise the runner rides forever.
+ *   STOP  — full position marks −CALLER_FOLLOW_STOP_PCT% (40%) → all out.
+ * The caller HOLDING at entry stays required (conviction filter), but their
+ * wallet is no longer watched after the buy.
  *
  * STAGE: buy is instant, public callout is instant (the first minutes pay);
  * the show catches up — the coin queues as a position REVEAL (research
@@ -32,10 +37,12 @@ interface FollowState {
   [mint: string]: {
     wallet: string; // the caller we followed
     who: string;
-    balAtEntry: string; // caller's raw token balance when we bought
+    balAtEntry?: string; // legacy (old caller-sell watch) — no longer written
     boughtAt: number;
     callMcUsd: number;
     med: number;
+    phase?: "full" | "runner"; // absent = "full"
+    mcAtPartial?: number; // mc when the TP fraction sold — runner stop anchors here
     fails?: number; // consecutive exit failures — bounded, never infinite
   };
 }
@@ -121,13 +128,6 @@ export async function attemptFollowBuy(
       return false;
     }
 
-    // caller's balance BEFORE we buy — the exit baseline
-    const { getTokenBalanceRaw } = await import("../chain/pump.js");
-    let balAtEntry = 0n;
-    try {
-      balAtEntry = await getTokenBalanceRaw(new PublicKey(c.mint), new PublicKey(c.wallet));
-    } catch { /* RPC hiccup — tracked as 0, watcher self-heals on first read */ }
-
     const symbol =
       c.symbol ||
       (await import("../chain/marketcap.js").then((m) => m.resolveSymbol(c.mint)).catch(() => null)) ||
@@ -161,8 +161,8 @@ export async function attemptFollowBuy(
       return false;
     }
     st.pos[c.mint] = {
-      wallet: c.wallet, who, balAtEntry: balAtEntry.toString(),
-      boughtAt: Date.now(), callMcUsd: c.mcAtCall, med: rep.med,
+      wallet: c.wallet, who,
+      boughtAt: Date.now(), callMcUsd: c.mcAtCall, med: rep.med, phase: "full",
     };
     st.count++;
     save();
@@ -189,13 +189,13 @@ export async function attemptFollowBuy(
   }
 }
 
-/** They sell → we sell. Checks every open followed position's CALLER wallet
- *  on-chain; also runs the rug guard on our own mark. */
+/** Exits priced off the caller's graded median — TP at the target (partial),
+ *  fixed runner stop under the TP price, stop-loss on the full position. */
 async function watchTick(): Promise<void> {
   const mints = Object.keys(st.pos);
   if (!mints.length) return;
   const { openPositions, tradeSell } = await import("../chain/trader.js");
-  const { getTokenBalanceRaw } = await import("../chain/pump.js");
+  const { marketCap } = await import("../chain/marketcap.js");
   for (const mint of mints) {
     const f = st.pos[mint];
     const pos = openPositions().find((p) => p.mint === mint);
@@ -204,34 +204,58 @@ async function watchTick(): Promise<void> {
       save();
       continue;
     }
-    let reason = "";
+    // live mc — the same yardstick the entry used. Unreadable = hold.
+    let mcUsd: number | null = null;
     try {
-      const bal = await getTokenBalanceRaw(new PublicKey(mint), new PublicKey(f.wallet));
-      const entry = BigInt(f.balAtEntry || "0");
-      if (entry === 0n && bal > 0n) {
-        // baseline was an RPC miss at entry — heal it now
-        f.balAtEntry = bal.toString();
-        save();
-      } else if (entry > 0n && bal < entry / 2n) {
-        reason = `${f.who} just dumped — I followed them in, I follow them out`;
+      mcUsd = (await marketCap(mint)).mcUsd;
+    } catch { /* RPC/API hiccup — next tick retries */ }
+    if (!mcUsd || mcUsd <= 0) continue;
+
+    const phase = f.phase ?? "full";
+    let reason = "";
+    let fraction = 1;
+    let toRunner = false;
+
+    if (phase === "runner") {
+      // fixed stop below where the TP sold — otherwise the runner just rides
+      if (f.mcAtPartial && mcUsd <= f.mcAtPartial * (1 - cfg.callerFollowRunnerStopPct / 100))
+        reason = `runner stopped — gave back ${cfg.callerFollowRunnerStopPct}% from where I took profit`;
+    } else {
+      const targetUsd = f.callMcUsd * f.med;
+      if (mcUsd >= targetUsd) {
+        // the median target the trade was PRICED against just printed
+        reason = `median target hit ($${Math.round(targetUsd).toLocaleString("en-US")} mc) — ${Math.round(cfg.callerFollowTpFraction * 100)}% off the table, the rest rides`;
+        fraction = cfg.callerFollowTpFraction;
+        toRunner = true;
+      } else {
+        // stop-loss on our own mark, independent of anyone's opinion
+        try {
+          const { estimateSellSolFor } = await import("../chain/pump.js");
+          const val = await estimateSellSolFor(new PublicKey(mint), BigInt(pos.tokensRaw));
+          if (pos.costSol > 0 && val < pos.costSol * (1 - cfg.callerFollowStopPct / 100))
+            reason = `stop loss — down ${cfg.callerFollowStopPct}%+, the call didn't work`;
+        } catch {}
       }
-    } catch { /* RPC hiccup — keep holding, next tick retries */ }
-    if (!reason) {
-      // rug guard: our own mark, independent of the caller
-      try {
-        const { estimateSellSolFor } = await import("../chain/pump.js");
-        const val = await estimateSellSolFor(new PublicKey(mint), BigInt(pos.tokensRaw));
-        if (pos.costSol > 0 && val < pos.costSol * (1 - cfg.callerFollowStopPct / 100))
-          reason = `down ${cfg.callerFollowStopPct}%+ while ${f.who} sleeps — rug guard, I'm out`;
-      } catch {}
     }
     if (!reason) continue;
-    const r = await tradeSell(mint, 1, reason);
+
+    const r = await tradeSell(mint, fraction, reason);
     if (r.ok) {
-      log.info("follower", `EXITED $${pos.symbol}: ${reason}${r.dry ? " [dry]" : ""}`);
-      hooks?.narrateExit(mint, pos.symbol, reason, r.solReceived ?? 0, pos.costSol);
-      delete st.pos[mint];
-      save();
+      if (toRunner) {
+        f.phase = "runner";
+        f.mcAtPartial = mcUsd;
+        f.fails = 0;
+        save();
+        log.info("follower", `TP $${pos.symbol}: ${reason}${r.dry ? " [dry]" : ""} — runner armed, stop at $${Math.round(mcUsd * (1 - cfg.callerFollowRunnerStopPct / 100)).toLocaleString("en-US")} mc`);
+        // honest pnl read for the partial: compare against the SOLD share's cost
+        hooks?.narrateExit(mint, pos.symbol, reason, r.solReceived ?? 0, pos.costSol * cfg.callerFollowTpFraction);
+      } else {
+        log.info("follower", `EXITED $${pos.symbol}: ${reason}${r.dry ? " [dry]" : ""}`);
+        const costShare = phase === "runner" ? pos.costSol * (1 - cfg.callerFollowTpFraction) : pos.costSol;
+        hooks?.narrateExit(mint, pos.symbol, reason, r.solReceived ?? 0, costShare);
+        delete st.pos[mint];
+        save();
+      }
     } else if (/no such position|already gone|ledger closed/.test(r.why ?? "")) {
       // the position is gone one way or another — stop watching, no ceremony
       log.info("follower", `watch closed $${pos.symbol}: ${r.why}`);
@@ -264,8 +288,8 @@ export function startCallerFollow(h: StageHooks): void {
   timer = setInterval(() => void watchTick(), 30_000);
   log.info(
     "follower",
-    `caller-follow LIVE — ${cfg.callerFollowSol} SOL per follow, need ${cfg.callerFollowRoom}x room to caller's median, ` +
-      `exit when their wallet sells (30s on-chain watch), rug guard −${cfg.callerFollowStopPct}%, max ${cfg.callerFollowMaxPerDay}/day` +
+    `caller-follow LIVE — ${cfg.callerFollowPct}% of spendable (floor ${cfg.callerFollowSol} SOL), need ${cfg.callerFollowRoom}x room to caller's median; ` +
+      `exits: TP ${Math.round(cfg.callerFollowTpFraction * 100)}% at median target, runner stop −${cfg.callerFollowRunnerStopPct}% from TP, stop-loss −${cfg.callerFollowStopPct}%; max ${cfg.callerFollowMaxPerDay}/day` +
       (cfg.tradeDryRun ? " [DRY RUN]" : " [REAL SOL]"),
   );
 }
