@@ -29,9 +29,11 @@ const ENVFILE = join(HERE, "feed-bridge.env");
 if (existsSync(ENVFILE)) {
   for (const line of readFileSync(ENVFILE, "utf8").split("\n")) {
     const m = line.match(/^\s*([A-Z_][A-Z0-9_]*)\s*=\s*(.*)\s*$/i);
-    if (m && !(m[1] in process.env)) {
+    if (m) {
       let v = m[2].trim();
       if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) v = v.slice(1, -1);
+      // the FILE wins over any stale shell env var (a leftover PUMP_COOKIE in
+      // the environment was silently overriding the file → 401s)
       process.env[m[1]] = v;
     }
   }
@@ -89,6 +91,8 @@ async function tick() {
   }
 }
 
-console.log(`feed-bridge → ${RIKU_URL}, every ${EVERY_MS / 1000}s`);
+console.log(
+  `feed-bridge → ${RIKU_URL}, every ${EVERY_MS / 1000}s | cookie ${COOKIE.length} chars (…${COOKIE.slice(-6)}) | admin key ${ADMIN_KEY.length} chars`,
+);
 await tick();
 setInterval(tick, EVERY_MS);
