@@ -141,8 +141,21 @@ export async function attemptFollowBuy(
       `called this at $${Math.round(c.mcAtCall).toLocaleString("en-US")} and is holding it themselves — ` +
       `${room.toFixed(1)}x room left to their typical peak`;
 
+    // SIZING: a % of spendable SOL, scaled by how good this caller actually
+    // is — an elite-median caller with a real hit rate deserves more than a
+    // barely-cleared bar. CALLER_FOLLOW_SOL is the floor; the global rails
+    // (MAX_TRADE_SOL, daily cap, float) cap the top.
+    const quality = rep.med >= 2 && rep.h2 >= 45 ? 1.5 : rep.med >= 1.6 ? 1.0 : 0.75;
+    let sol = cfg.callerFollowSol;
+    try {
+      const { solBalance } = await import("../chain/wallet.js");
+      const spendable = Math.max(0, (await solBalance()) - cfg.floatSol);
+      sol = Math.max(cfg.callerFollowSol, spendable * (cfg.callerFollowPct / 100) * quality);
+      sol = Math.round(sol * 1000) / 1000;
+    } catch { /* balance unreadable — floor size */ }
+
     const { tradeBuy } = await import("../chain/trader.js");
-    const res = await tradeBuy(c.mint, symbol, cfg.callerFollowSol, thesis, mc.mcSol ?? null, "callerfollow");
+    const res = await tradeBuy(c.mint, symbol, sol, thesis, mc.mcSol ?? null, "callerfollow");
     if (!res.ok) {
       log.info("follower", `buy blocked ${c.mint.slice(0, 8)}…: ${res.why}`);
       return false;
@@ -153,7 +166,7 @@ export async function attemptFollowBuy(
     };
     st.count++;
     save();
-    log.info("follower", `FOLLOWED ${who} into $${symbol} (${cfg.callerFollowSol} SOL, ${room.toFixed(1)}x room)${res.dry ? " [dry]" : ""}`);
+    log.info("follower", `FOLLOWED ${who} into $${symbol} (${sol} SOL @ quality ${quality}, ${room.toFixed(1)}x room)${res.dry ? " [dry]" : ""}`);
     // public callout 2s after the fill (the reward window is NOW) — and one
     // more try at ~25s if the first didn't land (earlyCallout is idempotent:
     // it skips itself when the call already posted).
@@ -168,7 +181,7 @@ export async function attemptFollowBuy(
       await new Promise((r) => setTimeout(r, 23_000));
       if (!wasCalledEarly(c.mint)) await earlyCallout(c.mint, symbol, calloutAngle);
     })().catch(() => {});
-    hooks.reveal(c.mint, cfg.callerFollowSol);
+    hooks.reveal(c.mint, sol);
     return true;
   } catch (e) {
     log.warn("follower", `attempt failed: ${String(e).slice(0, 100)}`);

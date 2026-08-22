@@ -127,7 +127,8 @@ export const cfg = {
   // caller-follow: BUY when a graded caller with skin calls fresh and there's
   // still room to their median; EXIT when their wallet sells (on-chain watch)
   callerFollow: bool("CALLER_FOLLOW", true),
-  callerFollowSol: num("CALLER_FOLLOW_SOL", 0.05),
+  callerFollowSol: num("CALLER_FOLLOW_SOL", 0.05), // FLOOR per follow-buy
+  callerFollowPct: num("CALLER_FOLLOW_PCT", 8), // % of spendable SOL at baseline quality
   callerFollowRoom: num("CALLER_FOLLOW_ROOM", 2), // need med/premium ≥ this much upside left
   callerFollowMaxPerDay: num("CALLER_FOLLOW_MAX_PER_DAY", 6),
   callerFollowStopPct: num("CALLER_FOLLOW_STOP_PCT", 75), // rug guard: sell if down this %
