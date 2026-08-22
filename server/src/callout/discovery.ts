@@ -152,6 +152,7 @@ function startFastFeed(onFind: OnFind): void {
   }
   let disabled = false;
   let failStreak = 0;
+  let authFails = 0;
   fastTimer = setInterval(async () => {
     if (disabled) return;
     try {
@@ -165,10 +166,15 @@ function startFastFeed(onFind: OnFind): void {
         },
       });
       if (res.status === 400 || res.status === 401 || res.status === 403) {
-        disabled = true;
-        log.warn("discovery", `follow feed rejected the cookie (${res.status}) — refresh PUMP_COOKIE and restart; falling back to trending sweep`);
+        // one bad response must not kill the feed until restart — a boot-time
+        // hiccup or transient edge 401 deserves retries before we give up
+        if (++authFails >= 3) {
+          disabled = true;
+          log.warn("discovery", `follow feed rejected the cookie ${authFails}x (last ${res.status}) — refresh PUMP_COOKIE and restart; falling back to trending sweep`);
+        }
         return;
       }
+      authFails = 0;
       if (!res.ok) throw new Error(`alerts ${res.status}`);
       const j: any = await res.json();
       const items: any[] = j?.items ?? [];
