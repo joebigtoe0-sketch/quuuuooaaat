@@ -59,6 +59,11 @@ interface StageHooks {
 }
 let hooks: StageHooks | null = null;
 
+/** Which caller did we follow into this mint? (for the stage's board moment) */
+export function followedWho(mint: string): string | null {
+  return st.pos[mint]?.who ?? null;
+}
+
 /** Called from discovery when a graded caller's fresh call passes the rep
  *  gate. Returns true if we bought (research then stages as a reveal). */
 export async function attemptFollowBuy(

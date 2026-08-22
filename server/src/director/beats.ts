@@ -332,6 +332,28 @@ export class Beats {
     this.loco.sit(true);
     this.hub.cue({ t: "camera", preset: "terminal" });
 
+    // CALLER-FOLLOW reveals open on the LEADERBOARD — the audience sees the
+    // index that fired before the research: his board, the caller highlighted
+    if (reveal?.kind === "call") {
+      try {
+        const { followedWho } = await import("../callout/follower.js");
+        const who = followedWho(mint);
+        if (who) {
+          const { topCallers } = await import("../callout/callers.js");
+          const rows = topCallers(8).map((r) => ({
+            name: r.username || r.userId.slice(0, 6), med: Number(r.med.toFixed(2)), h2: r.h2, calls: r.calls,
+          }));
+          this.hub.cue({ t: "takeover", view: { kind: "leaderboard", rows, highlight: who } });
+          await this.sayVaried(
+            `Before we look at the coin — look at the board. ${who} is on my graded index for a reason. When one of MY callers moves, the desk moves.`,
+            "excited",
+          );
+          await sleep(2500);
+          this.hub.cue({ t: "takeover", view: null });
+        }
+      } catch { /* board moment is garnish — research must never die for it */ }
+    }
+
     // By now analysis is usually done (2-6s). Watchdog at 12s regardless.
     const a = await Promise.race([analysisP, realSleep(12000).then(() => null)]);
     if (!a) {

@@ -116,10 +116,17 @@ async function buildWallet(): Promise<any> {
 }
 
 async function buildStats(): Promise<any> {
-  const { positionsSummary, bankSol } = await import("./chain/trader.js");
+  const { positionsSummary, bankSol, allPositions } = await import("./chain/trader.js");
   const { xFollowers, xPostsToday, xHandle } = await import("./social/x.js");
   const kpis = await snapshotKPIs().catch(() => null);
   const pos = await positionsSummary();
+  // TODAY's realized: positions CLOSED since local midnight (UTC), full
+  // round-trip result (soldSol - costSol) — partial exits on still-open
+  // positions land here on the day they finally close
+  const dayStart = new Date().setUTCHours(0, 0, 0, 0);
+  const realizedTodaySol = allPositions()
+    .filter((p: any) => p.closed && p.closed.at >= dayStart)
+    .reduce((s: number, p: any) => s + ((p.soldSol ?? 0) - p.costSol), 0);
   return {
     calls: store.callouts().length,
     tweetsToday: kpis?.tweetsToday ?? 0,
@@ -133,6 +140,7 @@ async function buildStats(): Promise<any> {
       openPositions: pos.open,
       realizedPnlSol: pos.realizedSol,
       unrealizedPnlSol: pos.unrealizedSol,
+      realizedTodaySol,
     },
     ownTokenMcUsd: kpis?.ownMcUsd ?? null,
   };

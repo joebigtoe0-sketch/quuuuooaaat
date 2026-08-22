@@ -77,7 +77,9 @@ export type TakeoverView =
       sol: number;
       thesis: string;
       state: "working" | "filled" | "failed";
-    };
+    }
+  // his graded caller index, shown when a caller-follow entry reveals
+  | { kind: "leaderboard"; rows: { name: string; med: number; h2: number; calls: number }[]; highlight?: string };
 
 export type Cue =
   | { t: "anim"; clip: string }

@@ -62,6 +62,10 @@ export class Screens {
     this.drawInspection({ mint: null, name: "IDLE", symbol: "—", rows: [], score: null, tier: null });
     this.drawCallouts([]);
     this.drawTreasury({ sol: 0, ownTokens: 0, buybacks: [], neverSoldDays: 0, holdings: [] });
+    // today's track record + PnL come from the server's public endpoints —
+    // refresh on a slow loop so the screen stays truthful without cue traffic
+    void this.refreshRecord();
+    setInterval(() => void this.refreshRecord(), 120_000);
   }
 
   private takeover: TakeoverView | null = null;
@@ -177,6 +181,54 @@ export class Screens {
         g.font = "bold 24px 'Consolas', monospace";
         g.fillText(v.state === "done" ? "✓ DONE" : "✗ FAILED", 28, H - 44);
       }
+    } else if (v.kind === "leaderboard") {
+      // HIS caller index — shown when a caller-follow entry reveals
+      g.fillStyle = "#2affd4";
+      g.font = "bold 30px 'Consolas', monospace";
+      g.fillText("◢ THE CALLER INDEX", 28, 24);
+      g.fillStyle = "#5a7290";
+      g.font = "18px 'Consolas', monospace";
+      g.fillText("graded by results — median peak · % hit 2x · calls", 28, 60);
+      g.fillStyle = "#1c2740";
+      g.fillRect(28, 86, W - 56, 3);
+      // column heads
+      g.fillStyle = "#5a7290";
+      g.font = "bold 18px 'Consolas', monospace";
+      g.fillText("#", 36, 100);
+      g.fillText("CALLER", 84, 100);
+      g.fillText("MED", 520, 100);
+      g.fillText("2X%", 660, 100);
+      g.fillText("CALLS", 790, 100);
+      let y = 134;
+      v.rows.slice(0, 8).forEach((r, i) => {
+        const hot = v.highlight && r.name === v.highlight;
+        if (hot) {
+          g.fillStyle = "rgba(42,255,212,0.12)";
+          g.fillRect(28, y - 6, W - 56, 46);
+          g.strokeStyle = "#2affd4";
+          g.lineWidth = 2;
+          g.strokeRect(28, y - 6, W - 56, 46);
+        }
+        g.fillStyle = "#5a6680";
+        g.font = "bold 24px 'Consolas', monospace";
+        g.fillText(String(i + 1), 36, y);
+        g.fillStyle = hot ? "#eafffa" : "#dfe8fa";
+        g.fillText(r.name.slice(0, 20), 84, y);
+        g.fillStyle = r.med >= 1.8 ? "#39ff88" : r.med >= 1.3 ? "#7fffd4" : "#aab6d0";
+        g.fillText(`${r.med.toFixed(2)}x`, 520, y);
+        g.fillStyle = "#aab6d0";
+        g.fillText(`${r.h2}%`, 660, y);
+        g.fillText(String(r.calls), 790, y);
+        if (hot) {
+          g.fillStyle = "#2affd4";
+          g.font = "bold 20px 'Consolas', monospace";
+          g.fillText("→ FOLLOWING", 866, y + 2);
+        }
+        y += 50;
+      });
+      g.fillStyle = "#5a7290";
+      g.font = "italic 20px 'Consolas', monospace";
+      g.fillText("pump.fun grades every call. i read the grades.", 28, H - 46);
     } else {
       // trade ticket
       const buy = v.side === "BUY";
@@ -218,52 +270,86 @@ export class Screens {
     const g = this.inspection.ctx;
     this.inspection.bg();
     g.textBaseline = "top";
+
+    // ---- header band: eyebrow, ticker + name on one line, source chip ----
+    g.fillStyle = "#0b1524";
+    g.fillRect(8, 8, W - 16, 118);
     g.fillStyle = "#2affd4";
-    g.font = "bold 34px 'Consolas', monospace";
-    g.fillText("◢ RESEARCH TERMINAL", 28, 24);
-    g.fillStyle = "#e8f0ff";
-    g.font = "bold 40px 'Consolas', monospace";
-    g.fillText(`$${(s.symbol || "—").slice(0, 12)}`, 28, 74);
-    g.fillStyle = "#7d8aa5";
+    g.font = "bold 20px 'Consolas', monospace";
+    g.fillText("◢ RESEARCH TERMINAL", 30, 22);
+    g.fillStyle = "#3a4a66";
     g.font = "20px 'Consolas', monospace";
-    g.fillText((s.name || "").slice(0, 40), 28, 124);
+    const clock = new Date().toISOString().slice(11, 16) + " UTC";
+    g.textAlign = "right";
+    g.fillText(clock, W - 30, 22);
+    g.textAlign = "left";
+    g.fillStyle = "#e8f0ff";
+    g.font = "bold 44px 'Consolas', monospace";
+    const sym = `$${(s.symbol || "—").slice(0, 12)}`;
+    g.fillText(sym, 30, 52);
+    const symW = g.measureText(sym).width;
+    g.fillStyle = "#66779a";
+    g.font = "22px 'Consolas', monospace";
+    g.fillText((s.name || "").slice(0, Math.max(4, Math.floor((W - 90 - symW) / 13))), 44 + symW, 68);
     if (s.source) {
-      g.fillStyle = s.source.startsWith("SENT") ? "#89ddff" : "#ffd700";
-      g.fillText(`${s.source.startsWith("SENT") ? "📨" : "🔍"} ${s.source.slice(0, 44)}`, 28, 150);
+      const sent = s.source.startsWith("SENT");
+      g.fillStyle = sent ? "#89ddff" : "#ffd700";
+      g.font = "bold 18px 'Consolas', monospace";
+      g.fillText(`● ${s.source.slice(0, 60)}`, 30, 100);
     }
 
-    let y = 194;
-    g.font = "22px 'Consolas', monospace";
-    for (const r of s.rows.slice(-11)) {
+    // ---- checks: zebra rows, aligned columns, color only where it means ----
+    let y = 142;
+    const rows = s.rows.slice(-11);
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i];
+      if (i % 2 === 0) {
+        g.fillStyle = "#0a111d";
+        g.fillRect(8, y - 4, W - 16, 30);
+      }
+      g.font = "bold 22px 'Consolas', monospace";
       g.fillStyle = VERDICT_COLOR[r.verdict];
-      const mark = r.verdict === "pass" ? "✓" : r.verdict === "fail" ? "✗" : r.verdict === "warn" ? "!" : "?";
-      g.fillText(mark, 30, y);
-      g.fillStyle = "#aab6d0";
-      g.fillText(r.label.padEnd(12).slice(0, 12), 62, y);
+      const mark = r.verdict === "pass" ? "✓" : r.verdict === "fail" ? "✗" : r.verdict === "warn" ? "!" : "·";
+      g.fillText(mark, 32, y);
+      g.fillStyle = r.verdict === "fail" ? "#ff8ca0" : r.verdict === "warn" ? "#ffcf8a" : "#93a3c2";
+      g.font = "bold 20px 'Consolas', monospace";
+      g.fillText(r.label.slice(0, 13), 66, y + 1);
       g.fillStyle = "#dfe8fa";
-      g.fillText(r.detail.slice(0, 44), 220, y);
+      g.font = "21px 'Consolas', monospace";
+      g.fillText(r.detail.slice(0, 55), 250, y + 1);
       y += 30;
     }
+    if (!rows.length) {
+      g.fillStyle = "#3a4a66";
+      g.font = "22px 'Consolas', monospace";
+      g.fillText("reading the chain" + ".".repeat(1 + (Math.floor(Date.now() / 400) % 3)), 32, y + 6);
+    }
 
+    // ---- verdict band: score bar left, tier right ----
+    g.fillStyle = "#0b1524";
+    g.fillRect(8, H - 92, W - 16, 84);
     if (s.score !== null) {
-      g.fillStyle = "#7d8aa5";
-      g.font = "20px 'Consolas', monospace";
+      g.fillStyle = "#66779a";
+      g.font = "bold 18px 'Consolas', monospace";
       g.fillText("SCORE", 30, H - 78);
-      // score bar
-      g.fillStyle = "#132033";
-      g.fillRect(120, H - 80, 500, 26);
+      g.fillStyle = "#101c2e";
+      g.fillRect(30, H - 52, 560, 22);
       const col = s.score >= 55 ? "#39ff88" : s.score >= 35 ? "#ffb454" : "#ff4d6d";
       g.fillStyle = col;
-      g.fillRect(120, H - 80, 5 * s.score, 26);
-      g.fillStyle = "#fff";
-      g.font = "bold 22px 'Consolas', monospace";
-      g.fillText(String(s.score), 636, H - 80);
+      g.fillRect(30, H - 52, Math.max(4, 5.6 * s.score), 22);
+      // threshold ticks at the tier lines
+      g.fillStyle = "#22314a";
+      g.fillRect(30 + 5.6 * 35, H - 56, 2, 30);
+      g.fillRect(30 + 5.6 * 55, H - 56, 2, 30);
+      g.fillStyle = col;
+      g.font = "bold 30px 'Consolas', monospace";
+      g.fillText(String(s.score), 606, H - 58);
     }
     if (s.tier) {
       g.fillStyle = TIER_COLOR[s.tier] ?? "#fff";
-      g.font = "bold 40px 'Consolas', monospace";
+      g.font = "bold 42px 'Consolas', monospace";
       g.textAlign = "right";
-      g.fillText(s.tier, W - 30, H - 46);
+      g.fillText(s.tier, W - 30, H - 66);
       g.textAlign = "left";
     }
     this.inspection.done();
@@ -271,6 +357,28 @@ export class Screens {
 
   private lastCards: CalloutCard[] = [];
   private lastActions: ActionEvent[] = [];
+  // today's TRACK RECORD (entry → peak → multiple) + today PnL, fetched from
+  // the server's own public endpoints — same numbers the website shows
+  private todayBoard: {
+    calls: number;
+    avgMultiplier: number | null;
+    winners2x: number;
+    rows: { symbol: string; entryMcUsd: number | null; peakMcUsd: number | null; multiplier: number | null; at: number; dry: boolean }[];
+  } | null = null;
+  private todayPnlSol: number | null = null;
+
+  private async refreshRecord(): Promise<void> {
+    try {
+      const b = await fetch("/public/callouts?range=today").then((r) => r.json());
+      if (b?.ok !== false && b?.rows) this.todayBoard = b;
+    } catch { /* keep the last board */ }
+    try {
+      const s: any = await fetch("/public/stats").then((r) => r.json());
+      const t = s?.trading;
+      if (t && t.realizedTodaySol != null) this.todayPnlSol = Number(t.realizedTodaySol);
+    } catch { /* keep the last number */ }
+    this.drawCallouts();
+  }
 
   drawCallouts(cards?: CalloutCard[], actions?: ActionEvent[]): void {
     if (cards) this.lastCards = cards;
@@ -278,42 +386,84 @@ export class Screens {
     const g = this.callouts.ctx;
     this.callouts.bg();
     g.textBaseline = "top";
+
+    // ---- header: title left, TODAY PNL right ----
     g.fillStyle = "#2affd4";
-    g.font = "bold 34px 'Consolas', monospace";
-    g.fillText("◢ CALLS ON THE RECORD", 28, 24);
-    let y = 86;
-    if (!this.lastCards.length) {
-      g.fillStyle = "#6b7690";
-      g.font = "22px 'Consolas', monospace";
-      g.fillText("no calls yet — send Riku a coin", 30, y);
-      y += 40;
+    g.font = "bold 30px 'Consolas', monospace";
+    g.fillText("◢ THE RECORD — TODAY", 28, 22);
+    if (this.todayPnlSol != null) {
+      const up = this.todayPnlSol >= 0;
+      g.textAlign = "right";
+      g.fillStyle = "#66779a";
+      g.font = "bold 16px 'Consolas', monospace";
+      g.fillText("PNL TODAY", W - 30, 18);
+      g.fillStyle = up ? "#39ff88" : "#ff4d6d";
+      g.font = "bold 28px 'Consolas', monospace";
+      g.fillText(`${up ? "+" : ""}${this.todayPnlSol.toFixed(3)} SOL`, W - 30, 38);
+      g.textAlign = "left";
     }
-    for (const c of this.lastCards.slice().reverse().slice(0, 6)) {
-      g.fillStyle = TIER_COLOR[c.tier] ?? "#c8d0e0";
-      g.font = "bold 24px 'Consolas', monospace";
-      g.fillText(`$${c.symbol.slice(0, 10)}`, 30, y);
-      g.fillStyle = "#7d8aa5";
-      g.font = "18px 'Consolas', monospace";
-      g.fillText(c.dry ? "[dry]" : c.tier, 210, y + 3);
-      g.fillStyle = "#aeb9d2";
-      g.fillText(c.text.slice(0, 52), 320, y + 3);
-      y += 40;
+    const b = this.todayBoard;
+    g.fillStyle = "#66779a";
+    g.font = "20px 'Consolas', monospace";
+    g.fillText(
+      b && b.calls
+        ? `${b.calls} call${b.calls === 1 ? "" : "s"}  ·  avg peak ${b.avgMultiplier != null ? b.avgMultiplier.toFixed(2) + "x" : "—"}  ·  ${b.winners2x} hit 2x`
+        : "no calls yet today — the tape decides when",
+      28,
+      64,
+    );
+    g.fillStyle = "#1c2740";
+    g.fillRect(28, 94, W - 56, 3);
+
+    // ---- the record table: SYM | ENTRY | PEAK | X ----
+    const fmtMc = (n: number | null) =>
+      n == null ? "—" : n >= 1e6 ? `$${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `$${(n / 1e3).toFixed(1)}k` : `$${n.toFixed(0)}`;
+    const ago = (at: number) => {
+      const m = Math.max(0, Math.round((Date.now() - at) / 60000));
+      return m < 1 ? "now" : m < 60 ? `${m}m` : `${Math.floor(m / 60)}h`;
+    };
+    g.fillStyle = "#5a7290";
+    g.font = "bold 17px 'Consolas', monospace";
+    g.fillText("CALL", 30, 108);
+    g.fillText("ENTRY", 260, 108);
+    g.fillText("PEAK", 420, 108);
+    g.fillText("X", 580, 108);
+    g.fillText("AGE", 700, 108);
+    let y = 138;
+    const rows = b?.rows ?? [];
+    for (const r of rows.slice(0, 7)) {
+      g.fillStyle = "#e8f0ff";
+      g.font = "bold 23px 'Consolas', monospace";
+      g.fillText(`$${r.symbol.slice(0, 10)}${r.dry ? " ᴰ" : ""}`, 30, y);
+      g.fillStyle = "#93a3c2";
+      g.font = "22px 'Consolas', monospace";
+      g.fillText(fmtMc(r.entryMcUsd), 260, y);
+      g.fillText(fmtMc(r.peakMcUsd), 420, y);
+      if (r.multiplier != null) {
+        g.fillStyle = r.multiplier >= 2 ? "#39ff88" : r.multiplier >= 1.2 ? "#7fffd4" : "#ff8ca0";
+        g.font = "bold 23px 'Consolas', monospace";
+        g.fillText(`${r.multiplier.toFixed(2)}x`, 580, y);
+      } else {
+        g.fillStyle = "#5a6680";
+        g.fillText("…", 580, y);
+      }
+      g.fillStyle = "#5a6680";
+      g.font = "20px 'Consolas', monospace";
+      g.fillText(ago(r.at), 700, y);
+      y += 36;
     }
 
     // ---- action ticker: what the desk DID ----
     const AK: Record<string, string> = {
       CALL: "#39ff88", BUY: "#7fffd4", SELL: "#ffb454", RECEIVED: "#89ddff", BUYBACK: "#ffd700", BURN: "#ff5c33",
     };
-    y = Math.max(y + 14, 350);
+    y = Math.max(y + 10, 408);
     g.fillStyle = "#5a7290";
-    g.font = "bold 20px 'Consolas', monospace";
+    g.font = "bold 18px 'Consolas', monospace";
     g.fillText("── DESK ACTIONS ──", 30, y);
-    y += 34;
-    const ago = (at: number) => {
-      const m = Math.max(0, Math.round((Date.now() - at) / 60000));
-      return m < 1 ? "now" : m < 60 ? `${m}m` : `${Math.floor(m / 60)}h`;
-    };
-    for (const a of this.lastActions.slice().reverse().slice(0, 6)) {
+    y += 32;
+    for (const a of this.lastActions.slice().reverse().slice(0, 5)) {
+      if (y > H - 30) break;
       g.fillStyle = AK[a.kind] ?? "#c8d0e0";
       g.font = "bold 20px 'Consolas', monospace";
       g.fillText(a.kind.padEnd(9), 30, y);
