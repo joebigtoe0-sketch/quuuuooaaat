@@ -3,7 +3,7 @@ import path from "node:path";
 import { cfg } from "../config.js";
 import { log } from "../log.js";
 import { store } from "../store.js";
-import { harvestMint, callerRep, callerPnl, parseCalloutItem, persistIntel, type HarvestedCall } from "./callers.js";
+import { harvestMint, callerRep, callerPnl, parseAlertItem, persistIntel, type HarvestedCall } from "./callers.js";
 
 /**
  * CALLOUT DISCOVERY — the callout tape brings RIKU coins, instead of him only
@@ -31,7 +31,6 @@ import { harvestMint, callerRep, callerPnl, parseCalloutItem, persistIntel, type
  * gauntlet (scoring, hard rejects, fake-chart tells) like any other pick.
  */
 
-const FEED_RECENT = "https://frontend-api-v3.pump.fun/callout/recent";
 const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36";
 
@@ -61,8 +60,16 @@ function today(): string {
 
 type OnFind = (mint: string, why: string) => { ok: boolean; why?: string };
 
-/** The nomination gate, shared by both speeds. Returns true if nominated. */
-async function tryNominate(c: HarvestedCall, onFind: OnFind, freshMs: number, source: string): Promise<boolean> {
+/** The nomination gate, shared by both speeds. Returns true if nominated.
+ *  `skin` (the caller's own position on the coin): pass it when the feed
+ *  already delivered it; leave undefined to fetch from the public PnL route. */
+async function tryNominate(
+  c: HarvestedCall,
+  onFind: OnFind,
+  freshMs: number,
+  source: string,
+  skinIn?: { costUsd: number; pnlPct: number | null } | null,
+): Promise<boolean> {
   if (Date.now() - c.at > freshMs) return false;
   if (today() !== st.day) {
     st.day = today();
@@ -80,13 +87,19 @@ async function tryNominate(c: HarvestedCall, onFind: OnFind, freshMs: number, so
   const who = c.username || rep.username || "a caller I track";
   const mcNote = c.mcAtCall > 0 ? ` at $${Math.round(c.mcAtCall).toLocaleString("en-US")} mc` : "";
   // skin check: is the caller actually positioned in what they're calling?
-  const skin = await Promise.race([callerPnl(c.wallet, c.mint), new Promise<null>((r) => setTimeout(() => r(null), 2500))]);
+  const skin =
+    skinIn !== undefined
+      ? skinIn
+      : await Promise.race([
+          callerPnl(c.wallet, c.mint).then((p) => (p ? { costUsd: p.costUsd, pnlPct: p.pct } : null)),
+          new Promise<null>((r) => setTimeout(() => r(null), 2500)),
+        ]);
   const skinNote =
-    skin && skin.costUsd > 5
-      ? ` — and they're holding it themselves ($${Math.round(skin.costUsd)} cost basis)`
-      : skin && skin.costUsd <= 0
-        ? " — calling it without holding it, noted"
-        : "";
+    skin == null
+      ? "" // unknown ≠ not holding
+      : skin.costUsd > 5
+        ? ` — and they're holding it themselves ($${Math.round(skin.costUsd)} cost basis)`
+        : " — calling it without holding it, noted";
   const why =
     `caller intel: ${who} (${rep.avg.toFixed(1)}x avg peak over ${rep.calls} graded calls, best ${rep.best.toFixed(1)}x) ` +
     `just called this${mcNote}${skinNote} — worth my own read`;
@@ -122,13 +135,19 @@ async function sweepCandidates(): Promise<string[]> {
   return mints.slice(0, 24);
 }
 
-// ---------- FAST: the cookie-gated live feed ----------
+// ---------- FAST: the cookie-gated FOLLOW feed ----------
+// `/following-positions/alerts?kinds=callout` — real-time callouts from every
+// account the cookie's user FOLLOWS, each item carrying pump.fun's own
+// grading (maxMultiplier), the mc at call, the thesis, AND the author's live
+// position on the coin. Coverage = the follow list: follow the graded top
+// callers (calloutfollow tooling) and this becomes a curated alpha feed.
+const FEED_ALERTS = "https://frontend-api-v3.pump.fun/following-positions/alerts";
 let fastTimer: ReturnType<typeof setInterval> | null = null;
 
 function startFastFeed(onFind: OnFind): void {
   const cookie = (process.env.PUMP_COOKIE ?? "").trim();
   if (!cookie) {
-    log.info("discovery", "PUMP_COOKIE not set — live callout feed off, trending sweep only (nominations will lag calls by up to ~45 min)");
+    log.info("discovery", "PUMP_COOKIE not set — live follow-feed off, trending sweep only (nominations will lag calls by up to ~45 min)");
     return;
   }
   let disabled = false;
@@ -136,7 +155,7 @@ function startFastFeed(onFind: OnFind): void {
   fastTimer = setInterval(async () => {
     if (disabled) return;
     try {
-      const res = await fetch(`${FEED_RECENT}?limit=30`, {
+      const res = await fetch(`${FEED_ALERTS}?pageSize=50&kinds=callout`, {
         headers: {
           "user-agent": UA,
           origin: "https://pump.fun",
@@ -147,24 +166,24 @@ function startFastFeed(onFind: OnFind): void {
       });
       if (res.status === 400 || res.status === 401 || res.status === 403) {
         disabled = true;
-        log.warn("discovery", `live feed rejected the cookie (${res.status}) — refresh PUMP_COOKIE and restart; falling back to trending sweep`);
+        log.warn("discovery", `follow feed rejected the cookie (${res.status}) — refresh PUMP_COOKIE and restart; falling back to trending sweep`);
         return;
       }
-      if (!res.ok) throw new Error(`recent ${res.status}`);
+      if (!res.ok) throw new Error(`alerts ${res.status}`);
       const j: any = await res.json();
-      const items: any[] = j?.callouts ?? [];
+      const items: any[] = j?.items ?? [];
       failStreak = 0;
-      for (const r of items) {
-        const c = parseCalloutItem(r);
+      for (const it of items) {
+        const c = parseAlertItem(it);
         if (!c) continue;
-        await tryNominate(c, onFind, FAST_FRESH_MS, "live");
+        await tryNominate(c, onFind, FAST_FRESH_MS, "follow-feed", c.skin);
       }
       if (items.length) persistIntel();
     } catch (e) {
-      if (++failStreak === 5) log.warn("discovery", `live feed failing repeatedly: ${String(e).slice(0, 80)}`);
+      if (++failStreak === 5) log.warn("discovery", `follow feed failing repeatedly: ${String(e).slice(0, 80)}`);
     }
   }, 20_000);
-  log.info("discovery", "live callout feed ON — polling /callout/recent every 20s (caller-call → nomination in seconds)");
+  log.info("discovery", "live follow-feed ON — polling followed callers' callouts every 20s (call → nomination in seconds)");
 }
 
 // ---------- SLOW: the trending sweep ----------

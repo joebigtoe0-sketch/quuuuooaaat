@@ -176,6 +176,38 @@ export function persistIntel(): void {
   saveCalls();
 }
 
+/** One item from the follow-feed (`/following-positions/alerts?kinds=callout`)
+ *  — richer wire shape than the public page: pump.fun's own maxMultiplier,
+ *  mc at call, and the author's LIVE position ride along. Upserts + tapes. */
+export function parseAlertItem(it: any): (HarvestedCall & { skin: { costUsd: number; pnlPct: number | null } | null }) | null {
+  const a = it?.author;
+  const co = it?.callout;
+  const wallet = String(a?.walletAddress ?? it?.walletAddress ?? "");
+  const calloutId = String(co?.calloutId ?? "");
+  const mint = String(it?.coinMint ?? "");
+  if (!wallet || !calloutId || !mint) return null;
+  const username = String(a?.userName ?? "").trim();
+  const at = Date.parse(co?.calloutTimestamp ?? it?.createdAt ?? "") || Date.now();
+  const entry = Number(co?.calloutPrice ?? 0);
+  const maxMult = Number(co?.maxMultiplier ?? 0) || null;
+  const mult = typeof co?.multiple === "number" ? co.multiple : null;
+  const mcAtCall = Number(co?.calledOutAtMcap ?? it?.marketCap ?? 0);
+  upsertCall(
+    {
+      w: wallet, u: username, m: mint, at, entry,
+      peak: entry > 0 && maxMult ? entry * maxMult : 0,
+      peakAt: Date.parse(co?.maxMultiplierAt ?? "") || 0,
+      mc: mcAtCall, mult,
+    },
+    calloutId,
+  );
+  const thesis = String(co?.thesis ?? "").trim();
+  if (thesis) noteTape(mint, username || wallet.slice(0, 6), thesis, mult, at);
+  const p = it?.position;
+  const skin = p ? { costUsd: Number(p.costBasisUsd ?? 0), pnlPct: p.pnlPercentage != null ? Number(p.pnlPercentage) : null } : null;
+  return { calloutId, wallet, username, thesis, peakMult: maxMult ?? mult, at, mcAtCall, mint, skin };
+}
+
 /** Does the caller have SKIN in the coin they called? Public pump.fun PnL
  *  route — cost basis + PnL of any wallet on any mint. This is the omo "FOMO
  *  feed" edge: weight a call by whether its author is actually positioned. */
