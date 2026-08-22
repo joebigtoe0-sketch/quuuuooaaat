@@ -85,7 +85,9 @@ async function tryNominate(
   const seenAt = store.seenAt(c.mint);
   if (seenAt && Date.now() - seenAt < 86_400_000) return false; // already on the show
   const rep = callerRep(c.wallet);
-  if (!rep || rep.calls < cfg.callerDiscoveryMinCalls || rep.avg < cfg.callerDiscoveryAvg) return false;
+  // med floor alongside the avg bar: a lottery-only caller (one 100x, rest
+  // dust) clears any avg bar but their TYPICAL call loses — median catches it
+  if (!rep || rep.calls < cfg.callerDiscoveryMinCalls || rep.avg < cfg.callerDiscoveryAvg || rep.med < 1.2) return false;
   const { touchBan } = await import("../agent/tokenguard.js");
   if (touchBan(c.mint)) return false;
   const who = c.username || rep.username || "a caller I track";
@@ -105,7 +107,7 @@ async function tryNominate(
         ? ` — and they're holding it themselves ($${Math.round(skin.costUsd)} cost basis)`
         : " — calling it without holding it, noted";
   const why =
-    `caller intel: ${who} (${rep.avg.toFixed(1)}x avg peak over ${rep.calls} graded calls, best ${rep.best.toFixed(1)}x) ` +
+    `caller intel: ${who} (${rep.med.toFixed(1)}x MEDIAN peak over ${rep.calls} graded calls, ${rep.h2}% hit 2x) ` +
     `just called this${mcNote}${skinNote} — worth my own read`;
   const res = onFind(c.mint, why);
   if (res.ok) {

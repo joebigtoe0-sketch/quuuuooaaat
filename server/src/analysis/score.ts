@@ -319,16 +319,18 @@ export function scoreToken(i: Inputs): {
   // CALLER INTEL (0-8) — who ELSE called this coin, judged by pump.fun's own
   // grading of their past calls. He judges other callers; a proven runner-
   // caller showing up is signal, a crowd of nobodies is not.
+  // judged on MEDIAN peak, not average — one lottery call makes a bad caller's
+  // average look elite; the median doesn't move
   const ci = i.callerIntel;
   if (ci && ci.callers > 0) {
-    if (ci.scored > 0 && ci.bestAvg >= 2) {
+    if (ci.scored > 0 && ci.bestMed >= 1.8) {
       score += 8;
-      row("CALLER INTEL", "pass", `${ci.callers} caller${ci.callers > 1 ? "s" : ""} on this — best is ${ci.bestName || "a proven one"} running ${ci.bestAvg.toFixed(1)}x avg over ${ci.bestCalls} calls`);
-    } else if (ci.scored > 0 && ci.bestAvg >= 1.3) {
+      row("CALLER INTEL", "pass", `${ci.callers} caller${ci.callers > 1 ? "s" : ""} on this — best is ${ci.bestName || "a proven one"}, ${ci.bestMed.toFixed(1)}x MEDIAN peak over ${ci.bestCalls} calls (not one lucky hit — the typical call)`);
+    } else if (ci.scored > 0 && ci.bestMed >= 1.3) {
       score += 4;
-      row("CALLER INTEL", "pass", `${ci.callers} caller${ci.callers > 1 ? "s" : ""} on this, best avg ${ci.bestAvg.toFixed(1)}x — decent company`);
+      row("CALLER INTEL", "pass", `${ci.callers} caller${ci.callers > 1 ? "s" : ""} on this, best runs a ${ci.bestMed.toFixed(1)}x median peak — decent company`);
     } else {
-      row("CALLER INTEL", "warn", `${ci.callers} caller${ci.callers > 1 ? "s" : ""} on this and none with a record — tourists, not signal`);
+      row("CALLER INTEL", "warn", `${ci.callers} caller${ci.callers > 1 ? "s" : ""} on this and none with a real record — tourists, not signal`);
     }
   }
 

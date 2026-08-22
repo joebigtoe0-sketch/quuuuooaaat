@@ -29,6 +29,12 @@ interface CallerStat {
   calls: number;
   sumMax: number; // sum of peak multiples across graded calls
   best: number; // best peak multiple seen
+  /** MEDIAN peak multiple — the honest number. One 148x lottery call gives a
+   *  1.1x-typical caller a 5x AVERAGE; the median doesn't move. Exit targets
+   *  and quality bars anchor here, never on avg. */
+  med: number;
+  /** % of calls that peaked ≥2x — robust hit-rate companion to the median. */
+  h2: number;
   coins: string[]; // mints this caller was seen on (capped)
   lastSeen: number;
 }
@@ -78,14 +84,24 @@ try {
 // Reputation = frozen seed baseline (3,146-callout firehose harvest of
 // 2026-08-15, aggregates only) + everything in the live rows map.
 const SEED_AT = Date.parse("2026-08-15T14:04:54.367Z");
-const seedBase = new Map(CALLER_SEED.map((s) => [s.w, { n: s.n, sum: s.avg * s.n, best: s.best }]));
+const seedBase = new Map(CALLER_SEED.map((s) => [s.w, { n: s.n, sum: s.avg * s.n, best: s.best, med: s.med, h2: s.h2 }]));
 
 function rowPeakMult(r: CallRow): number | null {
   if (r.entry > 0 && r.peak > 0) return r.peak / r.entry;
   return r.mult && r.mult > 0 ? r.mult : null;
 }
 
-/** Recompute one wallet's stats from seed baseline + its live rows. */
+function median(xs: number[]): number {
+  if (!xs.length) return 0;
+  const s = [...xs].sort((a, b) => a - b);
+  const m = Math.floor(s.length / 2);
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+}
+
+/** Recompute one wallet's stats from seed baseline + its live rows.
+ *  med: seed carries only its own median (not raw samples), so the combined
+ *  median is a count-weighted blend of seed med and live med — approximate,
+ *  and self-correcting as live rows outnumber the seed. h2 blends exactly. */
 function rebuildWallet(w: string, rowsByWallet?: Map<string, CallRow[]>): void {
   const mine = rowsByWallet?.get(w) ?? Object.values(calls).filter((r) => r.w === w);
   const base = seedBase.get(w);
@@ -95,13 +111,16 @@ function rebuildWallet(w: string, rowsByWallet?: Map<string, CallRow[]>): void {
     calls: base?.n ?? 0,
     sumMax: base?.sum ?? 0,
     best: base?.best ?? 0,
+    med: base?.med ?? 0,
+    h2: base?.h2 ?? 0,
     coins: prev?.coins ?? [],
     lastSeen: prev?.lastSeen || (base ? SEED_AT : 0),
   };
+  const peaks: number[] = [];
   for (const r of mine) {
     const pm = rowPeakMult(r);
     if (pm != null) {
-      c.calls += 1;
+      peaks.push(pm);
       c.sumMax += pm;
       if (pm > c.best) c.best = pm;
     }
@@ -111,6 +130,14 @@ function rebuildWallet(w: string, rowsByWallet?: Map<string, CallRow[]>): void {
       c.coins.push(r.m);
       if (c.coins.length > 200) c.coins = c.coins.slice(-200);
     }
+  }
+  const seedN = base?.n ?? 0;
+  c.calls = seedN + peaks.length;
+  if (peaks.length) {
+    const liveMed = median(peaks);
+    c.med = seedN ? (base!.med * seedN + liveMed * peaks.length) / c.calls : liveMed;
+    const hits = seedN * ((base?.h2 ?? 0) / 100) + peaks.filter((p) => p >= 2).length;
+    c.h2 = Math.round((100 * hits) / c.calls);
   }
   db.callers[w] = c;
 }
@@ -260,11 +287,14 @@ export function callerTape(mint: string): TapeLine[] {
   return db.mints[mint]?.tape ?? [];
 }
 
-/** A caller's accumulated reputation, if they have one. */
-export function callerRep(userId: string): { calls: number; avg: number; best: number; username: string } | null {
+/** A caller's accumulated reputation, if they have one.
+ *  med is the honest quality number; avg is kept for context/content only. */
+export function callerRep(
+  userId: string,
+): { calls: number; avg: number; med: number; h2: number; best: number; username: string } | null {
   const c = db.callers[userId];
   if (!c || c.calls < 1) return null;
-  return { calls: c.calls, avg: c.sumMax / c.calls, best: c.best, username: c.username };
+  return { calls: c.calls, avg: c.sumMax / c.calls, med: c.med, h2: c.h2, best: c.best, username: c.username };
 }
 
 const UA =
@@ -380,7 +410,8 @@ export function startCallerHarvester(): void {
 export interface CallerSignal {
   callers: number; // distinct callers seen on this mint
   scored: number; // of those, callers with ≥3 scored calls (credible sample)
-  bestAvg: number; // best avg maxMultiplier among credible callers on this mint
+  bestMed: number; // best MEDIAN peak among credible callers on this mint
+  bestAvg: number; // that same caller's avg (context only — lottery-distorted)
   bestName: string; // that caller's username
   bestCalls: number; // their sample size
 }
@@ -389,29 +420,31 @@ export interface CallerSignal {
 export function callerSignal(mint: string): CallerSignal | null {
   const h = db.mints[mint];
   if (!h || !h.callers.length) return null;
-  let bestAvg = 0, bestName = "", bestCalls = 0, scored = 0;
+  let bestMed = 0, bestAvg = 0, bestName = "", bestCalls = 0, scored = 0;
   for (const id of h.callers) {
     const c = db.callers[id];
     if (!c || c.calls < 3) continue; // one lucky call is noise, not reputation
     scored++;
-    const avg = c.sumMax / c.calls;
-    if (avg > bestAvg) {
-      bestAvg = avg;
+    if (c.med > bestMed) {
+      bestMed = c.med;
+      bestAvg = c.sumMax / c.calls;
       bestName = c.username;
       bestCalls = c.calls;
     }
   }
-  return { callers: h.callers.length, scored, bestAvg, bestName, bestCalls };
+  return { callers: h.callers.length, scored, bestMed, bestAvg, bestName, bestCalls };
 }
 
 /** The full graded leaderboard — every caller the index has ever graded.
  *  pump.fun caps its own board at top-50; ours shows everything we can prove.
+ *  RANKED BY MEDIAN peak (avg is lottery-distorted — one 148x call makes a
+ *  1.1x-typical caller look elite), avg as tiebreak, both served.
  *  n = 0 means no cap; minCalls guards against one-lucky-call rankings. */
 export function topCallers(n = 0, minCalls = 3): (CallerStat & { userId: string; avg: number })[] {
   const rows = Object.entries(db.callers)
     .filter(([, c]) => c.calls >= Math.max(1, minCalls))
     .map(([userId, c]) => ({ ...c, userId, avg: c.sumMax / c.calls }))
-    .sort((a, b) => b.avg - a.avg);
+    .sort((a, b) => b.med - a.med || b.avg - a.avg);
   return n > 0 ? rows.slice(0, n) : rows;
 }
 
