@@ -90,11 +90,6 @@ async function tryNominate(
   skinIn?: { costUsd: number; pnlPct: number | null } | null,
 ): Promise<boolean> {
   if (Date.now() - c.at > freshMs) return gate("stale");
-  if (today() !== st.day) {
-    st.day = today();
-    st.dayCount = 0;
-  }
-  if (st.dayCount >= cfg.callerDiscoveryMaxPerDay) return gate("day-cap");
   if (st.discovered[c.mint]) return gate("already-nominated");
   if (cfg.ownMint && c.mint === cfg.ownMint) return false;
   const seenAt = store.seenAt(c.mint);
@@ -127,6 +122,13 @@ async function tryNominate(
       return true;
     }
   }
+  // RESEARCH nomination below is a SHOW budget (max segments/day) — the buy
+  // above has its own caps and must never starve because the show is full
+  if (today() !== st.day) {
+    st.day = today();
+    st.dayCount = 0;
+  }
+  if (st.dayCount >= cfg.callerDiscoveryMaxPerDay) return gate("day-cap");
   const who = c.username || rep.username || "a caller I track";
   const mcNote = c.mcAtCall > 0 ? ` at $${Math.round(c.mcAtCall).toLocaleString("en-US")} mc` : "";
   const skinNote =
