@@ -134,8 +134,12 @@ function rebuildWallet(w: string, rowsByWallet?: Map<string, CallRow[]>): void {
   const seedN = base?.n ?? 0;
   c.calls = seedN + peaks.length;
   if (peaks.length) {
-    const liveMed = median(peaks);
-    c.med = seedN ? (base!.med * seedN + liveMed * peaks.length) / c.calls : liveMed;
+    // NOT a weighted mean of the two medians — that lets a few huge live rows
+    // drag a 1.7x-median caller to "6.7x median", the exact lottery distortion
+    // medians exist to kill. Represent the seed as seedN pseudo-samples at its
+    // median and take a true median over the combined set: outliers stay
+    // outliers no matter how big they run.
+    c.med = seedN ? median([...Array(seedN).fill(base!.med), ...peaks]) : median(peaks);
     const hits = seedN * ((base?.h2 ?? 0) / 100) + peaks.filter((p) => p >= 2).length;
     c.h2 = Math.round((100 * hits) / c.calls);
   }
