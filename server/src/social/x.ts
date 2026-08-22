@@ -110,6 +110,33 @@ function oauthHeader(method: string, url: string, extraParams: Record<string, st
   );
 }
 
+/**
+ * RETIRED-PHRASE RAIL. Catchphrases burn out: "write that down" was in half his
+ * posts before it read as a bot tic, and the caption model kept reaching for it
+ * (and for "i did the math so you don't have to") even when the brief banned
+ * them outright — five briefs in a row. Prompts don't hold; code does.
+ *
+ * Only strips the phrase when it stands as its OWN sentence, which is exactly
+ * the tic form. A quoted or embedded reference survives, so he can still say
+ * he retired it without this eating the line.
+ */
+const RETIRED = [
+  /write that down/i,
+  /i did the math so you don'?t have to/i,
+];
+export function scrubRetired(text: string): string {
+  const parts = text.split(/(?<=[.!?])\s+/);
+  const kept = parts.filter((sentence) => {
+    const bare = sentence.trim().replace(/^["'`“‘]+|["'`.!?”’]+$/g, "").trim();
+    return !RETIRED.some((re) => re.test(bare) && bare.replace(re, "").trim().length === 0);
+  });
+  // Nothing removed -> hand back the ORIGINAL string untouched. Rebuilding it
+  // would flatten the blank lines that long-form posts are written with.
+  if (kept.length === parts.length) return text;
+  const out = kept.join(" ").replace(/[ 	]{2,}/g, " ").trim();
+  return out.length >= 2 ? out : text; // never scrub a post down to nothing
+}
+
 /** Sentence-boundary trim (from universe) — never cut mid-word. */
 export function trimForX(text: string): string {
   if (text.length <= MAX_POST_LEN) return text;
@@ -125,7 +152,7 @@ export async function postTweet(
   // The model gets a leash (MAX_POST_LEN) so it can't ramble. Words the
   // producer wrote by hand are already deliberate — they go out whole, and
   // the account is Premium, so long-form is allowed.
-  const trim = (t: string): string => (opts.exact ? t : trimForX(t));
+  const trim = (t: string): string => scrubRetired(opts.exact ? t : trimForX(t));
   if (xPostsToday() >= MAX_POSTS_PER_DAY) return { ok: false, dry: false, why: "daily post cap" };
   // HARD GATE: nothing reaches the real timeline until GO LIVE is armed —
   // keys being present must never mean "start posting"

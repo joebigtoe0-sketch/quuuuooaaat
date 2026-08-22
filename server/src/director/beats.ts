@@ -1111,9 +1111,9 @@ export class Beats {
       case "tweet":
         return this.tweetBeat(action.topic, (action as any).image_prompt, undefined, manual);
       case "film":
-        return this.filmBeat(action.topic);
+        return this.filmBeat(action.topic, (action as any).caption);
       case "selfie":
-        return this.selfieBeat(action.topic, (action as any).anim, (action as any).expr);
+        return this.selfieBeat(action.topic, (action as any).anim, (action as any).expr, (action as any).caption);
       case "research": {
         if (this.dir.planner?.researchedRecently(action.mint, 3)) {
           memory.journal("research", `skipped re-research of ${action.mint.slice(0, 8)}… — already on file (<3h)`);
@@ -1251,7 +1251,7 @@ export class Beats {
 
   /** Selfie: strike a pose at the idle spot, the stage page snaps + uploads
    *  the frame, then it rides a tweet as the attached image. */
-  private async selfieBeat(topic: string, anim?: string, expr?: string): Promise<void> {
+  private async selfieBeat(topic: string, anim?: string, expr?: string, exactCaption?: string): Promise<void> {
     const SELFIE_ANIMS = ["phone_selfie", "pray", "flex_biceps", "two_thumbs", "heart_hands",
       "finger_guns", "salute", "thumbs_up", "dab", "hand_on_heart", "arms_folded"];
     const SELFIE_EXPRS = ["neutral", "happy", "sad", "angry", "smug", "shock", "thinking"];
@@ -1273,11 +1273,11 @@ export class Beats {
       return;
     }
     memory.journal("selfie", `took a selfie (${anim ?? "phone_selfie"}/${expr ?? "happy"})`);
-    await this.tweetBeat(topic, undefined, file);
+    await this.tweetBeat(topic, undefined, file, false, exactCaption);
   }
 
   /** Compose + post a tweet — typed out LIVE on the terminal screen. */
-  private async tweetBeat(topic: string, imagePrompt?: string, attachImage?: string, manual = false): Promise<void> {
+  private async tweetBeat(topic: string, imagePrompt?: string, attachImage?: string, manual = false, exactText?: string): Promise<void> {
     // OPERATOR OVERRIDE: a tweet pressed from the admin panel ignores the
     // pacing budget (daily cap + 25-min spacing). Those rails exist to stop the
     // AGENT from flooding; when the producer says post it, it posts.
@@ -1370,10 +1370,12 @@ export class Beats {
       this.loco.stateName = "IDLE";
       return;
     }
-    const tweet = cashtagify(
-      cleanSpoken(text ?? `day ${Math.ceil((Date.now() / 86_400_000) % 1000)} on the desk. the tape doesn't lie. $RIKU`),
-      knownSymbols(),
-    );
+    const tweet = exactText
+      ? exactText
+      : cashtagify(
+          cleanSpoken(text ?? `day ${Math.ceil((Date.now() / 86_400_000) % 1000)} on the desk. the tape doesn't lie. $RIKU`),
+          knownSymbols(),
+        );
 
     // attachment: a pre-shot selfie wins; else meme generation runs while he types
     const imageP: Promise<string | null> = attachImage
@@ -1415,7 +1417,11 @@ export class Beats {
   }
 
   /** Walk to the greenscreen, deliver a segment to camera, record + post it. */
-  private async filmBeat(topic: string): Promise<void> {
+  // exactCaption: words the producer wrote by hand. The caption model has
+  // ignored explicit briefs five times running (inventing figures, reusing
+  // retired catchphrases), so when the caption matters it gets written here
+  // and the beat only supplies the video.
+  private async filmBeat(topic: string, exactCaption?: string): Promise<void> {
     this.loco.stateName = "FILMING";
     // write the script while walking over
     const scriptP = callFreeform(
@@ -1465,7 +1471,10 @@ export class Beats {
     if (mp4) {
       const mediaId = await uploadVideo(mp4);
       if (mediaId) {
-        const res = await postTweet(cashtagify(cleanSpoken(caption && !looksLikeRefusal(caption) && !looksLikeMeta(caption) ? caption : topic), knownSymbols()), { mediaId });
+        const words = exactCaption
+          ? exactCaption
+          : cashtagify(cleanSpoken(caption && !looksLikeRefusal(caption) && !looksLikeMeta(caption) ? caption : topic), knownSymbols());
+        const res = await postTweet(words, { mediaId, ...(exactCaption ? { exact: true } : {}) });
         posted = res.ok && !res.dry;
         if (!posted) filmWhy = res.dry ? "postTweet gated (not live)" : `postTweet failed: ${(res as any).why ?? "?"}`;
       } else {
@@ -1480,7 +1489,8 @@ export class Beats {
     // refusal firewall on BOTH candidates — a refusal script must never ride
     // the text-post fallback either
     const fallbackText =
-      caption && !looksLikeRefusal(caption) && !looksLikeMeta(caption) ? caption
+      exactCaption ? exactCaption
+      : caption && !looksLikeRefusal(caption) && !looksLikeMeta(caption) ? caption
       : script && !looksLikeRefusal(script) && !looksLikeMeta(script) ? script
       : null;
     if (!posted && fallbackText) {

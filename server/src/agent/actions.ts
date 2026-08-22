@@ -14,8 +14,8 @@ const mint = () => z.string().min(32).max(48);
 export const ActionSchema = z.discriminatedUnion("do", [
   // KOL arm
   z.object({ do: z.literal("tweet"), topic: txt(3, 200), image_prompt: txt(0, 300).optional() }),
-  z.object({ do: z.literal("film"), topic: txt(3, 200) }),
-  z.object({ do: z.literal("selfie"), topic: txt(3, 200), anim: txt(0, 24).optional(), expr: txt(0, 16).optional() }),
+  z.object({ do: z.literal("film"), topic: txt(3, 200), caption: txt(0, 900).optional() }),
+  z.object({ do: z.literal("selfie"), topic: txt(3, 200), anim: txt(0, 24).optional(), expr: txt(0, 16).optional(), caption: txt(0, 900).optional() }),
   // trading arm
   z.object({ do: z.literal("research"), mint: mint(), why: txt(0, 200) }),
   z.object({
