@@ -133,10 +133,13 @@ export async function attemptFollowBuy(
       (await import("../chain/marketcap.js").then((m) => m.resolveSymbol(c.mint)).catch(() => null)) ||
       c.mint.slice(0, 4);
     const who = c.username || rep.username || "a graded caller";
+    // PUBLIC thesis (ledger, callout LLM, trade ticket): the INDEX gets the
+    // credit, never the individual — naming who we follow leaks the strategy
+    // and invites front-running of our own signal
     const thesis =
-      `following ${who}: ${rep.med.toFixed(1)}x median over ${rep.calls} calls, ${rep.h2}% hit 2x, ` +
-      `called at $${Math.round(c.mcAtCall).toLocaleString("en-US")} holding $${Math.round(c.skin.costUsd)} of it — ` +
-      `${room.toFixed(1)}x room to their typical peak`;
+      `my caller index lit up: a top-graded caller (${rep.med.toFixed(1)}x median peak over ${rep.calls} graded calls, ${rep.h2}% hit 2x) ` +
+      `called this at $${Math.round(c.mcAtCall).toLocaleString("en-US")} and is holding it themselves — ` +
+      `${room.toFixed(1)}x room left to their typical peak`;
 
     const { tradeBuy } = await import("../chain/trader.js");
     const res = await tradeBuy(c.mint, symbol, cfg.callerFollowSol, thesis, mc.mcSol ?? null, "callerfollow");

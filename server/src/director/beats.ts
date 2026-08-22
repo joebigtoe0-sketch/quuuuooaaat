@@ -343,9 +343,11 @@ export class Beats {
           const rows = topCallers(8).map((r) => ({
             name: r.username || r.userId.slice(0, 6), med: Number(r.med.toFixed(2)), h2: r.h2, calls: r.calls,
           }));
-          this.hub.cue({ t: "takeover", view: { kind: "leaderboard", rows, highlight: who } });
+          // board shown, source NOT highlighted — naming who triggered the buy
+          // would hand the signal to every front-runner watching the stream
+          this.hub.cue({ t: "takeover", view: { kind: "leaderboard", rows } });
           await this.sayVaried(
-            `Before we look at the coin — look at the board. ${who} is on my graded index for a reason. When one of MY callers moves, the desk moves.`,
+            `Before we look at the coin — look at the board. Every name on it is graded by what their calls actually did. One of them just moved, and I'm not telling you which. The index is the edge.`,
             "excited",
           );
           await sleep(2500);
