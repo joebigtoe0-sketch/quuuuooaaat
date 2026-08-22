@@ -630,27 +630,52 @@ function paintTodoBoard(scene: THREE.Scene, at: THREE.Vector3, roomCenter: THREE
   const draw = (lines: string[]) => {
     g.clearRect(0, 0, 512, 720);
     g.fillStyle = "#f6f4ea";
-    g.font = "900 108px 'Arial Black', Impact, sans-serif";
+    g.font = "900 76px 'Arial Black', Impact, sans-serif";
     g.textAlign = "center";
     g.textBaseline = "top"; // header hugs the very top edge of the board
     g.shadowColor = "rgba(0,0,0,0.35)";
     g.shadowOffsetY = 4;
     g.shadowBlur = 6;
-    g.fillText("TODO", 256, 4);
+    g.fillText("TODO", 256, 6);
     g.shadowColor = "transparent";
-    // handwritten notes, pinned under the header
+    // handwritten notes, pinned under the header — word-wrapped to the board,
+    // never clipped at the edge
     g.textAlign = "left";
     g.textBaseline = "middle";
-    let y = 160;
+    const FONT = "italic 30px 'Segoe Print', 'Comic Sans MS', cursive";
+    const MAX_W = 512 - 62 - 16; // left text margin to right edge
+    let y = 118;
     for (const line of lines.slice(0, 7)) {
+      if (y > 690) break;
+      // wrap into at most 2 lines; ellipsis if it still doesn't fit
+      g.font = FONT;
+      const words = line.split(/\s+/);
+      const rows: string[] = [];
+      let cur = "";
+      for (const w of words) {
+        const tryLine = cur ? cur + " " + w : w;
+        if (g.measureText(tryLine).width <= MAX_W) cur = tryLine;
+        else {
+          if (cur) rows.push(cur);
+          cur = w;
+          if (rows.length === 2) break;
+        }
+      }
+      if (rows.length < 2 && cur) rows.push(cur);
+      if (rows.length === 2 && cur && rows[1] !== cur) {
+        while (g.measureText(rows[1] + "…").width > MAX_W && rows[1].length > 1) rows[1] = rows[1].slice(0, -1);
+        rows[1] += "…";
+      }
       g.fillStyle = "#e0524d"; // pin
       g.beginPath();
       g.arc(38, y - 2, 7, 0, Math.PI * 2);
       g.fill();
       g.fillStyle = "#fdf9ee";
-      g.font = "italic 34px 'Segoe Print', 'Comic Sans MS', cursive";
-      g.fillText(line.slice(0, 30), 62, y);
-      y += 74;
+      for (const r of rows.slice(0, 2)) {
+        g.fillText(r, 62, y);
+        y += 38;
+      }
+      y += 20;
     }
     tex.needsUpdate = true;
   };
