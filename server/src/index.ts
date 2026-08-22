@@ -39,7 +39,7 @@ const hub = new Hub(server);
 // Control endpoints need the admin key (query ?key=, x-admin-key header, or
 // the qk cookie set by /admin login). Read-only + stage-internal endpoints
 // (feed, layout, clip upload, agent-status, health) stay open.
-const PROTECTED = /^\/admin\/(directive|reset|restart|agent$|fake-send|fake-buyback|pause|resume|goto|anim|camera|fx|tts-test|selfie-take|selfie-last|chat$|chat-add|go-live|syslog|record$|say|queue|clips|clip-file|research-now|blacklist|sniper|operator-call|operator-sell|positions|callout-entry|producer-state|tweet-exact|reply-exact|planner|autoreply|cc-probe|callers|facts|kol-roster|kol-pool)/;
+const PROTECTED = /^\/admin\/(directive|reset|restart|agent$|fake-send|fake-buyback|pause|resume|goto|anim|camera|fx|tts-test|selfie-take|selfie-last|chat$|chat-add|go-live|syslog|record$|say|queue|clips|clip-file|research-now|blacklist|sniper|operator-call|operator-sell|positions|callout-entry|producer-state|tweet-exact|reply-exact|planner|autoreply|cc-probe|callers|calls|facts|kol-roster|kol-pool)/;
 function hasAdminKey(req: express.Request): boolean {
   const c = String(req.headers.cookie ?? "");
   const cookieKey = c.match(/(?:^|;\s*)qk=([^;]+)/)?.[1];
@@ -998,6 +998,22 @@ async function callerBoard(req: express.Request, res: express.Response): Promise
 }
 app.get("/admin/callers", callerBoard);
 app.get("/public/callers", callerBoard);
+
+/** RAW CALL ROWS — the backtest dataset: every observed callout with entry
+ *  price, peak, time-to-peak and mc at call. ?since=<ms> ?wallet=<addr> */
+app.get("/admin/calls", async (req, res) => {
+  try {
+    const { callRows } = await import("./callout/callers.js");
+    const since = Number(req.query.since) || 0;
+    const wallet = String(req.query.wallet ?? "");
+    let rows = callRows().filter((r) => r.at >= since);
+    if (wallet) rows = rows.filter((r) => r.w === wallet);
+    rows.sort((a, b) => a.at - b.at);
+    res.json({ ok: true, count: rows.length, rows: rows.slice(-5000) });
+  } catch (e) {
+    res.json({ ok: false, why: String(e).slice(0, 120) });
+  }
+});
 
 /** THE CALLER BOARD, public — same rows /admin/callers returns, minus the key,
  *  so the page at /callers can fetch it from a browser. Reputation grades on

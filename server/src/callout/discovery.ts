@@ -3,27 +3,40 @@ import path from "node:path";
 import { cfg } from "../config.js";
 import { log } from "../log.js";
 import { store } from "../store.js";
-import { harvestMint, callerRep } from "./callers.js";
+import { harvestMint, callerRep, callerPnl, parseCalloutItem, persistIntel, type HarvestedCall } from "./callers.js";
 
 /**
  * CALLOUT DISCOVERY — the callout tape brings RIKU coins, instead of him only
- * grading coins he already found.
+ * grading coins he already found. One of SEVERAL discovery feeds (gifted
+ * inbox, conveyor, scouts…) — this is the caller-driven one.
  *
- * The global callout firehose went auth-only (~2026-08-21), so discovery works
- * the way the pump.fun frontend itself does now: keep a rotating pool of
- * COINS WORTH SWEEPING (pump.fun volume board + dexscreener boosts), and read
- * each coin's public callout page (`/callout/top/{mint}` — no auth) through
- * the caller-intel harvester. Every sweep deposits callers into the
- * reputation index; a FRESH callout from a caller whose accumulated record
- * clears the bar (≥ CALLER_DISCOVERY_MIN_CALLS graded calls, avg ≥
- * CALLER_DISCOVERY_AVG peak) nominates the coin into RIKU's research queue.
+ * Two speeds:
  *
- * Discovery NOMINATES, it never buys: nominated coins run the full research
+ *  FAST — the global /callout/recent feed, polled every ~20s. It went
+ *  cookie-only (~2026-08-21), so this path only runs when PUMP_COOKIE is set
+ *  (any pump.fun browser session's cookie header). Latency from "proven
+ *  caller posts a call" to "nomination" is seconds — which matters, because
+ *  calls peak in minutes.
+ *
+ *  SLOW — sweep the callout pages of trending coins (pump.fun volume board +
+ *  dexscreener boosts) one coin per tick via the public /callout/top route.
+ *  No cookie needed. Catches what the fast feed misses and keeps the
+ *  reputation index growing even with no cookie configured.
+ *
+ * Every observed callout lands in the per-call rows store (calls.json) —
+ * entry price, peak, time-to-peak, mc at call — which is both the reputation
+ * source and the backtest dataset for the caller-follow tactic.
+ *
+ * Discovery NOMINATES research, it never buys. Nominated coins run the full
  * gauntlet (scoring, hard rejects, fake-chart tells) like any other pick.
- * Capped per day so the show isn't wall-to-wall caller-follow segments.
  */
 
-const FRESH_MAX_AGE_MS = 90 * 60_000; // older than this = we're late, not early
+const FEED_RECENT = "https://frontend-api-v3.pump.fun/callout/recent";
+const UA =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36";
+
+const SWEEP_FRESH_MS = 90 * 60_000; // slow path: anything younger than this is still worth a look
+const FAST_FRESH_MS = 10 * 60_000; // fast path: the feed delivers in seconds; older = something's off
 
 interface DiscoveryState {
   discovered: Record<string, number>; // mint -> at (never re-nominate)
@@ -40,6 +53,53 @@ function saveState(): void {
   try {
     fs.writeFileSync(FILE(), JSON.stringify(st));
   } catch {}
+}
+
+function today(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+type OnFind = (mint: string, why: string) => { ok: boolean; why?: string };
+
+/** The nomination gate, shared by both speeds. Returns true if nominated. */
+async function tryNominate(c: HarvestedCall, onFind: OnFind, freshMs: number, source: string): Promise<boolean> {
+  if (Date.now() - c.at > freshMs) return false;
+  if (today() !== st.day) {
+    st.day = today();
+    st.dayCount = 0;
+  }
+  if (st.dayCount >= cfg.callerDiscoveryMaxPerDay) return false;
+  if (st.discovered[c.mint]) return false;
+  if (cfg.ownMint && c.mint === cfg.ownMint) return false;
+  const seenAt = store.seenAt(c.mint);
+  if (seenAt && Date.now() - seenAt < 86_400_000) return false; // already on the show
+  const rep = callerRep(c.wallet);
+  if (!rep || rep.calls < cfg.callerDiscoveryMinCalls || rep.avg < cfg.callerDiscoveryAvg) return false;
+  const { touchBan } = await import("../agent/tokenguard.js");
+  if (touchBan(c.mint)) return false;
+  const who = c.username || rep.username || "a caller I track";
+  const mcNote = c.mcAtCall > 0 ? ` at $${Math.round(c.mcAtCall).toLocaleString("en-US")} mc` : "";
+  // skin check: is the caller actually positioned in what they're calling?
+  const skin = await Promise.race([callerPnl(c.wallet, c.mint), new Promise<null>((r) => setTimeout(() => r(null), 2500))]);
+  const skinNote =
+    skin && skin.costUsd > 5
+      ? ` — and they're holding it themselves ($${Math.round(skin.costUsd)} cost basis)`
+      : skin && skin.costUsd <= 0
+        ? " — calling it without holding it, noted"
+        : "";
+  const why =
+    `caller intel: ${who} (${rep.avg.toFixed(1)}x avg peak over ${rep.calls} graded calls, best ${rep.best.toFixed(1)}x) ` +
+    `just called this${mcNote}${skinNote} — worth my own read`;
+  const res = onFind(c.mint, why);
+  if (res.ok) {
+    st.discovered[c.mint] = Date.now();
+    st.dayCount++;
+    saveState();
+    log.info("discovery", `[${source}] nominated ${c.mint.slice(0, 8)}… via ${who} (${rep.avg.toFixed(1)}x/${rep.calls}) — ${st.dayCount}/${cfg.callerDiscoveryMaxPerDay} today`);
+    return true;
+  }
+  log.info("discovery", `[${source}] worth nominating but queue said no (${res.why ?? "full"})`);
+  return false;
 }
 
 /** Coins currently worth sweeping for callouts: pump.fun's volume board plus
@@ -62,16 +122,58 @@ async function sweepCandidates(): Promise<string[]> {
   return mints.slice(0, 24);
 }
 
-function today(): string {
-  return new Date().toISOString().slice(0, 10);
+// ---------- FAST: the cookie-gated live feed ----------
+let fastTimer: ReturnType<typeof setInterval> | null = null;
+
+function startFastFeed(onFind: OnFind): void {
+  const cookie = (process.env.PUMP_COOKIE ?? "").trim();
+  if (!cookie) {
+    log.info("discovery", "PUMP_COOKIE not set — live callout feed off, trending sweep only (nominations will lag calls by up to ~45 min)");
+    return;
+  }
+  let disabled = false;
+  let failStreak = 0;
+  fastTimer = setInterval(async () => {
+    if (disabled) return;
+    try {
+      const res = await fetch(`${FEED_RECENT}?limit=30`, {
+        headers: {
+          "user-agent": UA,
+          origin: "https://pump.fun",
+          accept: "*/*",
+          "content-type": "application/json",
+          cookie,
+        },
+      });
+      if (res.status === 400 || res.status === 401 || res.status === 403) {
+        disabled = true;
+        log.warn("discovery", `live feed rejected the cookie (${res.status}) — refresh PUMP_COOKIE and restart; falling back to trending sweep`);
+        return;
+      }
+      if (!res.ok) throw new Error(`recent ${res.status}`);
+      const j: any = await res.json();
+      const items: any[] = j?.callouts ?? [];
+      failStreak = 0;
+      for (const r of items) {
+        const c = parseCalloutItem(r);
+        if (!c) continue;
+        await tryNominate(c, onFind, FAST_FRESH_MS, "live");
+      }
+      if (items.length) persistIntel();
+    } catch (e) {
+      if (++failStreak === 5) log.warn("discovery", `live feed failing repeatedly: ${String(e).slice(0, 80)}`);
+    }
+  }, 20_000);
+  log.info("discovery", "live callout feed ON — polling /callout/recent every 20s (caller-call → nomination in seconds)");
 }
 
+// ---------- SLOW: the trending sweep ----------
 let timer: ReturnType<typeof setInterval> | null = null;
 
-export function startCalloutDiscovery(
-  onFind: (mint: string, why: string) => { ok: boolean; why?: string },
-): void {
+export function startCalloutDiscovery(onFind: OnFind): void {
   if (!cfg.callerDiscovery || timer) return;
+
+  startFastFeed(onFind);
 
   let pool: string[] = [];
   let cursor = 0;
@@ -94,37 +196,9 @@ export function startCalloutDiscovery(
         return;
       }
       const mint = pool[cursor++ % pool.length];
-      const calls = await harvestMint(mint); // deposits reputation + tape as a side effect
-      if (today() !== st.day) {
-        st.day = today();
-        st.dayCount = 0;
-      }
+      const calls = await harvestMint(mint); // deposits rows + tape as a side effect
       for (const c of calls) {
-        // ---- nomination gate ----
-        if (Date.now() - c.at > FRESH_MAX_AGE_MS) continue;
-        if (st.dayCount >= cfg.callerDiscoveryMaxPerDay) break;
-        if (st.discovered[mint]) break;
-        if (cfg.ownMint && mint === cfg.ownMint) break;
-        const seenAt = store.seenAt(mint);
-        if (seenAt && Date.now() - seenAt < 86_400_000) break; // already on the show
-        const rep = callerRep(c.wallet);
-        if (!rep || rep.calls < cfg.callerDiscoveryMinCalls || rep.avg < cfg.callerDiscoveryAvg) continue;
-        const { touchBan } = await import("../agent/tokenguard.js");
-        if (touchBan(mint)) break;
-        const who = c.username || rep.username || "a caller I track";
-        const why =
-          `caller intel: ${who} (${rep.avg.toFixed(1)}x avg peak over ${rep.calls} graded calls, best ${rep.best.toFixed(1)}x) ` +
-          `just called this — worth my own read`;
-        const res = onFind(mint, why);
-        if (res.ok) {
-          st.discovered[mint] = Date.now();
-          st.dayCount++;
-          saveState();
-          log.info("discovery", `nominated ${mint.slice(0, 8)}… via ${who} (${rep.avg.toFixed(1)}x/${rep.calls}) — ${st.dayCount}/${cfg.callerDiscoveryMaxPerDay} today`);
-        } else {
-          log.info("discovery", `worth nominating but queue said no (${res.why ?? "full"}) — next sweep catches it`);
-        }
-        break; // one nomination per coin per sweep is plenty
+        if (await tryNominate(c, onFind, SWEEP_FRESH_MS, "sweep")) break; // one per coin per sweep
       }
     } catch (e) {
       log.warn("discovery", `sweep failed: ${String(e).slice(0, 80)}`);
