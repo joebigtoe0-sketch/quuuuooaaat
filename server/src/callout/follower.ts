@@ -154,11 +154,16 @@ export async function attemptFollowBuy(
     st.count++;
     save();
     log.info("follower", `FOLLOWED ${who} into $${symbol} (${cfg.callerFollowSol} SOL, ${room.toFixed(1)}x room)${res.dry ? " [dry]" : ""}`);
-    // public callout ~20s after the fill — near-instant for the reward window,
-    // but late enough that CC's holdings check can see the fresh tokens
+    // public callout 2s after the fill (the reward window is NOW) — and one
+    // more try at ~25s if the first didn't land (earlyCallout is idempotent:
+    // it skips itself when the call already posted)
     void (async () => {
-      await new Promise((r) => setTimeout(r, 20_000));
-      await import("./early.js").then((m) => m.earlyCallout(c.mint, symbol, thesis));
+      const { earlyCallout } = await import("./early.js");
+      const { wasCalledEarly } = await import("./early.js");
+      await new Promise((r) => setTimeout(r, 2_000));
+      await earlyCallout(c.mint, symbol, thesis);
+      await new Promise((r) => setTimeout(r, 23_000));
+      if (!wasCalledEarly(c.mint)) await earlyCallout(c.mint, symbol, thesis);
     })().catch(() => {});
     hooks.reveal(c.mint, cfg.callerFollowSol);
     return true;
