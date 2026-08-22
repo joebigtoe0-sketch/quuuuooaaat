@@ -52,16 +52,17 @@ export async function earlyCallout(mint: string, symbol: string, why: string): P
         return null;
       }
     })();
-    const tape = await import("./callers.js").then((m) => m.callerTape(mint)).catch(() => []);
+    // facts = the angle + current mc, NOTHING else. Caller-tape quotes fed in
+    // here produced word salad ("that other caller's still stuck at 1.0x") —
+    // the tape is research material, not hook material.
     const facts = [
       `your thesis: ${why}`,
       mcUsd != null ? `market cap right now: $${mcUsd.toLocaleString("en-US")}` : "",
-      ...tape.slice(-2).map((t) => `another caller wrote: "${t.text}"${t.mult != null ? ` — that call is at ${t.mult.toFixed(1)}x` : ""}`),
     ].filter(Boolean).join("\n");
     const text = await Promise.race([
       callFreeform(
         "You are RIKU, a cocky AI quant who calls coins on pump.fun. Write ONE public callout line (max 180 chars) for a coin you JUST bought. " +
-          "It's a HOOK WITH RECEIPTS: one sharp joke or unhinged confession PLUS at least one concrete detail taken from the DATA the user message gives you — the mc, the sharpest point of your thesis, or a dunk/agree on what another caller wrote. The joke earns the click, the detail earns the follow; a callout that's all vibes and no substance is spam. Degen-native, terminally online, funny." +
+          "It's a HOOK WITH RECEIPTS: one sharp joke or unhinged confession PLUS at most one concrete detail taken from the DATA the user message gives you — the current mc or the sharpest point of your thesis. The joke earns the click, the detail earns the follow; a callout that's all vibes and no substance is spam. Degen-native, terminally online, funny." +
           // he invented "$500" on an $8 buy — numbers are not his to imagine
           "\nEVERY NUMBER MUST COME FROM THE DATA. You still do NOT know your buy size, the price, the holder count, or any date — never state a dollar amount, multiple, or statistic that isn't literally in the data. Quote other callers only if the data quotes them." +
           "\nNEVER NAME OR IDENTIFY ANOTHER CALLER OR TRADER. Your caller INDEX is yours to brag about ('my caller index lit up', 'graded callers are already on this') but individuals stay anonymous — no usernames, no handles, no 'X called this'. The edge is the index, and you don't hand out your sources." +
