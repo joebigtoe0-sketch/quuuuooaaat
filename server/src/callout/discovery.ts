@@ -148,8 +148,19 @@ async function sweepCandidates(): Promise<string[]> {
 const FEED_ALERTS = "https://frontend-api-v3.pump.fun/following-positions/alerts";
 let fastTimer: ReturnType<typeof setInterval> | null = null;
 
+/** Accept either a full cookie string or a bare auth_token JWT — a value with
+ *  no `auth_token=` that looks like a JWT gets the prefix added. Kills the
+ *  "pasted the token without the cookie name" 401. */
+export function normCookie(v: string): string {
+  v = (v ?? "").trim().replace(/^["']|["']$/g, "");
+  if (!v) return "";
+  if (/(^|;\s*)auth_token=/.test(v)) return v;
+  if (/^ey[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(v)) return `auth_token=${v}`;
+  return v;
+}
+
 function startFastFeed(onFind: OnFind): void {
-  const cookie = (process.env.PUMP_COOKIE ?? "").trim();
+  const cookie = normCookie(process.env.PUMP_COOKIE ?? "");
   if (!cookie) {
     log.info("discovery", "PUMP_COOKIE not set — live follow-feed off, trending sweep only (nominations will lag calls by up to ~45 min)");
     return;

@@ -39,7 +39,15 @@ if (existsSync(ENVFILE)) {
   }
 }
 
-const COOKIE = (process.env.PUMP_COOKIE || "").trim();
+// accept a full cookie OR a bare auth_token JWT (auto-prefix the cookie name)
+function normCookie(v) {
+  v = (v || "").trim().replace(/^["']|["']$/g, "");
+  if (!v) return "";
+  if (/(^|;\s*)auth_token=/.test(v)) return v;
+  if (/^ey[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(v)) return `auth_token=${v}`;
+  return v;
+}
+const COOKIE = normCookie(process.env.PUMP_COOKIE || "");
 const RIKU_URL = (process.env.RIKU_URL || "https://quantriku.fun").replace(/\/$/, "");
 const ADMIN_KEY = (process.env.ADMIN_KEY || "").trim();
 const EVERY_MS = Number(process.env.EVERY_MS || 20000);
