@@ -134,6 +134,9 @@ export const cfg = {
   callerFollowStopPct: num("CALLER_FOLLOW_STOP_PCT", 40), // full-position stop-loss %
   callerFollowTpFraction: num("CALLER_FOLLOW_TP_FRACTION", 0.75), // sold at the median target
   callerFollowRunnerStopPct: num("CALLER_FOLLOW_RUNNER_STOP_PCT", 15), // runner stop below the TP price
+  callerFollowMaxSwarm: num("CALLER_FOLLOW_MAX_SWARM", 3), // >this many distinct callers in the window = coordinated pump, skip
+  callerFollowSwarmWindowMin: num("CALLER_FOLLOW_SWARM_WINDOW_MIN", 10),
+  callerFollowMaxFromFirstCall: num("CALLER_FOLLOW_MAX_FROM_FIRST_CALL", 1.4), // mcNow vs EARLIEST call's mc — later = the move already happened
   // ---------- dev-sniper (the quiet edge; the show never names it) ----------
   // instant entries on launches from PROVEN devs while mc is still under the
   // ceiling; exit at 95% bonding or after maxHold. Sizing follows his own book

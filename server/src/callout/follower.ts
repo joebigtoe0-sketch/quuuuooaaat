@@ -14,6 +14,9 @@ import type { HarvestedCall } from "./callers.js";
  * i.e. with a 3x-median caller calling at $10k, we still buy at $12k
  * (room to $30k ≈ 2.5x) but not at $20k (room only 1.5x). Their median is
  * the target the trade is priced against — never their lottery average.
+ * Plus two anti-swarm gates (see attemptFollowBuy): no buying a mint that a
+ * crowd of callers stamped inside minutes, and no buying above
+ * CALLER_FOLLOW_MAX_FROM_FIRST_CALL × the earliest call's mc.
  *
  * EXIT: priced off the SAME data as the entry — the caller's graded median,
  * not their sell button (callers are often wrong about exits; their call
@@ -127,6 +130,26 @@ export async function attemptFollowBuy(
       log.warn("follower", `analysis failed for ${c.mint.slice(0, 8)}… — no blind buys: ${String(e).slice(0, 60)}`);
       return false;
     }
+
+    // SWARM + POSITION-IN-MOVE — checked after the gauntlet on purpose:
+    // analyze() awaits harvestFresh(), so the mint's call rows are current.
+    // The night of 08-23 (5 straight −40% stops in 30 min) taught both rules:
+    // a wave of callers stamping the same mint inside minutes IS the pump
+    // (they farm their own grades on it), and a caller's median is measured
+    // from THEIR call price — if the mc already ran past the earliest call,
+    // the move we'd be pricing off has already happened and we're the exit.
+    try {
+      const { mintCallCrowd } = await import("./callers.js");
+      const crowd = mintCallCrowd(c.mint, cfg.callerFollowSwarmWindowMin * 60_000);
+      if (crowd.recent > cfg.callerFollowMaxSwarm) {
+        log.info("follower", `pass ${c.mint.slice(0, 8)}… — swarm: ${crowd.recent} callers in ${cfg.callerFollowSwarmWindowMin}min (max ${cfg.callerFollowMaxSwarm}); the wave is the pump`);
+        return false;
+      }
+      if (crowd.earliestMc && mcNowUsd > crowd.earliestMc * cfg.callerFollowMaxFromFirstCall) {
+        log.info("follower", `pass ${c.mint.slice(0, 8)}… — late: mc $${Math.round(mcNowUsd)} is ${(mcNowUsd / crowd.earliestMc).toFixed(1)}x the first call ($${Math.round(crowd.earliestMc)}); the move already happened`);
+        return false;
+      }
+    } catch { /* crowd data unreadable — the room gate already passed, proceed */ }
 
     const symbol =
       c.symbol ||
@@ -289,6 +312,7 @@ export function startCallerFollow(h: StageHooks): void {
   log.info(
     "follower",
     `caller-follow LIVE — ${cfg.callerFollowPct}% of spendable (floor ${cfg.callerFollowSol} SOL), need ${cfg.callerFollowRoom}x room to caller's median; ` +
+      `anti-swarm: max ${cfg.callerFollowMaxSwarm} callers/${cfg.callerFollowSwarmWindowMin}min, entry ≤${cfg.callerFollowMaxFromFirstCall}x first call; ` +
       `exits: TP ${Math.round(cfg.callerFollowTpFraction * 100)}% at median target, runner stop −${cfg.callerFollowRunnerStopPct}% from TP, stop-loss −${cfg.callerFollowStopPct}%; max ${cfg.callerFollowMaxPerDay}/day` +
       (cfg.tradeDryRun ? " [DRY RUN]" : " [REAL SOL]"),
   );

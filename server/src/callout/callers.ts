@@ -201,6 +201,27 @@ export function callRows(): CallRow[] {
   return Object.values(calls);
 }
 
+/** The crowd picture for one mint: how many distinct callers stamped it
+ *  inside the window, and where the EARLIEST known call priced it. Caller
+ *  swarms grade themselves on their own pumps — a wave of calls in minutes
+ *  means the move is the calls, and whoever buys off the wave is the exit. */
+export function mintCallCrowd(
+  mint: string,
+  windowMs: number,
+): { recent: number; earliestMc: number | null; total: number } {
+  const now = Date.now();
+  const recent = new Set<string>();
+  let earliest: CallRow | null = null;
+  let total = 0;
+  for (const r of Object.values(calls)) {
+    if (r.m !== mint) continue;
+    total++;
+    if (!earliest || r.at < earliest.at) earliest = r;
+    if (now - r.at <= windowMs) recent.add(r.w);
+  }
+  return { recent: recent.size, earliestMc: earliest && earliest.mc > 0 ? earliest.mc : null, total };
+}
+
 /** Batched persistence for external writers (the live-feed poller). */
 export function persistIntel(): void {
   save();
