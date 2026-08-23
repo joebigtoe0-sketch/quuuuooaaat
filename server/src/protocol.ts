@@ -88,7 +88,22 @@ export type TakeoverView =
     }
   // his graded caller index, shown when a caller-follow entry reveals —
   // the caller he followed gets the highlight row
-  | { kind: "leaderboard"; rows: { name: string; med: number; h2: number; calls: number }[]; highlight?: string };
+  | { kind: "leaderboard"; rows: { name: string; med: number; h2: number; calls: number }[]; highlight?: string }
+  | {
+      kind: "investdesk";
+      symbol: string;
+      name: string;
+      mcUsd: number;
+      liqUsd: number;
+      vol24Usd: number;
+      chg6hPct: number;
+      ageDays: number;
+      socials: string[];
+      verdict: "buy" | "pass";
+      conviction: number; // 1..5
+      thesis: string;
+      sizeSol: number | null; // set on buys
+    };
 
 export type Cue =
   | { t: "anim"; clip: string }

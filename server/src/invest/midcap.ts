@@ -266,10 +266,45 @@ async function writeThesis(c: MidcapCandidate): Promise<Verdict | null> {
 
 // ------------------------------------------------------------------- tick --
 
+export interface InvestNotePayload {
+  kind: "investdesk";
+  symbol: string;
+  name: string;
+  mcUsd: number;
+  liqUsd: number;
+  vol24Usd: number;
+  chg6hPct: number;
+  ageDays: number;
+  socials: string[];
+  verdict: "buy" | "pass";
+  conviction: number;
+  thesis: string;
+  sizeSol: number | null;
+}
 interface StageHooks {
-  reveal: (mint: string, sol: number) => void;
+  /** every desk verdict — pass or buy — becomes an on-stream segment */
+  investNote: (p: InvestNotePayload) => void;
 }
 let hooks: StageHooks | null = null;
+
+function noteFor(c: MidcapCandidate, v: Verdict, bought: { sizeSol: number } | null): InvestNotePayload {
+  return {
+    kind: "investdesk",
+    symbol: c.symbol,
+    name: c.name,
+    mcUsd: c.mcUsd,
+    liqUsd: c.liqUsd,
+    vol24Usd: c.vol24h,
+    chg6hPct: c.chg6h,
+    ageDays: c.ageHours / 24,
+    socials: c.socials,
+    // the stage never claims a buy that didn't fill — verdict follows the fill
+    verdict: bought ? "buy" : "pass",
+    conviction: v.conviction,
+    thesis: v.thesis,
+    sizeSol: bought?.sizeSol ?? null,
+  };
+}
 
 async function tick(): Promise<void> {
   try {
@@ -301,6 +336,7 @@ async function tick(): Promise<void> {
     }
     if (v.verdict !== "buy" || v.conviction < cfg.midcapMinConviction) {
       log.info("midcap", `pass $${c.symbol} (${v.verdict}, conviction ${v.conviction}): ${v.thesis.slice(0, 100)}`);
+      hooks?.investNote(noteFor(c, v, null));
       return;
     }
     // authoritative tradability check — the pump suffix was only the prefilter
@@ -310,6 +346,7 @@ async function tick(): Promise<void> {
       const state = await getTokenState(new PublicKey(c.mint));
       if (state.kind !== "curve" && state.kind !== "amm") {
         log.info("midcap", `pass $${c.symbol} — not tradable on our rails (${state.kind})`);
+        hooks?.investNote(noteFor(c, v, null));
         return;
       }
     } catch (e) {
@@ -329,6 +366,7 @@ async function tick(): Promise<void> {
     const r = await tradeBuy(c.mint, c.symbol, sol, thesis, null, STRATEGY);
     if (!r.ok) {
       log.info("midcap", `buy blocked $${c.symbol}: ${r.why}`);
+      hooks?.investNote(noteFor(c, v, null)); // wanted it, rails said no — stage it as the pass it became
       return;
     }
     st.count++;
@@ -337,7 +375,7 @@ async function tick(): Promise<void> {
       "midcap",
       `BOUGHT $${c.symbol} for the book (${sol} SOL, conviction ${v.conviction}/5, mc $${Math.round(c.mcUsd / 1000)}k)${r.dry ? " [dry]" : ""} — NO auto-exit, operator sells from /admin/book.html`,
     );
-    hooks?.reveal(c.mint, sol);
+    hooks?.investNote(noteFor(c, v, { sizeSol: sol }));
   } catch (e) {
     log.warn("midcap", `tick failed: ${String(e).slice(0, 100)}`);
   }

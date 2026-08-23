@@ -1254,8 +1254,9 @@ server.listen(cfg.port, cfg.host, () => {
   // every send at /admin/outreach.html
   void import("./social/outreach.js").then((m) => m.startOutreach());
   // midcap investment book: omo-inspired mid-cap buys with NO automatic exits —
-  // operator sells from /admin/book.html; buys stage as conviction reveals
+  // operator sells from /admin/book.html; every verdict (pass or buy) stages
+  // as an INVESTMENT DESK segment, visually distinct from the research loop
   void import("./invest/midcap.js").then((m) =>
-    m.startMidcap({ reveal: (mint, sol) => director.queueReveal(mint, sol, "hold") }),
+    m.startMidcap({ investNote: (p) => director.queueInvestNote(p) }),
   );
 });

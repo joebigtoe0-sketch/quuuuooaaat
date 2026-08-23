@@ -232,6 +232,98 @@ export class Screens {
       g.fillStyle = "#5a7290";
       g.font = "italic 20px 'Consolas', monospace";
       g.fillText("pump.fun grades every call. i read the grades.", PX, H - 72);
+    } else if (v.kind === "investdesk") {
+      // THE INVESTMENT DESK — deliberately NOT the research terminal look:
+      // a gold-on-charcoal portfolio memo, stamped like paper
+      const PX = 56;
+      const GOLD = "#e8c268", DIM = "#8a7a52", INK = "#e9e2d0";
+      // warm charcoal wash over the default bg so the segment reads different at a glance
+      g.fillStyle = "#171310";
+      g.fillRect(0, 0, W, H);
+      g.strokeStyle = GOLD;
+      g.lineWidth = 3;
+      g.strokeRect(PX - 16, 20, W - 2 * (PX - 16), H - 40);
+      g.fillStyle = GOLD;
+      g.font = "bold 26px 'Consolas', monospace";
+      g.fillText("RIKU CAPITAL", PX, 44);
+      g.fillStyle = DIM;
+      g.font = "18px 'Consolas', monospace";
+      g.textAlign = "right";
+      g.fillText("INVESTMENT DESK — THE BOOK", W - PX, 50);
+      g.textAlign = "left";
+      g.fillStyle = "#3a3020";
+      g.fillRect(PX, 78, W - 2 * PX, 2);
+      // the name
+      g.fillStyle = INK;
+      g.font = "bold 52px 'Consolas', monospace";
+      g.fillText(`$${v.symbol.slice(0, 12)}`, PX, 100);
+      g.fillStyle = DIM;
+      g.font = "20px 'Consolas', monospace";
+      g.fillText(v.name.slice(0, 34), PX, 158);
+      // stat grid, tabular
+      const money = (n: number) =>
+        n >= 1_000_000 ? `$${(n / 1_000_000).toFixed(1)}M` : `$${Math.round(n / 1_000)}K`;
+      const stats: [string, string][] = [
+        ["MKT CAP", money(v.mcUsd)],
+        ["LIQUIDITY", money(v.liqUsd)],
+        ["VOL 24H", money(v.vol24Usd)],
+        ["6H", `${v.chg6hPct >= 0 ? "+" : ""}${v.chg6hPct.toFixed(1)}%`],
+        ["AGE", `${v.ageDays.toFixed(1)}d`],
+        ["IDENTITY", v.socials.slice(0, 2).join("+") || "—"],
+      ];
+      let sx = PX, sy = 196;
+      stats.forEach(([k, val], i) => {
+        g.fillStyle = DIM;
+        g.font = "bold 16px 'Consolas', monospace";
+        g.fillText(k, sx, sy);
+        g.fillStyle = k === "6H" ? (v.chg6hPct >= 0 ? "#9fd68a" : "#d68a8a") : INK;
+        g.font = "bold 26px 'Consolas', monospace";
+        g.fillText(val, sx, sy + 20);
+        sx += 218;
+        if (i % 3 === 2) { sx = PX; sy += 66; }
+      });
+      // thesis, wrapped
+      g.fillStyle = "#c9bfa6";
+      g.font = "italic 21px 'Consolas', monospace";
+      let tx = PX, ty = 340;
+      for (const word of v.thesis.split(/(\s+)/)) {
+        const w = g.measureText(word).width;
+        if (tx + w > W - PX - 250) { tx = PX; ty += 30; }
+        if (ty > H - 70) break;
+        g.fillText(word, tx, ty);
+        tx += w;
+      }
+      // conviction dots
+      g.font = "bold 18px 'Consolas', monospace";
+      g.fillStyle = DIM;
+      g.fillText("CONVICTION", PX, H - 64);
+      for (let i = 0; i < 5; i++) {
+        g.fillStyle = i < v.conviction ? GOLD : "#3a3020";
+        g.beginPath();
+        g.arc(PX + 130 + i * 26, H - 54, 8, 0, Math.PI * 2);
+        g.fill();
+      }
+      // the STAMP — rotated, like it was pressed onto the memo
+      g.save();
+      g.translate(W - 200, H - 150);
+      g.rotate(-0.16);
+      const buyStamp = v.verdict === "buy";
+      g.strokeStyle = buyStamp ? "#7fce6a" : "#ce6a6a";
+      g.fillStyle = buyStamp ? "rgba(127,206,106,0.14)" : "rgba(206,106,106,0.12)";
+      g.lineWidth = 5;
+      const stampW = buyStamp ? 190 : 170;
+      g.fillRect(-stampW / 2, -40, stampW, 80);
+      g.strokeRect(-stampW / 2, -40, stampW, 80);
+      g.fillStyle = buyStamp ? "#7fce6a" : "#ce6a6a";
+      g.font = "bold 44px 'Consolas', monospace";
+      g.textAlign = "center";
+      g.fillText(buyStamp ? "BUY" : "PASS", 0, -22);
+      if (buyStamp && v.sizeSol) {
+        g.font = "bold 17px 'Consolas', monospace";
+        g.fillText(`${v.sizeSol} SOL — NO STOP`, 0, 46);
+      }
+      g.textAlign = "left";
+      g.restore();
     } else {
       // trade ticket
       const buy = v.side === "BUY";

@@ -7,8 +7,12 @@ import type {
   ConveyorItem,
   InspectionState,
   SnapshotMsg,
+  TakeoverView,
   TreasuryState,
 } from "../protocol.js";
+
+/** The investment desk's verdict payload — exactly the investdesk takeover. */
+export type InvestNote = Extract<TakeoverView, { kind: "investdesk" }>;
 import { Locomotion } from "./locomotion.js";
 import { Beats } from "./beats.js";
 import type { InboxEvent } from "../chain/inbox.js";
@@ -34,6 +38,7 @@ type Job =
   | { kind: "conveyor"; item: ConveyorItem; at: number }
   | { kind: "reveal"; mint: string; sol: number; revealKind: "snipe" | "call" | "hold"; at: number }
   | { kind: "exitnote"; symbol: string; reason: string; solReceived: number; costSol: number; at: number }
+  | { kind: "investnote"; p: InvestNote; at: number }
   | { kind: "kolfeed"; at: number }
   | { kind: "replyx"; at: number }
   | { kind: "commentary"; at: number };
@@ -244,11 +249,20 @@ export class Director {
     if (this.exitQ.length < 4) this.exitQ.push({ symbol, reason, solReceived, costSol });
   }
 
+  // the investment desk's half-hourly verdicts — pass or buy, both are a
+  // segment (the passes are half the content)
+  private investQ: InvestNote[] = [];
+  queueInvestNote(p: InvestNote): void {
+    if (this.investQ.length < 2) this.investQ.push(p);
+  }
+
   private nextJob(): Job | null {
     const rv = this.revealQ.shift();
     if (rv) return { kind: "reveal", mint: rv.mint, sol: rv.sol, revealKind: rv.revealKind, at: Date.now() };
     const ex = this.exitQ.shift();
     if (ex) return { kind: "exitnote", ...ex, at: Date.now() };
+    const inv = this.investQ.shift();
+    if (inv) return { kind: "investnote", p: inv, at: Date.now() };
     if (this.inboxQ.length) return this.inboxQ.shift()!;
     if (this.buybackQ.length) return this.buybackQ.shift()!;
     if (this.agentQ.length) return this.agentQ.shift()!;
@@ -301,6 +315,7 @@ export class Director {
           await this.beats.researchBeat(job.mint, null, null, true, { sol: job.sol, kind: job.revealKind });
         }
         else if (job.kind === "exitnote") { await this.beats.exitNoteBeat(job.symbol, job.reason, job.solReceived, job.costSol); }
+        else if (job.kind === "investnote") { await this.beats.investDeskBeat(job.p); }
         else if (job.kind === "replyx") { await this.beats.runReplyX(); }
         else if (job.kind === "kolfeed") { await this.beats.runKolFeed(); }
         else if (job.kind === "conveyor") {

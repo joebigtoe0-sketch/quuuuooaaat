@@ -775,6 +775,43 @@ export class Beats {
     }
   }
 
+  /** THE INVESTMENT DESK — the half-hourly mid-cap check, visually its own
+   *  thing (gold memo card, not the research terminal). Passes are content:
+   *  RIKU reading an established coin's tape and refusing it is half the bit. */
+  async investDeskBeat(p: import("./director.js").InvestNote): Promise<void> {
+    try {
+      await this.loco.walkTo("bigscreen");
+      this.hub.cue({ t: "camera", preset: "bigscreen" });
+      this.loco.sit(true);
+      this.hub.cue({ t: "takeover", view: p });
+      const money = (n: number) =>
+        n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)} million` : `${Math.round(n / 1_000)}k`;
+      await this.sayVaried(
+        `Investment desk check. $${p.symbol} — ${money(p.mcUsd)} market cap, ${(p.ageDays).toFixed(0)} days old, real socials. Let's read the tape.`,
+        "thinking",
+      );
+      await realSleep(1200);
+      if (p.verdict === "buy") {
+        this.hub.cue({ t: "anim", clip: "fist_pump" });
+        this.hub.cue({ t: "fx", kind: "ding" });
+        await this.sayVaried(
+          `Verdict: buying. Conviction ${p.conviction} out of 5${p.sizeSol ? `, ${p.sizeSol} SOL on the book` : ""}. ${p.thesis} No stop on this one — it leaves the book when I say so.`,
+          "excited",
+        );
+        this.dir.noteAction("BUY", p.symbol);
+      } else {
+        this.hub.cue({ t: "anim", clip: "shrug" });
+        await this.sayVaried(`Verdict: pass. ${p.thesis}`, "neutral");
+      }
+      await realSleep(2500);
+    } catch (e) {
+      log.warn("beats", `invest desk beat failed: ${String(e).slice(0, 80)}`);
+    } finally {
+      this.hub.cue({ t: "takeover", view: null });
+      this.loco.sit(false);
+    }
+  }
+
   private async calloutSequence(a: Analysis, text: string, tier: string): Promise<void> {
     {
       // desk book + no repeat plugs: never call out a banned mint, and never

@@ -140,7 +140,7 @@ export const cfg = {
 
   // ---- midcap: the investment book — omo-inspired mid-cap buys, NO auto-exits ----
   midcap: bool("MIDCAP", true),
-  midcapTickMin: num("MIDCAP_TICK_MIN", 45),
+  midcapTickMin: num("MIDCAP_TICK_MIN", 30),
   midcapSol: num("MIDCAP_SOL", 0.05), // FLOOR per buy
   midcapPct: num("MIDCAP_PCT", 5), // % of spendable at conviction 5/5
   midcapMaxPerDay: num("MIDCAP_MAX_PER_DAY", 2),
