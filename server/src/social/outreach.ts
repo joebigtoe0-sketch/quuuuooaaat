@@ -119,17 +119,21 @@ async function discoverTick(): Promise<void> {
     db.queryCursor++;
     const found = await searchTweetsRich(q, 20);
     const now = Date.now();
+    // tally WHY candidates die — a quiet queue must be explainable from syslog
+    const why: Record<string, number> = {};
+    const kill = (k: string): false => (((why[k] = (why[k] ?? 0) + 1), false));
     const fresh = found.filter((t) => {
       const u = norm(t.author);
-      if (u === norm(xHandle())) return false;
-      if (db.banned.includes(u)) return false;
+      if (u === norm(xHandle())) return kill("self");
+      if (db.banned.includes(u)) return kill("banned");
       const last = db.seenAuthors[u] ?? 0;
-      if (now - last < cfg.outreachDedupeDays * 86_400_000) return false;
-      if (t.authorFollowers == null || t.authorFollowers < cfg.outreachMinFollowers || t.authorFollowers > cfg.outreachMaxFollowers) return false;
-      if (t.at && now - t.at > 2 * 3600_000) return false; // stale takes get stale replies
-      if (t.text.length < 25 || !looksEnglish(t.text)) return false;
-      if (t.authorPosts != null && t.authorPosts > 200_000) return false; // reply-bot
-      if (db.items.some((i) => i.tweetId === t.id)) return false;
+      if (now - last < cfg.outreachDedupeDays * 86_400_000) return kill("dedupe");
+      if (t.authorFollowers == null) return kill("no-follower-data");
+      if (t.authorFollowers < cfg.outreachMinFollowers || t.authorFollowers > cfg.outreachMaxFollowers) return kill("follower-window");
+      if (t.at && now - t.at > 2 * 3600_000) return kill("stale"); // stale takes get stale replies
+      if (t.text.length < 25 || !looksEnglish(t.text)) return kill("text");
+      if (t.authorPosts != null && t.authorPosts > 200_000) return kill("reply-bot");
+      if (db.items.some((i) => i.tweetId === t.id)) return kill("seen-tweet");
       return true;
     });
     const scored = fresh
@@ -162,7 +166,8 @@ async function discoverTick(): Promise<void> {
     save();
     const pending = db.items.filter((i) => i.status === "pending").length;
     // always log — a silent sweep and a broken search look identical otherwise
-    log.info("outreach", `sweep "${q.slice(0, 36)}…" → ${found.length} found, ${fresh.length} passed filters, ${scored.length} drafted, ${pending} pending`);
+    const whyStr = Object.entries(why).map(([k, n]) => `${k}:${n}`).join(" ") || "none";
+    log.info("outreach", `sweep "${q.slice(0, 36)}…" → ${found.length} found, ${fresh.length} passed (killed: ${whyStr}), ${scored.length} drafted, ${pending} pending`);
   } catch (e) {
     log.warn("outreach", `discover failed: ${String(e).slice(0, 100)}`);
   }

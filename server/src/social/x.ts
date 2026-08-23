@@ -372,18 +372,23 @@ export async function searchTweetsRich(query: string, maxResults = 20): Promise<
       if (res.ok) {
         const data = (await res.json()) as any;
         const tweets = data.tweets ?? data.data ?? [];
+        const numOr = (...vals: any[]): number | null => {
+          for (const v of vals) if (v != null && Number.isFinite(Number(v))) return Number(v);
+          return null;
+        };
         const rows: RichTweet[] = tweets
           .map((t: any) => {
-            const a = t.author ?? {};
-            const ts = Date.parse(String(t.createdAt ?? ""));
-            const ats = Date.parse(String(a.createdAt ?? ""));
+            // field spellings drift across twitterapi.io versions — take any
+            const a = t.author ?? t.user ?? {};
+            const ts = Date.parse(String(t.createdAt ?? t.created_at ?? ""));
+            const ats = Date.parse(String(a.createdAt ?? a.created_at ?? ""));
             return {
-              id: String(t.id ?? ""),
-              author: String(a.userName ?? t.username ?? ""),
-              authorFollowers: Number.isFinite(Number(a.followers)) ? Number(a.followers) : null,
-              authorPosts: Number.isFinite(Number(a.statusesCount)) ? Number(a.statusesCount) : null,
+              id: String(t.id ?? t.id_str ?? ""),
+              author: String(a.userName ?? a.username ?? a.screen_name ?? t.username ?? ""),
+              authorFollowers: numOr(a.followers, a.followersCount, a.followers_count),
+              authorPosts: numOr(a.statusesCount, a.statuses_count, a.tweetsCount, a.tweets_count),
               authorCreatedAt: Number.isFinite(ats) ? ats : null,
-              text: String(t.text ?? "").replace(/https?:\/\/\S+/g, "").trim(),
+              text: String(t.text ?? t.full_text ?? "").replace(/https?:\/\/\S+/g, "").trim(),
               at: Number.isFinite(ts) ? ts : null,
             };
           })
