@@ -126,7 +126,7 @@ export class Planner {
   private async reviewPositions(): Promise<void> {
     if (!cfg.agentEnabled || store.kvGet("planner:off") === "1") return; // producer may hold the wheel
     for (const p of openPositions()) {
-      if (p.strategyId === "hold") continue; // conviction holds are not his to cut
+      if (p.strategyId === "hold" || p.strategyId === "midcap") continue; // operator-only positions are not his to cut
       const last = this.lastPosReview.get(p.mint) ?? 0;
       if (Date.now() - last < simT(45 * 60_000)) continue;
       let nowSol = 0;

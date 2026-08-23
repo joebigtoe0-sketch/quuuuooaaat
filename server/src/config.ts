@@ -138,6 +138,18 @@ export const cfg = {
   callerFollowSwarmWindowMin: num("CALLER_FOLLOW_SWARM_WINDOW_MIN", 10),
   callerFollowMaxFromFirstCall: num("CALLER_FOLLOW_MAX_FROM_FIRST_CALL", 1.4), // mcNow vs EARLIEST call's mc — later = the move already happened
 
+  // ---- midcap: the investment book — omo-inspired mid-cap buys, NO auto-exits ----
+  midcap: bool("MIDCAP", true),
+  midcapTickMin: num("MIDCAP_TICK_MIN", 45),
+  midcapSol: num("MIDCAP_SOL", 0.05), // FLOOR per buy
+  midcapPct: num("MIDCAP_PCT", 5), // % of spendable at conviction 5/5
+  midcapMaxPerDay: num("MIDCAP_MAX_PER_DAY", 2),
+  midcapMinConviction: num("MIDCAP_MIN_CONVICTION", 4),
+  midcapMinLiqUsd: num("MIDCAP_MIN_LIQ_USD", 40_000),
+  midcapMinVol24Usd: num("MIDCAP_MIN_VOL24_USD", 150_000),
+  midcapMinAgeHours: num("MIDCAP_MIN_AGE_HOURS", 6),
+  midcapCooldownDays: num("MIDCAP_COOLDOWN_DAYS", 3),
+
   // ---- outreach: find small crypto accounts, draft replies, producer approves ----
   outreach: bool("OUTREACH", true), // discovery only — sends ALWAYS need approval
   outreachTickMin: num("OUTREACH_TICK_MIN", 30),

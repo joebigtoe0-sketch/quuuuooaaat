@@ -227,8 +227,13 @@ export async function tradeBuy(
 /** Long-term conviction holds: bought only on an operator call, and RIKU can
  *  never sell them himself — only an operator-initiated sell may close one. */
 export const HOLD_STRATEGY = "hold";
+/** The investment book: mid-caps bought on thesis with DELIBERATELY no
+ *  automatic exits — same operator-only sell rule as holds. */
+export const MIDCAP_STRATEGY = "midcap";
 export function isHoldPosition(mint: string): boolean {
-  return openPositions().some((p) => p.mint === mint && p.strategyId === HOLD_STRATEGY);
+  return openPositions().some(
+    (p) => p.mint === mint && (p.strategyId === HOLD_STRATEGY || p.strategyId === MIDCAP_STRATEGY),
+  );
 }
 
 export async function tradeSell(
@@ -240,9 +245,10 @@ export async function tradeSell(
   if (cfg.ownMint && mint === cfg.ownMint) return { ok: false, dry: false, why: "own token is never sold" };
   const pos = openPositions().find((p) => p.mint === mint);
   if (!pos) return { ok: false, dry: false, why: "no such position" };
-  // the conviction rail: a long-term hold only closes when the desk says so
-  if (pos.strategyId === HOLD_STRATEGY && !operator)
-    return { ok: false, dry: false, why: "long-term conviction hold — not sold on impulse" };
+  // the conviction rail: holds and the investment book only close when the
+  // OPERATOR says so — no bot, beat, or planner may sell them
+  if ((pos.strategyId === HOLD_STRATEGY || pos.strategyId === MIDCAP_STRATEGY) && !operator)
+    return { ok: false, dry: false, why: "operator-only position — not sold on impulse" };
   // a ghost position: the ledger says he holds it, the wallet disagrees. Close
   // it here rather than failing this sell and every future one.
   if (!cfg.tradeDryRun) {

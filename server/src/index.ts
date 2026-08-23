@@ -39,7 +39,7 @@ const hub = new Hub(server);
 // Control endpoints need the admin key (query ?key=, x-admin-key header, or
 // the qk cookie set by /admin login). Read-only + stage-internal endpoints
 // (feed, layout, clip upload, agent-status, health) stay open.
-const PROTECTED = /^\/admin\/(directive|reset|restart|agent$|fake-send|fake-buyback|pause|resume|goto|anim|camera|fx|tts-test|selfie-take|selfie-last|chat$|chat-add|go-live|syslog|record$|say|queue|clips|clip-file|research-now|blacklist|sniper|operator-call|operator-sell|positions|callout-entry|producer-state|tweet-exact|reply-exact|planner|autoreply|cc-probe|callers|calls|feed-ingest|facts|kol-roster|kol-pool|outreach)/;
+const PROTECTED = /^\/admin\/(directive|reset|restart|agent$|fake-send|fake-buyback|pause|resume|goto|anim|camera|fx|tts-test|selfie-take|selfie-last|chat$|chat-add|go-live|syslog|record$|say|queue|clips|clip-file|research-now|blacklist|sniper|operator-call|operator-sell|positions|callout-entry|producer-state|tweet-exact|reply-exact|planner|autoreply|cc-probe|callers|calls|feed-ingest|facts|kol-roster|kol-pool|outreach|book)/;
 function hasAdminKey(req: express.Request): boolean {
   const c = String(req.headers.cookie ?? "");
   const cookieKey = c.match(/(?:^|;\s*)qk=([^;]+)/)?.[1];
@@ -408,6 +408,71 @@ app.post("/admin/reply-exact", async (req, res) => {
   // depict it on stream (post already out — this is decoration, non-blocking)
   director.showPost({ text, replyTo: id, ok: r.ok });
   res.json({ ok: r.ok, dry: r.dry, id: r.id, why: r.why });
+});
+
+// ---------- THE BOOK — open positions with live marks + operator sell ----------
+app.get("/admin/book", async (_req, res) => {
+  const { openPositions } = await import("./chain/trader.js");
+  const { estimateSellSolFor } = await import("./chain/pump.js");
+  const { PublicKey } = await import("@solana/web3.js");
+  const rows = await Promise.all(
+    openPositions().map(async (p) => {
+      let nowSol: number | null = null;
+      try {
+        nowSol = await estimateSellSolFor(new PublicKey(p.mint), BigInt(p.tokensRaw));
+      } catch { /* unreadable — show the cost only */ }
+      return {
+        mint: p.mint, symbol: p.symbol, strategyId: p.strategyId ?? "?",
+        costSol: p.costSol, nowSol, openedAt: p.openedAt, thesis: p.thesis, dry: p.dry,
+        pnlPct: nowSol != null && p.costSol > 0 ? ((nowSol - p.costSol) / p.costSol) * 100 : null,
+      };
+    }),
+  );
+  res.json({ ok: true, positions: rows });
+});
+app.get("/admin/book.html", (_req, res) => {
+  res.type("html").send(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>the book</title>
+<style>
+body{background:#0d1117;color:#e6edf3;font:14px/1.45 ui-monospace,monospace;max-width:820px;margin:20px auto;padding:0 12px}
+h1{font-size:16px}.sub{color:#8b949e;margin-bottom:14px}
+.card{border:1px solid #30363d;border-radius:8px;padding:12px;margin-bottom:12px;background:#161b22}
+.sym{color:#58a6ff;font-weight:700;font-size:15px}.strat{font-size:11px;padding:2px 8px;border-radius:10px;background:#30363d;margin-left:8px}
+.strat.midcap{background:#1f4428}.strat.hold{background:#3d2c6e}
+.up{color:#7ee787}.down{color:#ff7b72}.meta{color:#8b949e;font-size:12px;margin:4px 0}
+.th{margin:8px 0;padding:8px;background:#0d1117;border-radius:6px;color:#c9d1d9;font-size:12px}
+button{font:inherit;border:0;border-radius:6px;padding:7px 12px;margin:6px 6px 0 0;cursor:pointer;background:#6e2c2c;color:#fff}
+button.q{background:#30363d}
+</style>
+<h1>the book</h1>
+<div class=sub>every open position with a live mark. midcap + hold positions have NO automatic exits — selling here is the only exit they have.</div>
+<div id=list>loading…</div>
+<script>
+async function jf(u,opts){const r=await fetch(u,opts);if(r.status===401){document.getElementById('list').innerHTML='<b>log in at <a href=/admin style=color:#58a6ff>/admin</a> first, then reload</b>';throw 0}return r.json()}
+async function load(){
+  const d=await jf('/admin/book');
+  const el=document.getElementById('list');el.innerHTML='';
+  if(!d.positions.length){el.textContent='book is flat — no open positions';return}
+  d.positions.sort((a,b)=>(b.nowSol??0)-(a.nowSol??0));
+  for(const p of d.positions){
+    const c=document.createElement('div');c.className='card';
+    const days=((Date.now()-p.openedAt)/86400000);
+    const age=days>=1?days.toFixed(1)+'d':Math.round(days*24)+'h';
+    const pnl=p.pnlPct==null?'<span class=meta>mark unreadable</span>':'<b class='+(p.pnlPct>=0?'up':'down')+'>'+(p.pnlPct>=0?'+':'')+p.pnlPct.toFixed(0)+'%</b>';
+    c.innerHTML='<span class=sym>$'+p.symbol+'</span><span class="strat '+p.strategyId+'">'+p.strategyId+(p.dry?' · dry':'')+'</span> '+pnl+
+      '<div class=meta>cost '+p.costSol.toFixed(3)+' SOL · now '+(p.nowSol!=null?p.nowSol.toFixed(3)+' SOL':'?')+' · open '+age+'</div>'+
+      '<div class=th>'+String(p.thesis||'').replace(/</g,'&lt;').slice(0,300)+'</div>';
+    const mk=(label,frac,cls)=>{const b=document.createElement('button');if(cls)b.className=cls;b.textContent=label;
+      b.onclick=async()=>{if(!confirm('sell '+Math.round(frac*100)+'% of $'+p.symbol+'?'))return;
+        const r=await jf('/admin/operator-sell?mint='+p.mint+'&fraction='+frac+'&reason='+encodeURIComponent('operator decision from the book'),{method:'POST'});
+        if(!r.ok)alert(r.why||'failed');setTimeout(load,1500)};
+      c.appendChild(b)};
+    mk('sell 25%',0.25,'q');mk('sell 50%',0.5,'q');mk('sell 100%',1,'');
+    el.appendChild(c);
+  }
+}
+load();setInterval(load,45000);
+</script>`);
 });
 
 // ---------- OUTREACH — reply candidates, producer-approved only ----------
@@ -1188,4 +1253,9 @@ server.listen(cfg.port, cfg.host, () => {
   // outreach: small-account reply candidates — drafts only, producer approves
   // every send at /admin/outreach.html
   void import("./social/outreach.js").then((m) => m.startOutreach());
+  // midcap investment book: omo-inspired mid-cap buys with NO automatic exits —
+  // operator sells from /admin/book.html; buys stage as conviction reveals
+  void import("./invest/midcap.js").then((m) =>
+    m.startMidcap({ reveal: (mint, sol) => director.queueReveal(mint, sol, "hold") }),
+  );
 });

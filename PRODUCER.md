@@ -335,3 +335,23 @@ Editing guidance: the drafts follow his reply rules — react to what THEY
 said, deadpan, no coin/site/stream plugs, no links, no cashtags, never dunk
 on someone's loss. If a draft breaks any of that, fix it or skip it. The
 profile does the converting; the reply just has to be worth a profile click.
+
+## 16. THE INVESTMENT BOOK (midcap) — no auto-exits, operator sells only
+
+Second trading strategy alongside caller-follow: established pump.fun-born
+mid-caps (public twitter + site, $40k+ liquidity, $150k+ daily volume, 6h+
+old, wash-chart tells rejected) get an LLM thesis; conviction ≥4/5 buys a
+small ticket (floor 0.05 SOL, 5% of spendable × conviction, max 2/day).
+Every buy is hash-committed and staged as a conviction reveal.
+
+**These positions have NO automatic exits by design** — no stop, no TP, no
+planner review. The operator's judgment is that mid-caps recover from dips.
+The ONLY exit is a human clicking sell at **`/admin/book.html`** (live marks
+on every open position, sell 25/50/100% buttons — works for every strategy's
+positions, but midcap + hold positions can ONLY be closed there).
+
+What this means for you: glance at the book page daily. A midcap position
+deep red for days is a conversation with the operator, not a RIKU decision —
+he cannot sell it and will not pretend he can. On stream he can talk about
+the book honestly (theses are in the ledger), but exits there are "the desk
+reviews it", never a promise.
