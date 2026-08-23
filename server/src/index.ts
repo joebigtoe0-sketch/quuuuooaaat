@@ -1067,6 +1067,16 @@ app.get("/public/decisions", async (req, res) => {
   }
 });
 
+// Pretty aliases used in tweets/bio — keep these working forever.
+app.get("/decisions", (req, res) => {
+  const q = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
+  res.redirect(302, `/public/decisions${q}`);
+});
+app.get("/callers", (req, res) => {
+  const q = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
+  res.redirect(302, `/public/callers${q}`);
+});
+
 app.get("/admin/agent-status", async (_req, res) => {
   res.json({
     kpis: await snapshotKPIs().catch(() => null),
