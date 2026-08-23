@@ -132,6 +132,9 @@ async function discoverTick(): Promise<void> {
       if (t.authorFollowers < cfg.outreachMinFollowers || t.authorFollowers > cfg.outreachMaxFollowers) return kill("follower-window");
       if (t.at && now - t.at > 2 * 3600_000) return kill("stale"); // stale takes get stale replies
       if (t.text.length < 25 || !looksEnglish(t.text)) return kill("text");
+      // twitterapi.io ignores -filter:replies — a take buried in someone
+      // else's thread gives our reply no audience
+      if (/^@/.test(t.text)) return kill("thread-reply");
       if (t.authorPosts != null && t.authorPosts > 200_000) return kill("reply-bot");
       if (db.items.some((i) => i.tweetId === t.id)) return kill("seen-tweet");
       return true;
