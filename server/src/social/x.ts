@@ -393,8 +393,12 @@ export async function searchTweetsRich(query: string, maxResults = 20): Promise<
     } catch { /* fall through to v2 */ }
   }
   if (BEARER) {
+    // v2 speaks a different dialect than the web/advanced search: -filter:replies
+    // is -is:reply, and min_faves doesn't exist at all (silently dropping it
+    // beats a guaranteed 400)
+    const v2q = query.replace(/-filter:replies/g, "-is:reply").replace(/\s*min_faves:\d+/g, "").trim();
     const j = await v2(
-      `/tweets/search/recent?query=${encodeURIComponent(query)}&max_results=${Math.min(50, Math.max(10, maxResults))}` +
+      `/tweets/search/recent?query=${encodeURIComponent(v2q)}&max_results=${Math.min(50, Math.max(10, maxResults))}` +
         `&expansions=author_id&user.fields=username,public_metrics,created_at&tweet.fields=created_at,author_id`,
     );
     if (j) {

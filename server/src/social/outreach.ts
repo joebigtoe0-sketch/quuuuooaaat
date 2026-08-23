@@ -161,7 +161,8 @@ async function discoverTick(): Promise<void> {
     if (db.items.length > 400) db.items = db.items.slice(-400);
     save();
     const pending = db.items.filter((i) => i.status === "pending").length;
-    if (scored.length) log.info("outreach", `query "${q.slice(0, 40)}…" → ${found.length} found, ${scored.length} drafted, ${pending} pending approval`);
+    // always log — a silent sweep and a broken search look identical otherwise
+    log.info("outreach", `sweep "${q.slice(0, 36)}…" → ${found.length} found, ${fresh.length} passed filters, ${scored.length} drafted, ${pending} pending`);
   } catch (e) {
     log.warn("outreach", `discover failed: ${String(e).slice(0, 100)}`);
   }
