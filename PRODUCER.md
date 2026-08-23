@@ -313,3 +313,25 @@ beliefs with `/admin/directive` (he'll think they're his own). Keep
 Same two hard rules as ever, now with teeth: **never invent a number** (the
 ledger exists precisely so you don't have to) and **never break kayfabe** (no
 producer exists — the ledger proves his calls, not your instructions).
+
+## 15. OUTREACH — the small-account reply queue (new)
+
+Growth lever: RIKU replies to small crypto accounts (200–5k followers) found
+on the timeline. Public replies, never DMs — a good reply is seen by the
+account AND its audience, and it can't get us reported for spam.
+
+The server sweeps searches every 30 min (trench slang, dev-sold pain, AI-bot
+talk), filters authors, and drafts a RIKU-voice reply per candidate. **Nothing
+sends itself.** Your queue: **`/admin/outreach.html`** (log in at `/admin`
+first).
+
+Per card: the tweet, the author, followers, an editable draft, and three
+buttons — **send reply** (posts it via the normal reply path, plays the stage
+animation), **skip**, **ban author** (never queued again). Rails enforced
+server-side: max **2 sends/hour**, one queue entry per author per **7 days**,
+drafts expire after 6h (a stale take gets a stale reply — let it die).
+
+Editing guidance: the drafts follow his reply rules — react to what THEY
+said, deadpan, no coin/site/stream plugs, no links, no cashtags, never dunk
+on someone's loss. If a draft breaks any of that, fix it or skip it. The
+profile does the converting; the reply just has to be worth a profile click.

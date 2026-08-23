@@ -350,6 +350,77 @@ export async function searchTweets(query: string, maxResults = 15): Promise<{ au
   }
 }
 
+export interface RichTweet {
+  id: string;
+  author: string; // username, no @
+  authorFollowers: number | null;
+  authorPosts: number | null;
+  authorCreatedAt: number | null; // ms
+  text: string;
+  at: number | null; // tweet time ms
+}
+
+/** Search with full author stats + tweet ids — what outreach needs and
+ *  searchTweets throws away. twitterapi.io first (richest), v2 fallback. */
+export async function searchTweetsRich(query: string, maxResults = 20): Promise<RichTweet[]> {
+  if (READ_KEY) {
+    try {
+      const res = await fetch(
+        `https://api.twitterapi.io/twitter/tweet/advanced_search?query=${encodeURIComponent(query)}&queryType=Latest`,
+        { headers: { "X-API-Key": READ_KEY } },
+      );
+      if (res.ok) {
+        const data = (await res.json()) as any;
+        const tweets = data.tweets ?? data.data ?? [];
+        const rows: RichTweet[] = tweets
+          .map((t: any) => {
+            const a = t.author ?? {};
+            const ts = Date.parse(String(t.createdAt ?? ""));
+            const ats = Date.parse(String(a.createdAt ?? ""));
+            return {
+              id: String(t.id ?? ""),
+              author: String(a.userName ?? t.username ?? ""),
+              authorFollowers: Number.isFinite(Number(a.followers)) ? Number(a.followers) : null,
+              authorPosts: Number.isFinite(Number(a.statusesCount)) ? Number(a.statusesCount) : null,
+              authorCreatedAt: Number.isFinite(ats) ? ats : null,
+              text: String(t.text ?? "").replace(/https?:\/\/\S+/g, "").trim(),
+              at: Number.isFinite(ts) ? ts : null,
+            };
+          })
+          .filter((t: RichTweet) => t.id && t.author && t.text.length > 5);
+        if (rows.length) return rows.slice(0, maxResults);
+      }
+    } catch { /* fall through to v2 */ }
+  }
+  if (BEARER) {
+    const j = await v2(
+      `/tweets/search/recent?query=${encodeURIComponent(query)}&max_results=${Math.min(50, Math.max(10, maxResults))}` +
+        `&expansions=author_id&user.fields=username,public_metrics,created_at&tweet.fields=created_at,author_id`,
+    );
+    if (j) {
+      const users = new Map<string, any>((j?.includes?.users ?? []).map((u: any) => [String(u.id), u]));
+      return (j?.data ?? [])
+        .map((t: any) => {
+          const u = users.get(String(t.author_id)) ?? {};
+          const ts = Date.parse(String(t.created_at ?? ""));
+          const ats = Date.parse(String(u.created_at ?? ""));
+          return {
+            id: String(t.id ?? ""),
+            author: String(u.username ?? ""),
+            authorFollowers: u.public_metrics?.followers_count ?? null,
+            authorPosts: u.public_metrics?.tweet_count ?? null,
+            authorCreatedAt: Number.isFinite(ats) ? ats : null,
+            text: String(t.text ?? "").replace(/https?:\/\/\S+/g, "").trim(),
+            at: Number.isFinite(ts) ? ts : null,
+          };
+        })
+        .filter((t: RichTweet) => t.id && t.author && t.text.length > 5)
+        .slice(0, maxResults);
+    }
+  }
+  return [];
+}
+
 /** Our follower count (twitterapi.io), cached 10 min. */
 export async function xFollowers(): Promise<number | null> {
   if (!HANDLE) return null;

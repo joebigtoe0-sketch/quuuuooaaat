@@ -39,7 +39,7 @@ const hub = new Hub(server);
 // Control endpoints need the admin key (query ?key=, x-admin-key header, or
 // the qk cookie set by /admin login). Read-only + stage-internal endpoints
 // (feed, layout, clip upload, agent-status, health) stay open.
-const PROTECTED = /^\/admin\/(directive|reset|restart|agent$|fake-send|fake-buyback|pause|resume|goto|anim|camera|fx|tts-test|selfie-take|selfie-last|chat$|chat-add|go-live|syslog|record$|say|queue|clips|clip-file|research-now|blacklist|sniper|operator-call|operator-sell|positions|callout-entry|producer-state|tweet-exact|reply-exact|planner|autoreply|cc-probe|callers|calls|feed-ingest|facts|kol-roster|kol-pool)/;
+const PROTECTED = /^\/admin\/(directive|reset|restart|agent$|fake-send|fake-buyback|pause|resume|goto|anim|camera|fx|tts-test|selfie-take|selfie-last|chat$|chat-add|go-live|syslog|record$|say|queue|clips|clip-file|research-now|blacklist|sniper|operator-call|operator-sell|positions|callout-entry|producer-state|tweet-exact|reply-exact|planner|autoreply|cc-probe|callers|calls|feed-ingest|facts|kol-roster|kol-pool|outreach)/;
 function hasAdminKey(req: express.Request): boolean {
   const c = String(req.headers.cookie ?? "");
   const cookieKey = c.match(/(?:^|;\s*)qk=([^;]+)/)?.[1];
@@ -408,6 +408,77 @@ app.post("/admin/reply-exact", async (req, res) => {
   // depict it on stream (post already out — this is decoration, non-blocking)
   director.showPost({ text, replyTo: id, ok: r.ok });
   res.json({ ok: r.ok, dry: r.dry, id: r.id, why: r.why });
+});
+
+// ---------- OUTREACH — reply candidates, producer-approved only ----------
+app.get("/admin/outreach", async (_req, res) => {
+  const { outreachList } = await import("./social/outreach.js");
+  res.json({ ok: true, ...outreachList() });
+});
+app.post("/admin/outreach/approve", async (req, res) => {
+  const b: any = req.body ?? {};
+  const id = String(b.id ?? req.query.id ?? "").trim();
+  const text = String(b.text ?? "").trim() || undefined;
+  const { outreachApprove } = await import("./social/outreach.js");
+  const r = await outreachApprove(id, text);
+  if (r.ok && r.text && r.tweetId) director.showPost({ text: r.text, replyTo: r.tweetId, ok: true });
+  res.json(r);
+});
+app.post("/admin/outreach/skip", async (req, res) => {
+  const id = String((req.body as any)?.id ?? req.query.id ?? "").trim();
+  const { outreachSkip } = await import("./social/outreach.js");
+  res.json({ ok: outreachSkip(id) });
+});
+app.post("/admin/outreach/ban", async (req, res) => {
+  const author = String((req.body as any)?.author ?? req.query.author ?? "").trim();
+  if (!author) return res.json({ ok: false, why: "no author" });
+  const { outreachBan } = await import("./social/outreach.js");
+  res.json({ ok: true, skipped: outreachBan(author) });
+});
+// the producer's queue page — self-contained, uses the qk cookie from /admin login
+app.get("/admin/outreach.html", (_req, res) => {
+  res.type("html").send(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>outreach queue</title>
+<style>
+body{background:#0d1117;color:#e6edf3;font:14px/1.45 ui-monospace,monospace;max-width:780px;margin:20px auto;padding:0 12px}
+h1{font-size:16px} .rail{color:#8b949e;margin-bottom:14px}
+.card{border:1px solid #30363d;border-radius:8px;padding:12px;margin-bottom:12px;background:#161b22}
+.who{color:#58a6ff;font-weight:700} .fol{color:#8b949e;font-size:12px}
+.tw{margin:8px 0;padding:8px;background:#0d1117;border-radius:6px;color:#c9d1d9;white-space:pre-wrap}
+textarea{width:100%;box-sizing:border-box;background:#0d1117;color:#7ee787;border:1px solid #30363d;border-radius:6px;padding:8px;font:inherit;min-height:56px}
+button{font:inherit;border:0;border-radius:6px;padding:7px 14px;margin:6px 6px 0 0;cursor:pointer}
+.ok{background:#238636;color:#fff}.no{background:#30363d;color:#e6edf3}.ban{background:#6e2c2c;color:#fff}
+.done{opacity:.45}.tag{font-size:11px;padding:2px 8px;border-radius:10px;background:#30363d;margin-left:8px}
+a{color:#58a6ff}
+</style>
+<h1>outreach queue <span id=rail class=rail></span></h1>
+<div class=rail>drafts auto-expire after 6h. edits in the box are what gets sent. nothing sends without a click here.</div>
+<div id=list>loading…</div>
+<script>
+async function j(u,opts){const r=await fetch(u,opts);if(r.status===401){document.getElementById('list').innerHTML='<b>log in at <a href=/admin>/admin</a> first, then reload</b>';throw 0}return r.json()}
+async function load(){
+  const d=await j('/admin/outreach');
+  document.getElementById('rail').textContent=\`(\${d.sentLastHour}/\${d.maxPerHour} sent this hour)\`;
+  const el=document.getElementById('list');el.innerHTML='';
+  const items=d.items.filter(i=>i.status==='pending').concat(d.items.filter(i=>i.status!=='pending').slice(0,10));
+  if(!items.length){el.textContent='queue empty — the sweep runs every 30 min';return}
+  for(const i of items){
+    const c=document.createElement('div');c.className='card'+(i.status!=='pending'?' done':'');
+    const age=Math.round((Date.now()-i.foundAt)/60000);
+    c.innerHTML=\`<span class=who>@\${i.author}</span> <span class=fol>\${i.followers??'?'} followers · found \${age}m ago · score \${i.score}</span>\`+(i.status!=='pending'?\`<span class=tag>\${i.status}</span>\`:'')+
+      \`<div class=tw>\${i.tweetText.replace(/</g,'&lt;')}</div>\`;
+    if(i.status==='pending'){
+      const t=document.createElement('textarea');t.value=i.draft;c.appendChild(t);
+      const mk=(cls,label,fn)=>{const b=document.createElement('button');b.className=cls;b.textContent=label;b.onclick=fn;c.appendChild(b)};
+      mk('ok','send reply',async()=>{const r=await j('/admin/outreach/approve',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:i.id,text:t.value})});if(!r.ok)alert(r.why||'failed');load()});
+      mk('no','skip',async()=>{await j('/admin/outreach/skip?id='+encodeURIComponent(i.id),{method:'POST'});load()});
+      mk('ban','ban author',async()=>{if(confirm('never queue @'+i.author+' again?')){await j('/admin/outreach/ban?author='+encodeURIComponent(i.author),{method:'POST'});load()}});
+    } else if(i.sentText){const s=document.createElement('div');s.className='tw';s.textContent='→ '+i.sentText;c.appendChild(s)}
+    el.appendChild(c);
+  }
+}
+load();setInterval(load,60000);
+</script>`);
 });
 
 /** Auto-reply timers on/off. The producer writing every reply only works if
@@ -1114,4 +1185,7 @@ server.listen(cfg.port, cfg.host, () => {
         director.queueExitNote(symbol, reason, solReceived, costSol),
     }),
   );
+  // outreach: small-account reply candidates — drafts only, producer approves
+  // every send at /admin/outreach.html
+  void import("./social/outreach.js").then((m) => m.startOutreach());
 });

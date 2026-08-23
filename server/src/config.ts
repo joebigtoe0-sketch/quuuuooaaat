@@ -137,6 +137,14 @@ export const cfg = {
   callerFollowMaxSwarm: num("CALLER_FOLLOW_MAX_SWARM", 3), // >this many distinct callers in the window = coordinated pump, skip
   callerFollowSwarmWindowMin: num("CALLER_FOLLOW_SWARM_WINDOW_MIN", 10),
   callerFollowMaxFromFirstCall: num("CALLER_FOLLOW_MAX_FROM_FIRST_CALL", 1.4), // mcNow vs EARLIEST call's mc — later = the move already happened
+
+  // ---- outreach: find small crypto accounts, draft replies, producer approves ----
+  outreach: bool("OUTREACH", true), // discovery only — sends ALWAYS need approval
+  outreachTickMin: num("OUTREACH_TICK_MIN", 30),
+  outreachMinFollowers: num("OUTREACH_MIN_FOLLOWERS", 200),
+  outreachMaxFollowers: num("OUTREACH_MAX_FOLLOWERS", 5000),
+  outreachMaxSendsPerHour: num("OUTREACH_MAX_SENDS_PER_HOUR", 2),
+  outreachDedupeDays: num("OUTREACH_DEDUPE_DAYS", 7),
   // ---------- dev-sniper (the quiet edge; the show never names it) ----------
   // instant entries on launches from PROVEN devs while mc is still under the
   // ceiling; exit at 95% bonding or after maxHold. Sizing follows his own book
