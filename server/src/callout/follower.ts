@@ -61,6 +61,7 @@ function save(): void {
   } catch {}
 }
 const today = (): string => new Date().toISOString().slice(0, 10);
+let capLogAt = 0;
 
 interface StageHooks {
   /** queue the on-stream position-reveal ceremony for a fresh buy */
@@ -87,7 +88,15 @@ export async function attemptFollowBuy(
       st.day = today();
       st.count = 0;
     }
-    if (st.count >= cfg.callerFollowMaxPerDay) return false;
+    if (st.count >= cfg.callerFollowMaxPerDay) {
+      // say it (throttled) — a capped day and a dead pipeline look identical
+      // from the outside, and that cost us hours of "is something broken?"
+      if (Date.now() - capLogAt > 30 * 60_000) {
+        capLogAt = Date.now();
+        log.info("follower", `day cap ${st.count}/${cfg.callerFollowMaxPerDay} — passing on everything until UTC midnight (CALLER_FOLLOW_MAX_PER_DAY raises it)`);
+      }
+      return false;
+    }
     if (st.pos[c.mint]) return false;
     // no skin, no trade — their wallet IS our exit signal
     if (!c.skin || c.skin.costUsd < 10) return false;
