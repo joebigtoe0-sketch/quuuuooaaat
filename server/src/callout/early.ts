@@ -21,8 +21,16 @@ export function wasCalledEarly(mint: string, withinMin = 90): boolean {
   return at > 0 && Date.now() - at < withinMin * 60_000;
 }
 
-/** Fire-and-forget: write the hook and post it immediately. Never throws. */
-export async function earlyCallout(mint: string, symbol: string, why: string): Promise<void> {
+/** Fire-and-forget: write the hook and post it immediately. Never throws.
+ *  opts.exact posts `why` verbatim (trimmed) instead of generating a troll
+ *  line — the investment book calls with its actual thesis, the trench book
+ *  calls with the bit. */
+export async function earlyCallout(
+  mint: string,
+  symbol: string,
+  why: string,
+  opts?: { exact?: boolean },
+): Promise<void> {
   try {
     // coins he trades are exactly the ones worth knowing the caller crowd on
     void import("./callers.js").then((m) => m.requestHarvest(mint)).catch(() => {});
@@ -59,19 +67,28 @@ export async function earlyCallout(mint: string, symbol: string, why: string): P
       `your thesis: ${why}`,
       mcUsd != null ? `market cap right now: $${mcUsd.toLocaleString("en-US")}` : "",
     ].filter(Boolean).join("\n");
-    const text = await Promise.race([
+    // the last posted callouts are a BANNED list — the model was parroting
+    // the prompt's own example lines ("the group chat went quiet") until the
+    // examples were abstracted and repeats were made a hard rule
+    const recentCalls = store
+      .callouts()
+      .slice(-8)
+      .map((c) => `- ${c.text}`)
+      .join("\n");
+    const text = opts?.exact ? why : await Promise.race([
       callFreeform(
         "You are RIKU, a cocky AI quant who calls coins on pump.fun. Write ONE public callout line for a coin you JUST bought. " +
-          "\nSTYLE — deadpan degen shitpost. Everyone reading should half-know you're trolling, and that's the charm; the alpha hides inside the bit. SHORT: one or two short sentences, under ~140 chars, lowercase preferred, absurd confidence, zero explanation. Pick ONE shape and nail it:" +
-          "\n1) fake TA with absurdly wrong specificity — 'cup and handle on the 5 second chart', 'golden cross forming on the 9 seconds. rip it to bonding'" +
-          "\n2) insider larp — 'cabal said to trim some before they turn on the faucet', 'the group chat went quiet. that's the signal'" +
-          "\n3) machine-quant absurdity — 'backtested this on 11 seconds of data. verdict: yes', 'my model flagged it and then unplugged itself'" +
-          "\n4) pure command — 'rip it to bonding', 'send it. i'll explain after'" +
-          "\nFake indicators, fake timeframes and cabal bits are JOKES and always allowed. Real numbers are different: at most ONE, and only the current mc from DATA (optional — most lines need no number at all). Never invent your buy size, prices, multiples, holders, or stats." +
+          "\nSTYLE — deadpan degen shitpost. Everyone reading half-knows you're trolling, that's the charm; the alpha hides inside the bit. SHORT: one or two short sentences, under ~140 chars, lowercase preferred, absurd confidence, zero explanation." +
+          "\nTHE BIT MUST BE INVENTED FRESH, and the strongest material is the COIN ITSELF: its name/ticker is your prop — pun it, take it literally, treat it as a technical indicator, whatever lands ($SMOLCAT: the joke should probably involve something being smol, or a cat). Shapes you can build in (pick ONE):" +
+          "\n1) fake TA with absurdly wrong specificity — invent a nonsense pattern on a nonsense timeframe, stated dead seriously" +
+          "\n2) insider larp — imply a source/group/entity that obviously doesn't exist told you something" +
+          "\n3) machine-quant absurdity — your model/backtest/code doing something unhinged about this exact coin" +
+          "\n4) pure command — a short imperative with zero justification" +
+          "\nHARD RULES: never reuse or lightly reword a line from the RECENT CALLS list — those are burned. Fake indicators, timeframes and cabal bits are jokes and always allowed. Real numbers: at most ONE, and only the current mc from DATA (optional — most lines need none). Never invent buy size, prices, multiples, holders, or stats." +
           "\nNEVER NAME OR IDENTIFY ANOTHER CALLER OR TRADER, never explain your strategy (no medians, hit rates, 'x room', anyone's entries or targets)." +
           "\nTHESE ARE MEMECOINS — no whitepaper/roadmap/team/utility talk, even as a joke premise. No hashtags, no DYOR, no financial advice, max one emoji. Output only the line.",
-        `$${symbol} — DATA:\n${facts}`,
-        90,
+        `$${symbol} — DATA:\n${facts}\nRECENT CALLS (burned material, do not resemble):\n${recentCalls || "- (none yet)"}`,
+        120,
         FRAGMENT_MODEL,
       ),
       new Promise<null>((r) => setTimeout(() => r(null), 9000)),
@@ -84,8 +101,15 @@ export async function earlyCallout(mint: string, symbol: string, why: string): P
       const sp = cut.lastIndexOf(" ");
       return (sp > max * 0.6 ? cut.slice(0, sp) : cut).trim();
     };
+    // fallback rotates so a dead LLM doesn't post the same canned line twice
+    const FALLBACKS = [
+      `cup and handle on the 5 second chart. $${symbol} to bonding.`,
+      `$${symbol} printing a pattern my model refuses to name. in.`,
+      `ran the numbers on $${symbol}. the numbers ran back.`,
+      `$${symbol}. that's it. that's the analysis.`,
+    ];
     const line = cutClean((text ?? "").trim().replace(/^["']|["']$/g, ""), 190) ||
-      `cup and handle on the 5 second chart. $${symbol} to bonding.`;
+      FALLBACKS[Math.floor(Math.random() * FALLBACKS.length)];
     // decision record opened (and hash-committed on-chain) BEFORE the post —
     // this is what makes "average peak 1.67x" provable instead of claimed
     const { openDecision, sealDecision } = await import("../desk/records.js");

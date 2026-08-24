@@ -375,6 +375,13 @@ async function tick(): Promise<void> {
       "midcap",
       `BOUGHT $${c.symbol} for the book (${sol} SOL, conviction ${v.conviction}/5, mc $${Math.round(c.mcUsd / 1000)}k)${r.dry ? " [dry]" : ""} — NO auto-exit, operator sells from /admin/book.html`,
     );
+    // the investment book calls with its ACTUAL THESIS — no bit, no troll
+    // line; the reasoning is the flex (the trench book keeps the degen voice)
+    void (async () => {
+      const { earlyCallout } = await import("../callout/early.js");
+      await new Promise((res) => setTimeout(res, 2_000));
+      await earlyCallout(c.mint, c.symbol, v.thesis, { exact: true });
+    })().catch(() => {});
     hooks?.investNote(noteFor(c, v, { sizeSol: sol }));
   } catch (e) {
     log.warn("midcap", `tick failed: ${String(e).slice(0, 100)}`);
