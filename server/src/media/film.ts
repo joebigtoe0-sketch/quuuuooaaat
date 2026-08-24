@@ -36,6 +36,9 @@ export async function receiveClip(id: string, webm: Buffer): Promise<string | nu
     fs.writeFileSync(webmPath, webm);
     const mp4Path = path.join(cfg.clipsDir, `${id}.mp4`);
     const ok = await transcode(webmPath, mp4Path);
+    // the webm is only worth keeping when the transcode failed (it's the
+    // sole copy then) — otherwise it just doubles clip disk
+    if (ok) try { fs.unlinkSync(webmPath); } catch {}
     const finalPath = ok ? mp4Path : null;
     const p = pending.get(id);
     if (p) {
