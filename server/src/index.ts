@@ -1224,7 +1224,9 @@ async function callerBoard(req: express.Request, res: express.Response): Promise
   try {
     const { topCallers, indexStats } = await import("./callout/callers.js");
     const n = Math.max(0, Number(req.query.n) || 0);
-    const min = Math.max(1, Number(req.query.min) || 3);
+    // default matches topCallers: 5 graded calls — a 3-call "56x median" is a
+    // farmer, not a caller. ?min= still overrides for admin digging.
+    const min = Math.max(1, Number(req.query.min) || 5);
     res.json({ ok: true, ...indexStats(), rows: topCallers(n, min) });
   } catch (e) {
     res.json({ ok: false, why: String(e).slice(0, 120) });
