@@ -6,16 +6,14 @@ import { log } from "./log.js";
 /**
  * Disk janitor — the volume only grows without this. TTS audio is spoken
  * once (never replayed after ~minutes), clips/selfies are posted shortly
- * after recording. Hourly sweep:
- *   data/audio    — delete files older than 24h
- *   data/clips    — delete files older than 7d
- *   data/selfies  — delete files older than 7d
+ * after recording — everything is dead weight after a day. Hourly sweep
+ * deletes audio, clips and selfies older than 24h
  */
 
 const RULES: { dir: () => string; maxAgeMs: number }[] = [
   { dir: () => cfg.audioDir, maxAgeMs: 24 * 3600_000 },
-  { dir: () => cfg.clipsDir, maxAgeMs: 7 * 86_400_000 },
-  { dir: () => path.join(cfg.dataDir, "selfies"), maxAgeMs: 7 * 86_400_000 },
+  { dir: () => cfg.clipsDir, maxAgeMs: 24 * 3600_000 },
+  { dir: () => path.join(cfg.dataDir, "selfies"), maxAgeMs: 24 * 3600_000 },
 ];
 
 function sweepDir(dir: string, maxAgeMs: number): { n: number; bytes: number } {
@@ -87,5 +85,5 @@ export function startJanitor(): void {
   if (timer) return;
   timer = setInterval(sweepDisk, 3600_000);
   setTimeout(sweepDisk, 30_000); // first sweep shortly after boot
-  log.info("janitor", "disk janitor on — audio >24h, clips/selfies >7d, hourly");
+  log.info("janitor", "disk janitor on — audio/clips/selfies >24h, hourly");
 }
