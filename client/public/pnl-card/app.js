@@ -55,7 +55,7 @@ function mulberry32(seed) {
 const IV_MS = { '1s': 1e3, '15s': 15e3, '30s': 30e3, '1m': 60e3, '5m': 300e3, '15m': 900e3, '30m': 1800e3, '1h': 36e5, '4h': 144e5, '6h': 216e5, '12h': 432e5 };
 
 // ---------------------------------------------------------------- state
-const cfg = { durMs: 20000, aspect: '9:16' };
+const cfg = { durMs: 20000, aspect: '9:16', videoAudio: false };
 let model = null;
 let playing = false, playT0 = 0, lastFrameT = 0, playGen = 0, cueIdx = 0;
 let smooth = { yMax: 0, yMin: 0, pnl: 0 };
@@ -95,6 +95,20 @@ function startMusic() {
 }
 function stopMusic() {
   if (musicSrc) { try { musicSrc.stop(); } catch {} musicSrc = null; }
+}
+
+// route a bg-video's soundtrack into the master graph (speakers + recording).
+// createMediaElementSource is once-per-element, so mark the element; the
+// muted flag then acts as the on/off switch for the routed audio.
+function routeVideoAudio(v) {
+  if (v._routed || !AC) return;
+  try {
+    const g = AC.createGain();
+    g.gain.value = 0.9;
+    AC.createMediaElementSource(v).connect(g);
+    g.connect(masterGain);
+    v._routed = true;
+  } catch {}
 }
 
 function sfx(kind) {
@@ -816,6 +830,8 @@ function play() {
   playT0 = performance.now();
   if (chartBgImg && chartBgImg.tagName === 'VIDEO') {
     try { chartBgImg.currentTime = 0; } catch {}
+    routeVideoAudio(chartBgImg);
+    chartBgImg.muted = !cfg.videoAudio;
     chartBgImg.play().catch(() => {});
   }
   startMusic();
@@ -829,6 +845,7 @@ function tick(now, g) {
     renderFrame(totalMs() - 1);
     playing = false;
     stopMusic();
+    if (chartBgImg && chartBgImg.tagName === 'VIDEO') chartBgImg.muted = true; // keep looping, silently
     if (recorder && recorder.state === 'recording') setTimeout(stopRecording, 400);
     return;
   }
@@ -920,10 +937,16 @@ function hookBgInput(id, assign) {
       const v = document.createElement('video');
       v.muted = true; v.loop = true; v.playsInline = true;
       v.src = URL.createObjectURL(f);
-      v.onloadeddata = () => { assign(v); v.play().catch(() => {}); if (model && !playing) renderFrame(lastFrameT); };
+      v.onloadeddata = () => {
+        assign(v);
+        if (id === 'bgChart') $('vaudWrap').hidden = false;
+        v.play().catch(() => {});
+        if (model && !playing) renderFrame(lastFrameT);
+      };
       v.onerror = () => setStatus('could not load that video file', true);
       return;
     }
+    if (id === 'bgChart') $('vaudWrap').hidden = true;
     const rd = new FileReader();
     rd.onload = () => {
       const im = new Image();
@@ -935,6 +958,11 @@ function hookBgInput(id, assign) {
 }
 hookBgInput('bgChart', im => { chartBgImg = im; });
 hookBgInput('bgCard', im => { cardBgImg = im; });
+
+$('vaud').onchange = e => {
+  cfg.videoAudio = e.target.checked;
+  if (chartBgImg && chartBgImg.tagName === 'VIDEO' && playing) chartBgImg.muted = !cfg.videoAudio;
+};
 
 $('music').addEventListener('change', async e => {
   const f = e.target.files && e.target.files[0];

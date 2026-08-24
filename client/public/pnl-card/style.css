@@ -70,6 +70,14 @@ button.primary:hover:not(:disabled) { filter: brightness(1.08); color: var(--ink
 .summary .pos { color: var(--green); }
 .summary .neg { color: var(--red); }
 
+.vaud {
+  display: flex; align-items: center; gap: 8px; margin-top: 8px;
+  color: var(--cream); font: 12px var(--lab); text-transform: none; letter-spacing: .04em;
+  cursor: pointer;
+}
+.vaud input { accent-color: var(--signal); }
+.vaud[hidden] { display: none; }
+
 .donate {
   margin-top: 22px; width: 100%;
   background: none; border: 1px dashed var(--line); color: var(--muted);

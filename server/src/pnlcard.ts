@@ -1,5 +1,5 @@
 // PNL REPLAY (/pnl-card) — the trade-replay hype-video generator.
-// (page rev: video chart backgrounds — server touch to trigger the rebuild) (v1.1: frontend retries through reboot 502s)
+// (page rev: bg-video audio toggle — server touch to trigger the rebuild) (v1.1: frontend retries through reboot 502s)
 // Frontend lives in client/public/pnl-card/ (served by the existing static
 // middleware); these are its two data routes. Fully self-contained: public
 // pump.fun endpoints only, no keys, no RIKU systems touched.
