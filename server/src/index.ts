@@ -367,7 +367,7 @@ app.get("/admin/producer-state", async (_req, res) => {
       })),
       callRecord: perf.board(rows, "all"),
       kols: { roster: kols.roster().length },
-      memory: { board: memory.board(), journal: memory.recentByKind?.("", 12) ?? [], directives: memory.directives() },
+      memory: { board: memory.board(), journal: memory.recentAll(12), directives: memory.directives() },
     });
   } catch (e) {
     res.json({ ok: false, why: String(e).slice(0, 200) });
