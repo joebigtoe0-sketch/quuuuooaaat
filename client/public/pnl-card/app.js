@@ -841,6 +841,14 @@ function applyAspect() {
 }
 
 // ---------------------------------------------------------------- recording
+function saveBlob(blob, name) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+
 function record() {
   if (!model || recorder) return;
   playing = false; // interrupt any running preview; play() below restarts cleanly
@@ -849,22 +857,30 @@ function record() {
   if (AC.state === 'suspended') AC.resume();
   const stream = cv.captureStream(60);
   for (const tr of audioDest.stream.getAudioTracks()) stream.addTrack(tr);
+  // record webm, then ALWAYS convert via server ffmpeg → real H.264+AAC mp4.
+  // (browser-native 'video/mp4' is a trap: Chromium muxes VP9/Opus into the
+  // mp4 container, which X/TikTok reject just like webm)
   const mime = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm']
     .find(m => MediaRecorder.isTypeSupported(m));
   recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 14e6 });
   recChunks = [];
   recorder.ondataavailable = e => e.data.size && recChunks.push(e.data);
-  recorder.onstop = () => {
-    const blob = new Blob(recChunks, { type: 'video/webm' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `${model.meta.symbol}-pnl-replay.webm`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  recorder.onstop = async () => {
+    const name = `${model.meta.symbol}-pnl-replay`;
     recorder = null;
     $('rec').classList.remove('recording');
-    $('rec').textContent = '⏺ Record .webm';
-    setStatus('video saved ✓');
+    $('rec').textContent = '⏺ Record .mp4';
+    const webm = new Blob(recChunks, { type: 'video/webm' });
+    setStatus('converting to mp4…');
+    try {
+      const r = await fetch('api/mp4', { method: 'POST', headers: { 'content-type': 'video/webm' }, body: webm });
+      if (!r.ok) throw new Error(String(r.status));
+      saveBlob(await r.blob(), `${name}.mp4`);
+      setStatus('video saved ✓ (converted to mp4)');
+    } catch {
+      saveBlob(webm, `${name}.webm`);
+      setStatus('mp4 conversion unavailable right now — saved .webm instead');
+    }
   };
   recorder.start();
   $('rec').classList.add('recording');

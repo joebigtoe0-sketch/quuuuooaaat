@@ -3,6 +3,11 @@
 // middleware); these are its two data routes. Fully self-contained: public
 // pump.fun endpoints only, no keys, no RIKU systems touched.
 import type { Express } from "express";
+import { spawn } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import ffmpegPath from "ffmpeg-static";
 
 const UA = { "user-agent": "Mozilla/5.0 (X11; Linux x86_64) quantriku-pnl/1.0", accept: "application/json" };
 
@@ -120,6 +125,54 @@ export function registerPnlCard(app: Express) {
       const data = await apiReplay(String(req.query.mint || ""), String(req.query.wallet || ""));
       res.json(data);
     } catch (e: any) {
+      res.status(500).json({ error: String(e?.message || e) });
+    }
+  });
+
+  // webm → mp4 for browsers whose MediaRecorder can't mux mp4 natively.
+  // NOTE: this path must be in index.ts RAW_UPLOADS or the global text parser
+  // eats the binary body. One job at a time — this box also runs the show.
+  let converting = false;
+  app.post("/pnl-card/api/mp4", async (req, res) => {
+    if (converting) return res.status(429).json({ error: "busy" });
+    if (!ffmpegPath) return res.status(501).json({ error: "no ffmpeg" });
+    converting = true;
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pnl-"));
+    const inF = path.join(dir, "in.webm");
+    const outF = path.join(dir, "out.mp4");
+    const cleanup = () => { try { fs.rmSync(dir, { recursive: true, force: true }); } catch {} converting = false; };
+    try {
+      // collect raw body, capped at 120MB
+      await new Promise<void>((resolve, reject) => {
+        const ws = fs.createWriteStream(inF);
+        let size = 0;
+        req.on("data", (c: Buffer) => {
+          size += c.length;
+          if (size > 120e6) { req.destroy(); reject(new Error("too large")); }
+        });
+        req.pipe(ws);
+        ws.on("finish", resolve);
+        ws.on("error", reject);
+        req.on("error", reject);
+      });
+      await new Promise<void>((resolve, reject) => {
+        const p = spawn(ffmpegPath as string, [
+          "-y", "-i", inF,
+          "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p",
+          "-c:a", "aac", "-b:a", "160k",
+          "-movflags", "+faststart",
+          outF,
+        ], { stdio: "ignore" });
+        p.on("close", (code) => (code === 0 && fs.existsSync(outF) ? resolve() : reject(new Error("ffmpeg failed"))));
+        p.on("error", reject);
+      });
+      res.set("content-type", "video/mp4");
+      const rs = fs.createReadStream(outF);
+      rs.pipe(res);
+      rs.on("close", cleanup);
+      rs.on("error", () => { cleanup(); res.end(); });
+    } catch (e: any) {
+      cleanup();
       res.status(500).json({ error: String(e?.message || e) });
     }
   });

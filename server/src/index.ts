@@ -31,7 +31,7 @@ app.use(express.urlencoded({ extended: true }));
 // accept bodies with any/no content-type — but NEVER touch the binary upload
 // routes (selfie PNGs, greenscreen webm): a global text parse would 413 them
 const textParser = express.text({ type: () => true });
-const RAW_UPLOADS = new Set(["/admin/selfie-upload", "/admin/clip"]);
+const RAW_UPLOADS = new Set(["/admin/selfie-upload", "/admin/clip", "/pnl-card/api/mp4"]);
 app.use((req, res, next) => (RAW_UPLOADS.has(req.path) ? next() : textParser(req, res, next)));
 const server = http.createServer(app);
 const hub = new Hub(server);
