@@ -66,6 +66,10 @@ export class Locomotion {
     }
     this.hub.cue({ t: "walk", to: station, durMs: Math.round((dist / WALK_SPEED) * 1000) });
     this.target = s;
+    // a new walk overrides the old target — resolve the old awaiter instead of
+    // stranding it forever (an orphaned walk promise froze the whole stage:
+    // postAnimBusy never cleared, ambient never ran again)
+    this.arriveResolve?.();
     return new Promise((resolve) => {
       this.arriveResolve = resolve;
     });

@@ -367,8 +367,9 @@ export class Director {
         try {
           const text = opts.text;
           // he WALKS to the terminal and sits before typing — the camera was
-          // cutting to an empty chair while he stood across the room
-          await this.loco.walkTo("terminal");
+          // cutting to an empty chair while he stood across the room.
+          // Bounded: decoration may never be able to hang the stage.
+          await Promise.race([this.loco.walkTo("terminal"), new Promise((r) => setTimeout(r, 8000))]);
           if (this.runningBeat) return; // a beat claimed him mid-walk — vanish
           this.hub.cue({ t: "camera", preset: "terminal" });
           this.loco.sit(true);
