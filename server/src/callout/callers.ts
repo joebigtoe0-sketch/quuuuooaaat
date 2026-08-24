@@ -496,10 +496,28 @@ export function callerSignal(mint: string): CallerSignal | null {
  *  pump.fun caps its own board at top-50; ours shows everything we can prove.
  *  RANKED BY MEDIAN peak (avg is lottery-distorted — one 148x call makes a
  *  1.1x-typical caller look elite), avg as tiebreak, both served.
- *  n = 0 means no cap; minCalls guards against one-lucky-call rankings. */
-export function topCallers(n = 0, minCalls = 3): (CallerStat & { userId: string; avg: number })[] {
+ *  n = 0 means no cap; minCalls guards against one-lucky-call rankings.
+ *  MICRO-CAP FARMER FILTER: a "56x median over 4 calls" is someone grading
+ *  themselves on their own $3k launches. Callers whose live rows are mostly
+ *  sub-$10k-mc calls are excluded from the PUBLIC board (the strategy's own
+ *  gates already ignore them for trading). */
+export function topCallers(n = 0, minCalls = 5): (CallerStat & { userId: string; avg: number })[] {
+  // per-wallet median call-mc from live rows, computed once per board build
+  const mcByWallet = new Map<string, number[]>();
+  for (const r of Object.values(calls)) {
+    if (!(r.mc > 0)) continue;
+    const arr = mcByWallet.get(r.w) ?? [];
+    arr.push(r.mc);
+    mcByWallet.set(r.w, arr);
+  }
   const rows = Object.entries(db.callers)
-    .filter(([, c]) => c.calls >= Math.max(1, minCalls))
+    .filter(([userId, c]) => {
+      if (c.calls < Math.max(1, minCalls)) return false;
+      const mcs = mcByWallet.get(userId);
+      // ≥3 live rows and the TYPICAL call is a micro-cap → farmer, hide
+      if (mcs && mcs.length >= 3 && median(mcs) < 10_000) return false;
+      return true;
+    })
     .map(([userId, c]) => ({ ...c, userId, avg: c.sumMax / c.calls }))
     .sort((a, b) => b.med - a.med || b.avg - a.avg);
   return n > 0 ? rows.slice(0, n) : rows;
