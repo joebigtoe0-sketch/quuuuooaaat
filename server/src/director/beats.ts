@@ -23,6 +23,7 @@ import { scoutAll } from "../social/scout.js";
 import { readChat, unreadChat } from "../social/livechat.js";
 import { evaluateStrategies, factsFor, createStrategy, updateStrategy, retireStrategy, getStrategy, noteStrategyBuy, type StrategyRead } from "../agent/strategies.js";
 import { runSandboxed } from "../agent/sandbox.js";
+import { thinkAloud, pickThinkClip } from "./thoughts.js";
 import { z as zod } from "zod";
 import { tradeBuy, tradeSell, openPositions } from "../chain/trader.js";
 import { expectClip } from "../media/film.js";
@@ -248,6 +249,17 @@ export class Beats {
     return mockVerdict(a);
   }
 
+  /** The visible inner monologue: a "thought" line in the public feed + a
+   *  thinking emote on the rig, fired as a beat starts. Cheap and instant —
+   *  the beat never waits on it. */
+  private think(context: string, detail?: string): void {
+    try {
+      this.hub.cue({ t: "mood", mood: "thinking" });
+      this.hub.cue({ t: "anim", clip: pickThinkClip() });
+      thinkAloud(context, detail);
+    } catch { /* decoration only */ }
+  }
+
   // ------------------------------------------------------------------
   async researchBeat(
     mint: string,
@@ -260,6 +272,7 @@ export class Beats {
     // "snipe" = dev-launch entry; "call" = operator call (no launch claims).
     reveal?: { sol: number; kind?: "snipe" | "call" | "hold" },
   ): Promise<Analysis | null> {
+    if (!cfg.ownMint || mint !== cfg.ownMint) this.think("research");
     // HIS OWN COIN is never researched, never graded, never roasted. Someone
     // sending him $RIKU (or the launch allocation landing) gets the doctrine.
     if (cfg.ownMint && mint === cfg.ownMint) {
@@ -754,6 +767,7 @@ export class Beats {
    *  backstage, then the stage replays it. Numbers come from the real fill. */
   async exitNoteBeat(symbol: string, reason: string, solReceived: number, costSol: number): Promise<void> {
     try {
+      this.think("exit");
       await this.loco.walkTo("bigscreen");
       this.hub.cue({ t: "camera", preset: "bigscreen" });
       this.loco.sit(true);
@@ -780,6 +794,7 @@ export class Beats {
    *  RIKU reading an established coin's tape and refusing it is half the bit. */
   async investDeskBeat(p: import("./director.js").InvestNote): Promise<void> {
     try {
+      this.think("investdesk");
       await this.loco.walkTo("bigscreen");
       this.hub.cue({ t: "camera", preset: "bigscreen" });
       this.loco.sit(true);
@@ -890,6 +905,7 @@ export class Beats {
 
   // ------------------------------------------------------------------
   async buybackBeat(sol: number, why?: string): Promise<void> {
+    this.think("buyback");
     this.loco.stateName = "BUYBACK";
     await this.loco.walkTo("vault");
     this.hub.cue({ t: "camera", preset: "vault" });
@@ -1120,6 +1136,7 @@ export class Beats {
 
   // ------------------------------------------------------------------
   async commentaryBeat(): Promise<void> {
+    this.think("commentary");
     this.loco.stateName = "COMMENTARY";
     await this.loco.walkTo("bigscreen");
     this.hub.cue({ t: "camera", preset: "bigscreen" });
@@ -1723,6 +1740,7 @@ ${factsBlock(1400)}` : ""),
    *  accounts he follows, reads the good ones ALOUD on camera, and fires back
    *  replies typed on screen. Also quietly follows a few new accounts. */
   private async kolFeedBeat(): Promise<void> {
+    this.think("kolfeed");
     try {
       await this.kolFeedBeatInner();
     } finally {
@@ -1930,6 +1948,7 @@ ${factsBlock(1400)}` : ""),
     // EVERY exit path must restore the stage. Without this the beat parked the
     // camera on the terminal (it never cued wide again), and a throw or the
     // daily-cap early return stranded him seated in REPLYING forever.
+    this.think("timeline");
     try {
       await this.replyXBeatInner();
     } finally {

@@ -28,6 +28,7 @@ const KIND_COLOR: Record<string, string> = {
   callout: "#39ff88",
   buyback: "#ffd700",
   say: "#ffffff",
+  thought: "#b8a7ff",
 };
 
 function kindColor(kind: string): string {

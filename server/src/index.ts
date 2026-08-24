@@ -39,7 +39,7 @@ const hub = new Hub(server);
 // Control endpoints need the admin key (query ?key=, x-admin-key header, or
 // the qk cookie set by /admin login). Read-only + stage-internal endpoints
 // (feed, layout, clip upload, agent-status, health) stay open.
-const PROTECTED = /^\/admin\/(directive|reset|restart|agent$|fake-send|fake-buyback|pause|resume|goto|anim|camera|fx|tts-test|selfie-take|selfie-last|chat$|chat-add|go-live|syslog|record$|say|queue|clips|clip-file|research-now|blacklist|sniper|operator-call|operator-sell|positions|callout-entry|producer-state|tweet-exact|reply-exact|planner|autoreply|cc-probe|callers|calls|feed-ingest|facts|kol-roster|kol-pool|outreach|book)/;
+const PROTECTED = /^\/admin\/(directive|reset|restart|agent$|fake-send|fake-buyback|pause|resume|goto|anim|camera|fx|tts-test|selfie-take|selfie-last|chat$|chat-add|go-live|syslog|record$|say|queue|clips|clip-file|research-now|blacklist|sniper|operator-call|operator-sell|positions|callout-entry|producer-state|tweet-exact|reply-exact|planner|autoreply|cc-probe|callers|calls|feed-ingest|facts|kol-roster|kol-pool|outreach|book|thought)/;
 function hasAdminKey(req: express.Request): boolean {
   const c = String(req.headers.cookie ?? "");
   const cookieKey = c.match(/(?:^|;\s*)qk=([^;]+)/)?.[1];
@@ -408,6 +408,19 @@ app.post("/admin/reply-exact", async (req, res) => {
   // depict it on stream (post already out — this is decoration, non-blocking)
   director.showPost({ text, replyTo: id, ok: r.ok });
   res.json({ ok: r.ok, dry: r.dry, id: r.id, why: r.why });
+});
+
+/** Producer-written deep thought: lands in the public feed as RIKU's own
+ *  inner monologue, with the thinking emote on the rig. */
+app.post("/admin/thought", async (req, res) => {
+  const text = String((req.body as any)?.text ?? req.query.text ?? "").trim();
+  if (text.length < 2) return res.json({ ok: false, why: "no text" });
+  const { pushFeed } = await import("./feed.js");
+  const { pickThinkClip } = await import("./director/thoughts.js");
+  hub.cue({ t: "mood", mood: "thinking" });
+  hub.cue({ t: "anim", clip: pickThinkClip() });
+  pushFeed("thought", text.slice(0, 500));
+  res.json({ ok: true });
 });
 
 // ---------- THE BOOK — open positions with live marks + operator sell ----------
