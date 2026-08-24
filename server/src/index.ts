@@ -39,7 +39,7 @@ const hub = new Hub(server);
 // Control endpoints need the admin key (query ?key=, x-admin-key header, or
 // the qk cookie set by /admin login). Read-only + stage-internal endpoints
 // (feed, layout, clip upload, agent-status, health) stay open.
-const PROTECTED = /^\/admin\/(directive|reset|restart|agent$|fake-send|fake-buyback|pause|resume|goto|anim|camera|fx|tts-test|selfie-take|selfie-last|chat$|chat-add|go-live|syslog|record$|say|queue|clips|clip-file|research-now|blacklist|sniper|operator-call|operator-sell|positions|callout-entry|producer-state|tweet-exact|reply-exact|planner|autoreply|cc-probe|callers|calls|feed-ingest|facts|kol-roster|kol-pool|outreach|book|thought)/;
+const PROTECTED = /^\/admin\/(directive|reset|restart|agent$|fake-send|fake-buyback|pause|resume|goto|anim|camera|fx|tts-test|selfie-take|selfie-last|chat$|chat-add|go-live|syslog|record$|say|queue|clips|clip-file|research-now|blacklist|sniper|operator-call|operator-sell|positions|callout-entry|producer-state|tweet-exact|reply-exact|planner|autoreply|cc-probe|callers|calls|feed-ingest|facts|kol-roster|kol-pool|outreach|book|thought|du)/;
 function hasAdminKey(req: express.Request): boolean {
   const c = String(req.headers.cookie ?? "");
   const cookieKey = c.match(/(?:^|;\s*)qk=([^;]+)/)?.[1];
@@ -408,6 +408,17 @@ app.post("/admin/reply-exact", async (req, res) => {
   // depict it on stream (post already out — this is decoration, non-blocking)
   director.showPost({ text, replyTo: id, ok: r.ok });
   res.json({ ok: r.ok, dry: r.dry, id: r.id, why: r.why });
+});
+
+/** What's eating the volume — sizes per top-level entry of the data dir. */
+app.get("/admin/du", async (_req, res) => {
+  const { diskUsage } = await import("./janitor.js");
+  res.json({ ok: true, entries: diskUsage() });
+});
+app.post("/admin/du/sweep", async (_req, res) => {
+  const { sweepDisk } = await import("./janitor.js");
+  sweepDisk();
+  res.json({ ok: true });
 });
 
 /** Producer-written deep thought: lands in the public feed as RIKU's own
@@ -1266,6 +1277,8 @@ server.listen(cfg.port, cfg.host, () => {
   // outreach: small-account reply candidates — drafts only, producer approves
   // every send at /admin/outreach.html
   void import("./social/outreach.js").then((m) => m.startOutreach());
+  // hourly disk janitor: spoken audio >24h and clips/selfies >7d are dead weight
+  void import("./janitor.js").then((m) => m.startJanitor());
   // midcap investment book: omo-inspired mid-cap buys with NO automatic exits —
   // operator sells from /admin/book.html; every verdict (pass or buy) stages
   // as an INVESTMENT DESK segment, visually distinct from the research loop
