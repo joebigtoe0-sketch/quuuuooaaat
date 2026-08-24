@@ -366,8 +366,11 @@ function labText(txt, x, y, sizePx, color, align, spacingPx) {
 }
 
 function drawCover(img, x, y, w, h) {
-  const s = Math.max(w / img.width, h / img.height);
-  const dw = img.width * s, dh = img.height * s;
+  // works for <img> and <video> alike
+  const iw = img.videoWidth || img.width, ih = img.videoHeight || img.height;
+  if (!iw || !ih) return;
+  const s = Math.max(w / iw, h / ih);
+  const dw = iw * s, dh = ih * s;
   ctx.drawImage(img, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh);
 }
 
@@ -811,6 +814,10 @@ function play() {
   cueIdx = 0;
   playing = true;
   playT0 = performance.now();
+  if (chartBgImg && chartBgImg.tagName === 'VIDEO') {
+    try { chartBgImg.currentTime = 0; } catch {}
+    chartBgImg.play().catch(() => {});
+  }
   startMusic();
   const g = ++playGen;
   requestAnimationFrame(now => tick(now, g));
@@ -908,6 +915,15 @@ function hookBgInput(id, assign) {
   $(id).addEventListener('change', e => {
     const f = e.target.files && e.target.files[0];
     if (!f) { assign(null); if (model && !playing) renderFrame(lastFrameT); return; }
+    if (f.type.startsWith('video/')) {
+      // looping muted <video>; drawImage picks up the current frame each render
+      const v = document.createElement('video');
+      v.muted = true; v.loop = true; v.playsInline = true;
+      v.src = URL.createObjectURL(f);
+      v.onloadeddata = () => { assign(v); v.play().catch(() => {}); if (model && !playing) renderFrame(lastFrameT); };
+      v.onerror = () => setStatus('could not load that video file', true);
+      return;
+    }
     const rd = new FileReader();
     rd.onload = () => {
       const im = new Image();
