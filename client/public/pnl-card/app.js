@@ -135,15 +135,31 @@ function sfx(kind) {
 }
 
 // ---------------------------------------------------------------- data
+// the RIKU server reboots now and then; Railway answers 502 with an HTML page
+// during those windows — retry through them instead of choking on '<!DOCTYPE'
+async function fetchReplay(mint, wallet) {
+  for (let i = 0; i < 4; i++) {
+    const r = await fetch(`api/replay?mint=${encodeURIComponent(mint)}&wallet=${encodeURIComponent(wallet)}`);
+    const txt = await r.text();
+    let data = null;
+    try { data = JSON.parse(txt); } catch {}
+    if (r.ok && data) return data;
+    if (data && data.error) throw new Error(data.error); // real API error — no point retrying
+    if (i < 3) {
+      setStatus(`desk is rebooting (${r.status}) — retrying ${i + 1}/3…`);
+      await new Promise(s => setTimeout(s, 2500 * (i + 1)));
+    }
+  }
+  throw new Error('server unavailable — try again in a minute');
+}
+
 async function load() {
   const mint = $('mint').value.trim(), wallet = $('wallet').value.trim();
   if (!mint || !wallet) return setStatus('need both addresses', true);
   setStatus('fetching trades + chart…');
   $('load').disabled = true;
   try {
-    const r = await fetch(`api/replay?mint=${encodeURIComponent(mint)}&wallet=${encodeURIComponent(wallet)}`);
-    const data = await r.json();
-    if (!r.ok || data.error) throw new Error(data.error || r.status);
+    const data = await fetchReplay(mint, wallet);
     await document.fonts.load("100px Anton").catch(() => {});
     model = buildModel(data, wallet);
     setStatus(`${model.meta.symbol}: ${model.rawTrades.length} fills → ${model.events.length} events, ${data.candles.length} candles (${data.interval})`);
