@@ -179,16 +179,31 @@ export function registerPnlCard(app: Express) {
     }
   });
 
-  // token images proxied same-origin so the canvas stays untainted for MediaRecorder
+  // token images proxied same-origin so the canvas stays untainted for MediaRecorder.
+  // ipfs.io 403s datacenter IPs, and half of pump.fun's image_uris point there —
+  // rewrite /ipfs/CID URLs through gateways that actually answer (pump.fun's own
+  // pinata first), original URL as the last resort.
   app.get("/pnl-card/api/img", async (req, res) => {
     try {
       const u = String(req.query.u || "");
       if (!/^https:\/\//.test(u)) return res.status(400).end("https only");
-      const r = await fetch(u, { headers: { "user-agent": UA["user-agent"] } });
-      const ct = r.headers.get("content-type") || "";
-      if (!r.ok || !ct.startsWith("image/")) return res.status(502).end("not an image");
-      res.set("content-type", ct).set("cache-control", "max-age=3600");
-      res.end(Buffer.from(await r.arrayBuffer()));
+      const m = u.match(/\/ipfs\/([^?#]+)/);
+      const candidates = m
+        ? [`https://pump.mypinata.cloud/ipfs/${m[1]}`, `https://ipfs.filebase.io/ipfs/${m[1]}`, u]
+        : [u];
+      for (const cand of candidates) {
+        try {
+          const r = await fetch(cand, {
+            headers: { "user-agent": UA["user-agent"] },
+            signal: AbortSignal.timeout(6000),
+          });
+          const ct = r.headers.get("content-type") || "";
+          if (!r.ok || !ct.startsWith("image/")) continue;
+          res.set("content-type", ct).set("cache-control", "max-age=3600");
+          return res.end(Buffer.from(await r.arrayBuffer()));
+        } catch {} // next gateway
+      }
+      res.status(502).end("not an image");
     } catch {
       res.status(502).end();
     }
