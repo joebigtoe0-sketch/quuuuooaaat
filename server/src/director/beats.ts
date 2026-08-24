@@ -1437,7 +1437,13 @@ export class Beats {
       if (up) mediaId = up;
       memory.journal("image", `generated a meme for the tweet (${img.split(/[\/]/).pop()})${up ? " and attached it" : " — saved locally (keys pending)"}`);
     }
-    const res = await postTweet(tweet, mediaId ? { mediaId } : {});
+    // exactText is the producer's own words: it must reach X byte-for-byte,
+    // so it takes the same `exact` bypass filmBeat uses. Without it trimForX
+    // silently cut long selfie captions off mid-sentence.
+    const res = await postTweet(tweet, {
+      ...(mediaId ? { mediaId } : {}),
+      ...(exactText ? { exact: true } : {}),
+    });
     this.hub.cue({ t: "takeover", view: { kind: "compose", text: tweet, typed: tweet.length, state: res.ok && !res.dry ? "posted" : "drafted" } });
     this.hub.cue({ t: "fx", kind: "ding" });
     await sleep(2200);
