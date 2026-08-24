@@ -137,6 +137,8 @@ export const cfg = {
   callerFollowMaxSwarm: num("CALLER_FOLLOW_MAX_SWARM", 3), // >this many distinct callers in the window = coordinated pump, skip
   callerFollowSwarmWindowMin: num("CALLER_FOLLOW_SWARM_WINDOW_MIN", 10),
   callerFollowMaxFromFirstCall: num("CALLER_FOLLOW_MAX_FROM_FIRST_CALL", 1.4), // mcNow vs EARLIEST call's mc — later = the move already happened
+  callerFollowMedCap: num("CALLER_FOLLOW_MED_CAP", 3), // clamp the median used in room/target math — an 8x med over 5 calls is a pump farmer, not a target
+  callerFollowMinCallMc: num("CALLER_FOLLOW_MIN_CALL_MC", 10_000), // calls on sub-$10k coins are launch snipes wearing a caller costume
 
   // ---- midcap: the investment book — omo-inspired mid-cap buys, NO auto-exits ----
   midcap: bool("MIDCAP", true),

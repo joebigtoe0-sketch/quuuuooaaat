@@ -125,6 +125,12 @@ export async function tradableFloat(): Promise<number> {
   return Math.max(0, bal - cfg.floatSol - cfg.tradeReserveSol * 0); // reserve handled in buyback
 }
 
+// a buy takes 20-30s to become a visible position (fill + balance-read
+// retries) — two triggers for the same mint inside that window both passed
+// the "already holding" check and BOTH filled (SOLSHIBE, 2026-08-24, 0.05
+// SOL paid twice). The in-flight lock closes the window for every strategy.
+const buyInFlight = new Set<string>();
+
 export async function tradeBuy(
   mint: string,
   symbol: string,
@@ -138,6 +144,24 @@ export async function tradeBuy(
     store.kvSet("trade:lastblock", JSON.stringify({ at: Date.now(), mint: mint.slice(0, 8), symbol, sol, why }));
     return { ok: false, dry: false, why };
   };
+  if (buyInFlight.has(mint)) return block("buy already in flight for this mint");
+  buyInFlight.add(mint);
+  try {
+    return await tradeBuyInner(mint, symbol, sol, thesis, entryMcSol, strategyId, block);
+  } finally {
+    buyInFlight.delete(mint);
+  }
+}
+
+async function tradeBuyInner(
+  mint: string,
+  symbol: string,
+  sol: number,
+  thesis: string,
+  entryMcSol: number | null,
+  strategyId: string | undefined,
+  block: (why: string) => { ok: false; dry: false; why: string },
+): Promise<{ ok: boolean; dry: boolean; sig?: string; why?: string }> {
   // launch snipes and operator calls have their OWN slot caps and must never
   // be starved by stale research positions hogging the global cap
   const capExempt = strategyId === "devsnipe" || strategyId === "opcall";

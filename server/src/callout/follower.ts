@@ -93,15 +93,26 @@ export async function attemptFollowBuy(
     if (!c.skin || c.skin.costUsd < 10) return false;
     if (!(c.mcAtCall > 0) || !(rep.med > 1)) return false;
 
+    // sub-$10k "calls" are launch snipes wearing a caller costume — NEEDLE
+    // (called at $2,890 by a 5-call "8.1x median" farmer) taught this gate
+    if (c.mcAtCall < cfg.callerFollowMinCallMc) {
+      log.info("follower", `pass ${c.mint.slice(0, 8)}… — call mc $${Math.round(c.mcAtCall)} below $${cfg.callerFollowMinCallMc} floor (launch snipe, not a call)`);
+      return false;
+    }
+
     // entry premium: how much of their median move is left from HERE?
+    // The median is CLAMPED for all math: a tiny-sample 8x median is a
+    // lottery artifact (or a farmer grading their own pumps), and pricing a
+    // target off it buys garbage with extra size.
+    const med = Math.min(rep.med, cfg.callerFollowMedCap);
     const { marketCap } = await import("../chain/marketcap.js");
     const mc = await marketCap(c.mint);
     const mcNowUsd = mc.mcUsd;
     if (!mcNowUsd || mcNowUsd <= 0) return false;
-    const targetUsd = c.mcAtCall * rep.med; // where their TYPICAL call peaks
+    const targetUsd = c.mcAtCall * med; // where their TYPICAL call peaks
     const room = targetUsd / mcNowUsd;
     if (room < cfg.callerFollowRoom) {
-      log.info("follower", `pass ${c.mint.slice(0, 8)}… — ${c.username || "caller"} called at $${Math.round(c.mcAtCall)}, now $${Math.round(mcNowUsd)}, med ${rep.med.toFixed(1)}x leaves only ${room.toFixed(1)}x room`);
+      log.info("follower", `pass ${c.mint.slice(0, 8)}… — ${c.username || "caller"} called at $${Math.round(c.mcAtCall)}, now $${Math.round(mcNowUsd)}, med ${med.toFixed(1)}x (raw ${rep.med.toFixed(1)}x) leaves only ${room.toFixed(1)}x room`);
       return false;
     }
 
@@ -168,7 +179,8 @@ export async function attemptFollowBuy(
     // is — an elite-median caller with a real hit rate deserves more than a
     // barely-cleared bar. CALLER_FOLLOW_SOL is the floor; the global rails
     // (MAX_TRADE_SOL, daily cap, float) cap the top.
-    const quality = rep.med >= 2 && rep.h2 >= 45 ? 1.5 : rep.med >= 1.6 ? 1.0 : 0.75;
+    // quality sizing uses the CLAMPED med — a lottery median must never size up
+    const quality = med >= 2 && rep.h2 >= 45 ? 1.5 : med >= 1.6 ? 1.0 : 0.75;
     let sol = cfg.callerFollowSol;
     try {
       const { solBalance } = await import("../chain/wallet.js");
@@ -185,7 +197,9 @@ export async function attemptFollowBuy(
     }
     st.pos[c.mint] = {
       wallet: c.wallet, who,
-      boughtAt: Date.now(), callMcUsd: c.mcAtCall, med: rep.med, phase: "full",
+      // the CLAMPED med is what the exit target is priced off — storing the
+      // raw one would set an 8x TP that never prints
+      boughtAt: Date.now(), callMcUsd: c.mcAtCall, med, phase: "full",
     };
     st.count++;
     save();
