@@ -159,6 +159,7 @@ export function registerPnlCard(app: Express) {
         const p = spawn(ffmpegPath as string, [
           "-y", "-i", inF,
           "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p",
+          "-r", "60", // canvas-capture webm is VFR and reads as 120fps — X caps at 60
           "-c:a", "aac", "-b:a", "160k",
           "-movflags", "+faststart",
           outF,
