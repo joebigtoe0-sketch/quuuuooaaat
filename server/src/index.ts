@@ -39,7 +39,7 @@ const hub = new Hub(server);
 // Control endpoints need the admin key (query ?key=, x-admin-key header, or
 // the qk cookie set by /admin login). Read-only + stage-internal endpoints
 // (feed, layout, clip upload, agent-status, health) stay open.
-const PROTECTED = /^\/admin\/(directive|reset|restart|agent$|fake-send|fake-buyback|pause|resume|goto|anim|camera|fx|tts-test|selfie-take|selfie-last|chat$|chat-add|go-live|syslog|record$|say|queue|clips|clip-file|research-now|blacklist|sniper|operator-call|operator-sell|positions|callout-entry|producer-state|tweet-exact|reply-exact|planner|autoreply|cc-probe|callers|calls|feed-ingest|facts|kol-roster|kol-pool|outreach|book|thought|du)/;
+const PROTECTED = /^\/admin\/(directive|reset|restart|agent$|fake-send|fake-buyback|pause|resume|goto|anim|camera|fx|tts-test|selfie-take|selfie-last|chat$|chat-add|go-live|syslog|record$|say|queue|clips|clip-file|research-now|blacklist|sniper|operator-call|operator-sell|positions|callout-entry|producer-state|tweet-exact|reply-exact|planner|autoreply|cc-probe|callers|calls|feed-ingest|facts|kol-roster|kol-pool|outreach|book|thought|du|memory)/;
 function hasAdminKey(req: express.Request): boolean {
   const c = String(req.headers.cookie ?? "");
   const cookieKey = c.match(/(?:^|;\s*)qk=([^;]+)/)?.[1];
@@ -408,6 +408,61 @@ app.post("/admin/reply-exact", async (req, res) => {
   // depict it on stream (post already out — this is decoration, non-blocking)
   director.showPost({ text, replyTo: id, ok: r.ok });
   res.json({ ok: r.ok, dry: r.dry, id: r.id, why: r.why });
+});
+
+// ---------- MEMORY — the producer's window into what RIKU remembers ----------
+app.get("/admin/memory", (_req, res) => {
+  res.json({
+    ok: true,
+    digest: memory.digest(),
+    chronicle: memory.chronicle(),
+    journal: memory.recentByKind?.("", 40) ?? [],
+    directives: memory.directives(),
+  });
+});
+app.get("/admin/memory.html", (_req, res) => {
+  res.type("html").send(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>riku memory</title>
+<style>
+body{background:#0d1117;color:#e6edf3;font:14px/1.5 ui-monospace,monospace;max-width:820px;margin:20px auto;padding:0 12px}
+h1{font-size:16px}h2{font-size:13px;color:#8b949e;letter-spacing:1px;margin:22px 0 8px;text-transform:uppercase}
+.card{border:1px solid #30363d;border-radius:8px;padding:10px 12px;margin-bottom:8px;background:#161b22;white-space:pre-wrap}
+.week{border-left:3px solid #b8a7ff}.day{border-left:3px solid #58a6ff}
+.dir{border-left:3px solid #e8c268}.meta{color:#8b949e;font-size:11px}
+input,textarea{width:100%;box-sizing:border-box;background:#0d1117;color:#7ee787;border:1px solid #30363d;border-radius:6px;padding:8px;font:inherit}
+button{font:inherit;border:0;border-radius:6px;padding:7px 14px;margin-top:6px;cursor:pointer;background:#238636;color:#fff}
+.x{background:#6e2c2c;padding:2px 8px;margin-left:8px;font-size:11px}
+</style>
+<h1>RIKU://MEMORY</h1>
+<div class=meta>what he carries into every decision. digest feeds his brain each cycle; chronicle = days rolled into weeks.</div>
+<h2>plant a conviction (he'll think it was his idea)</h2>
+<input id=dtext placeholder="e.g. sub-10k caller coins are launch snipes, not calls…"><button onclick="addDir()">whisper it</button>
+<div id=main>loading…</div>
+<script>
+async function jf(u,opts){const r=await fetch(u,opts);if(r.status===401){document.getElementById('main').innerHTML='<b>log in at <a href=/admin style=color:#58a6ff>/admin</a> first, then reload</b>';throw 0}return r.json()}
+async function addDir(){const t=document.getElementById('dtext').value.trim();if(t.length<4)return;await jf('/admin/directive?text='+encodeURIComponent(t));document.getElementById('dtext').value='';load()}
+async function rmDir(id){await jf('/admin/directive?remove='+encodeURIComponent(id));load()}
+async function load(){
+  const d=await jf('/admin/memory');
+  const el=document.getElementById('main');el.innerHTML='';
+  const sec=(t)=>{const h=document.createElement('h2');h.textContent=t;el.appendChild(h)};
+  sec('current convictions (directives)');
+  if(!d.directives.length){const c=document.createElement('div');c.className='meta';c.textContent='none planted';el.appendChild(c)}
+  for(const x of d.directives){const c=document.createElement('div');c.className='card dir';
+    c.textContent=x.text||String(x);const b=document.createElement('button');b.className='x';b.textContent='remove';
+    b.onclick=()=>rmDir(x.id);if(x.id)c.appendChild(b);el.appendChild(c)}
+  sec('the digest (what his brain sees each cycle)');
+  const dg=document.createElement('div');dg.className='card';dg.textContent=d.digest||'(empty)';el.appendChild(dg);
+  sec('chronicle — weeks then days');
+  const ch=[...d.chronicle].sort((a,b)=>b.at-a.at);
+  if(!ch.length){const c=document.createElement('div');c.className='meta';c.textContent='no consolidated periods yet';el.appendChild(c)}
+  for(const x of ch){const c=document.createElement('div');c.className='card '+x.scale;
+    c.innerHTML='<span class=meta>'+x.scale.toUpperCase()+' · '+x.period+'</span>\\n'+String(x.text).replace(/</g,'&lt;');el.appendChild(c)}
+  sec('recent journal (raw, newest first)');
+  for(const x of (d.journal||[]).slice().reverse()){const c=document.createElement('div');c.className='card';c.textContent=x;el.appendChild(c)}
+}
+load();setInterval(load,60000);
+</script>`);
 });
 
 /** What's eating the volume — sizes per top-level entry of the data dir. */
