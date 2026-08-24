@@ -416,7 +416,7 @@ app.get("/admin/memory", (_req, res) => {
     ok: true,
     digest: memory.digest(),
     chronicle: memory.chronicle(),
-    journal: memory.recentByKind?.("", 40) ?? [],
+    journal: memory.recentAll(40),
     directives: memory.directives(),
   });
 });

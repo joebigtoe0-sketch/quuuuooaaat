@@ -118,6 +118,10 @@ export const memory = {
   recentByKind(kind: string, n = 5): string[] {
     return mem.journal.filter((j) => j.kind === kind).slice(-n).map((j) => j.text);
   },
+  /** Newest raw journal lines across every kind, labeled. */
+  recentAll(n = 40): string[] {
+    return mem.journal.slice(-n).map((j) => `[${j.kind}] ${j.text}`);
+  },
   board(): string[] {
     return mem.board ?? [];
   },
