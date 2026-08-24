@@ -362,7 +362,12 @@ export class Director {
         this.postAnimBusy = true;
         try {
           const text = opts.text;
+          // he WALKS to the terminal and sits before typing — the camera was
+          // cutting to an empty chair while he stood across the room
+          await this.loco.walkTo("terminal");
+          if (this.runningBeat) return; // a beat claimed him mid-walk — vanish
           this.hub.cue({ t: "camera", preset: "terminal" });
+          this.loco.sit(true);
           // cap the animation: long-form (300-1000 chars) types in the same
           // ~9s wall clock as a normal tweet, just with bigger chunks
           const iterations = Math.min(22, Math.max(4, Math.ceil(text.length / 13)));
@@ -384,8 +389,11 @@ export class Director {
           await new Promise((r) => setTimeout(r, 2200));
         } finally {
           this.postAnimBusy = false;
-          // release the screen — but never clobber a camera a beat just set
+          // release the screen — but never clobber a camera a beat just set.
+          // Stand up either way: if a beat took over it's still walking to its
+          // own station and will seat him itself.
           this.hub.cue({ t: "takeover", view: null });
+          this.loco.sit(false);
           if (!this.runningBeat) this.hub.cue({ t: "camera", preset: "wide" });
         }
       } catch { /* decoration must never throw into the void */ }
