@@ -20,3 +20,6 @@ sidekick/previews/
 # --- editor / local misc ---
 pekrrlerlerler2.code-workspace
 tools/feed-bridge.env
+
+# --- pnl-generator: local-only tool, not deployed yet ---
+pnl-generator/

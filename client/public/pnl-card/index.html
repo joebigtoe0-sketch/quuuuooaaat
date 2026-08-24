@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RIKU PNL Replay</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+  <aside class="panel">
+    <div class="kicker">RIKU · DESK TOOLS</div>
+    <h1>PNL REPLAY</h1>
+    <p class="sub">Turn a trade into a hype clip. Paste a pump.fun token + the wallet that traded it.</p>
+
+    <label>Token address (mint)</label>
+    <input id="mint" spellcheck="false" placeholder="8J15pUS8TcuoUhLeRfrGv8fv8Lkq5sLt5Hitk162pump">
+
+    <label>Wallet address</label>
+    <input id="wallet" spellcheck="false" placeholder="DqMNcQmqxtHRGR4X1gHovtxbFYBuRHXbKHqRNCFriKu">
+
+    <label>Replay length <b id="durLabel">20s</b></label>
+    <input id="dur" type="range" min="8" max="45" step="1" value="20">
+
+    <label>Format</label>
+    <select id="aspect">
+      <option value="9:16" selected>Vertical 9:16 (TikTok / Reels)</option>
+      <option value="1:1">Square 1:1 (X feed)</option>
+      <option value="16:9">Wide 16:9</option>
+    </select>
+
+    <label>Chart background <span class="opt">(optional image)</span></label>
+    <input id="bgChart" type="file" accept="image/*">
+
+    <label>PNL card background <span class="opt">(optional image)</span></label>
+    <input id="bgCard" type="file" accept="image/*">
+
+    <label>Music <span class="opt">(optional mp3, mixed into the video)</span></label>
+    <input id="music" type="file" accept="audio/*">
+
+    <div class="btns">
+      <button id="load" class="primary">Load trade</button>
+      <button id="play" disabled>▶ Preview</button>
+      <button id="rec" disabled>⏺ Record .webm</button>
+      <button id="png" disabled>⬇ PNL card .png</button>
+    </div>
+
+    <div id="status" class="status">idle</div>
+    <div id="summary" class="summary"></div>
+
+    <button id="donate" class="donate">◈ support the creator</button>
+  </aside>
+
+  <main class="stage">
+    <canvas id="cv" width="1080" height="1920"></canvas>
+  </main>
+</div>
+
+<div id="dmodal" class="dmodal" hidden>
+  <div class="dbox">
+    <div class="kicker">SUPPORT THE DESK</div>
+    <p>Enjoying the tool? Send SOL — or anything — here:</p>
+    <code id="daddr">DqMNcQmqxtHRGR4X1gHovtxbFYBuRHXbKHqRNCFriKu</code>
+    <div class="drow">
+      <button id="dcopy" class="primary">Copy address</button>
+      <button id="dclose">Close</button>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

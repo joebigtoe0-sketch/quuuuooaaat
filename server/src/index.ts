@@ -23,6 +23,7 @@ import { armDevSniper, onSnipeLaunch } from "./agent/devsniper.js";
 import { wardrobe } from "./wardrobe.js";
 import { startStatsCache, cachedWallet, cachedStats } from "./statsCache.js";
 import { pushChat, allChat, unreadChat, startMockChat } from "./social/livechat.js";
+import { registerPnlCard } from "./pnlcard.js";
 
 const app = express();
 app.use(express.json());
@@ -795,6 +796,11 @@ app.get("/live", (_req, res) => {
   if (fs.existsSync(f)) res.sendFile(f);
   else res.status(200).send("client not built — run `npm run build` in client/");
 });
+
+// PNL REPLAY (/pnl-card) — hype-video generator. Page ships from
+// client/public/pnl-card via the static middleware below; these are its
+// two data routes (public pump.fun proxies, self-contained, no keys).
+registerPnlCard(app);
 
 // ---------- static ----------
 app.use("/audio", express.static(cfg.audioDir, { maxAge: "1h" }));
