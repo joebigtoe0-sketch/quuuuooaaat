@@ -304,7 +304,11 @@ export class Director {
         }
         const job = this.nextJob();
         if (!job) {
-          await this.beats.ambientStep();
+          // the producer-post animation isn't a beat, but he's SEATED at the
+          // terminal for it — ambient fidgets walking him away mid-tweet
+          // looked exactly as dumb as it sounds
+          if (this.postAnimBusy) await new Promise((r) => setTimeout(r, 400));
+          else await this.beats.ambientStep();
           continue;
         }
         this.runningBeat = job.kind; // beats own the screen + camera while set
