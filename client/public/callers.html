@@ -71,9 +71,9 @@
   <div class="scroll">
     <table>
       <thead><tr>
-        <th>#</th><th>Caller</th><th>Avg peak</th><th>Graded calls</th><th>Best call</th>
+        <th>#</th><th>Caller</th><th>Median peak</th><th>Hit rate 2x+</th><th>Graded calls</th><th>Best call</th>
       </tr></thead>
-      <tbody id="rows"><tr><td colspan="5" class="loading">reading the index…</td></tr></tbody>
+      <tbody id="rows"><tr><td colspan="6" class="loading">reading the index…</td></tr></tbody>
     </table>
   </div>
 
@@ -93,13 +93,17 @@ const mult = (m) => (isFinite(m) && m > 0) ? m.toFixed(2) + 'x' : '—';
 
 function render(rows) {
   if (!rows.length) {
-    $('rows').innerHTML = '<tr><td colspan="5" class="empty">index is still warming up.</td></tr>';
+    $('rows').innerHTML = '<tr><td colspan="6" class="empty">index is still warming up.</td></tr>';
     return;
   }
+  // "biggest call" reads off the same sanity filter as the board. One call
+  // priced off a dust entry produces a multiple in the billions, and a board
+  // that prints it is a board nobody believes.
+  const bestSane = Math.max.apply(null, rows.map((r) => (r.best || 0) <= BEST_CAP ? (r.best || 0) : 0));
   $('tiles').innerHTML = [
     ['callers graded', rows.length, 'with 3+ calls'],
-    ['best average', mult(rows[0].avg), (rows[0].username || 'unnamed').trim()],
-    ['biggest call', mult(Math.max.apply(null, rows.map((r) => r.best || 0))), 'peak multiple'],
+    ['best median', mult(rows[0].med), (rows[0].username || 'unnamed').trim()],
+    ['biggest call', mult(bestSane), 'peak multiple'],
     ['calls indexed', rows.reduce((s, r) => s + (r.calls || 0), 0), 'graded so far'],
   ].map(([k, v, n]) =>
     '<div class="tile"><div class="k">' + k + '</div><div class="v up">' + v +
@@ -115,23 +119,32 @@ function render(rows) {
     return '<tr class="' + (i < 3 ? 'top3' : '') + '">' +
       '<td class="rank">' + (i + 1) + '</td>' +
       '<td>' + who + '</td>' +
-      '<td class="big">' + mult(r.avg) + '</td>' +
+      '<td class="big">' + mult(r.med) + '</td>' +
+      '<td>' + (isFinite(r.h2) ? r.h2 + '%' : '—') + '</td>' +
       '<td>' + (r.calls ?? '—') + '</td>' +
       '<td class="big">' + mult(r.best) + '</td>' +
     '</tr>';
   }).join('');
 
   const named = rows.filter((r) => (r.username || '').trim()).length;
-  $('note').textContent = 'Avg peak is the average of what each caller’s calls did at their high — ' +
-    'not what they are worth now, and not the same measure as the multiples on my own record. ' +
+  $('note').textContent = 'Ranked on the MEDIAN peak multiple, not the average. One lottery call ' +
+    'drags an average anywhere it likes; the median is what a caller actually does on a typical ' +
+    'call. Hit rate is the share of their calls that peaked at 2x or better. ' +
     named + ' of ' + rows.length + ' names resolved so far; the rest fill in as the index reads their pages.';
 }
+
+// A call whose entry price was read as dust divides out to a multiple in the
+// billions. The index keeps the row; the public board refuses to rank on it.
+const BEST_CAP = 1e4;
 
 async function load() {
   try {
     const r = await fetch('/public/callers');
     const j = await r.json();
-    render((j.rows || []).slice().sort((a, b) => (b.avg || 0) - (a.avg || 0)));
+    // The server already sorts by median (the honest number) and this page used
+    // to throw that away by re-sorting on avg, which put a 6.7e10 row at #1.
+    // Keep the server's order; only drop rows whose numbers are not real.
+    render((j.rows || []).filter((x) => (x.med || 0) > 0 && (x.med || 0) <= BEST_CAP));
   } catch (e) {
     $('rows').innerHTML = '<tr><td colspan="5" class="empty">could not reach the index. refresh.</td></tr>';
   }

@@ -86,9 +86,23 @@ try {
 const SEED_AT = Date.parse("2026-08-15T14:04:54.367Z");
 const seedBase = new Map(CALLER_SEED.map((s) => [s.w, { n: s.n, sum: s.avg * s.n, best: s.best, med: s.med, h2: s.h2 }]));
 
+// A real pump.fun call multiple tops out in the hundreds. Ratios beyond this
+// are unit garbage (cross-chain rows priced in 1e-18 tokens produced a
+// "1.07e12x best call" on the public board), never legendary calls.
+const MAX_SANE_MULT = 1000;
+
+/** Solana base58 mint — the feed also carries EVM coins (0x…) whose price
+ *  units make every derived number nonsense. They never grade. */
+export const isSolMint = (m: string): boolean => /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(m);
+
 function rowPeakMult(r: CallRow): number | null {
-  if (r.entry > 0 && r.peak > 0) return r.peak / r.entry;
-  return r.mult && r.mult > 0 ? r.mult : null;
+  if (!isSolMint(r.m)) return null;
+  if (r.entry > 0 && r.peak > 0) {
+    const m = r.peak / r.entry;
+    if (Number.isFinite(m) && m <= MAX_SANE_MULT) return m;
+    // ratio is garbage — fall back to pump.fun's own graded multiple if sane
+  }
+  return r.mult && r.mult > 0 && r.mult <= MAX_SANE_MULT ? r.mult : null;
 }
 
 function median(xs: number[]): number {
@@ -149,6 +163,18 @@ function rebuildWallet(w: string, rowsByWallet?: Map<string, CallRow[]>): void {
 // boot: rebuild the whole index from seed + rows (drops the first-generation
 // incremental sums, which graded calls at first sight — immature peaks)
 {
+  // one-time hygiene: EVM rows poisoned averages (0x mints with 1e-18 price
+  // units) — purge them so rebuilds can't resurrect the garbage
+  let purged = 0;
+  for (const [id, r] of Object.entries(calls)) {
+    if (!isSolMint(r.m)) {
+      delete calls[id];
+      purged++;
+    }
+  }
+  if (purged) log.info("callers", `purged ${purged} non-Solana call rows (EVM mints — unit garbage)`);
+  // scrub the 0x mints out of coin lists too — rebuild carries them forward
+  for (const c of Object.values(db.callers)) c.coins = (c.coins ?? []).filter(isSolMint);
   const byWallet = new Map<string, CallRow[]>();
   for (const r of Object.values(calls)) {
     const arr = byWallet.get(r.w) ?? [];
@@ -184,6 +210,7 @@ function saveCalls(): void {
 /** Upsert one observed callout (from a page harvest OR the live feed) and
  *  refresh its caller's derived stats. Same id re-seen = peak/mult update. */
 export function upsertCall(row: Omit<CallRow, "seen">, calloutId: string): void {
+  if (!isSolMint(row.m)) return; // EVM rows never enter the dataset
   const prev = calls[calloutId];
   calls[calloutId] = {
     ...row,

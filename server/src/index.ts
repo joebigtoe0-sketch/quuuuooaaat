@@ -1210,9 +1210,16 @@ app.get("/public/callouts", async (req, res) => {
 });
 
 /** CALLER LEADERBOARD — the full reputation index, every caller RIKU has
- *  graded (avg PEAK multiple per call, calloutId-deduped). pump.fun's own
- *  board stops at top-50; this one doesn't stop.
- *  ?n=0 (all, default) ?min=3 (min graded calls) */
+ *  graded (calloutId-deduped). pump.fun's own board stops at top-50; this
+ *  one doesn't stop.
+ *  ?n=0 (all, default) ?min=3 (min graded calls)
+ *
+ *  ROWS ARRIVE SORTED BY MEDIAN peak multiple and callers.html MUST NOT
+ *  re-sort them on `avg`. A single call whose entry price was read as dust
+ *  divides out to a multiple in the billions: one such row ranked #1 on the
+ *  public board with a 6.7e10 "average" until the page stopped overriding
+ *  this order. The median already absorbs that outlier, which is the whole
+ *  reason it is the number the index ranks on. */
 async function callerBoard(req: express.Request, res: express.Response): Promise<void> {
   try {
     const { topCallers, indexStats } = await import("./callout/callers.js");
