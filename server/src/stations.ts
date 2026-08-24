@@ -15,7 +15,7 @@ const DEFAULTS: Record<StationId, { x: number; z: number; face: number }> = {
   bigscreen: { x: -1.4, z: -2.4, face: Math.PI },
   inbox: { x: 3.6, z: -2.0, face: Math.PI },
   terminal: { x: 1.2, z: -0.6, face: Math.PI },
-  idle_spot: { x: -0.6, z: 0.2, face: 0 }, // a step back from the wide cam — z 1.2 read too close
+  idle_spot: { x: -0.6, z: -0.8, face: 0 }, // ~2m back from the original 1.2 — wide cam wants him small
   camera_mark: { x: 1.8, z: 1.6, face: 0 },
   greenscreen: { x: 5.6, z: 0.2, face: Math.PI / 2 },
 };
