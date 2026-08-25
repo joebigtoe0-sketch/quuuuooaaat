@@ -83,6 +83,16 @@ const POOLS: Record<string, { doing: string; examples: string[] }> = {
       "desk review. no survivors",
     ],
   },
+  coding: {
+    doing: "sitting down to work on his own tooling/code (the pnl card, the caller board page, stage renderers)",
+    examples: [
+      "the tooling doesn't write itself",
+      "found a todo comment from three days ago. me. it was me",
+      "time to touch code nobody asked about",
+      "quick refactor. famous last words",
+      "the desk runs on duct tape i wrote. maintaining the tape",
+    ],
+  },
   buyback: {
     doing: "about to do a treasury buyback of his own token",
     examples: [

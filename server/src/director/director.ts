@@ -43,6 +43,7 @@ type Job =
   | { kind: "kolfeed"; at: number }
   | { kind: "replyx"; at: number }
   | { kind: "commentary"; at: number }
+  | { kind: "coding"; at: number }
   | { kind: "play"; script: PlayStep[]; at: number };
 
 export class Director {
@@ -54,8 +55,9 @@ export class Director {
   private agentQ: Job[] = [];
   readonly planner: Planner;
   private conveyor: ConveyorItem[] = [];
-  private lastConveyorPick = Date.now();
+  private lastConveyorPick = 0; // fire a checkup on boot instead of sitting idle for CONVEYOR_PICK_MIN
   private lastCommentary = Date.now();
+  private lastCoding = Date.now();
   private lastKolFeed = Date.now();
   private lastReplyX = Date.now();
   noteReplyX(): void { this.lastReplyX = Date.now(); }
@@ -308,6 +310,10 @@ export class Director {
       this.lastCommentary = Date.now();
       return { kind: "commentary", at: Date.now() };
     }
+    if ((Date.now() - this.lastCoding) / simT(60_000) >= cfg.codingMin) {
+      this.lastCoding = Date.now();
+      return { kind: "coding", at: Date.now() };
+    }
     return null;
   }
 
@@ -350,6 +356,7 @@ export class Director {
         else if (job.kind === "buyback") await this.beats.buybackBeat(job.p.sol);
         else if (job.kind === "agent") await this.beats.agentBeat(job.qa.action, job.qa.manual === true);
         else if (job.kind === "commentary") await this.beats.commentaryBeat();
+        else if (job.kind === "coding") { await this.beats.codingBeat(); }
         else if (job.kind === "play") await this.beats.playBeat(job.script);
       } catch (e) {
         log.error("director", `beat crashed: ${String(e).slice(0, 200)}`);

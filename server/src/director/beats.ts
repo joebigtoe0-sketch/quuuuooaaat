@@ -796,6 +796,68 @@ export class Beats {
     }
   }
 
+  /** CODING BEAT — idle filler with substance: he sits at the terminal and
+   *  "works on" a random chunk of one of his OWN tools, typed out live on
+   *  the script screen. Only visual/tooling files — strategy code (follower,
+   *  discovery, config knobs) never goes on stream, that's the edge. */
+  async codingBeat(): Promise<void> {
+    const path = await import("node:path");
+    const fs = await import("node:fs");
+    // [repo-relative file, what he pretends to be doing]
+    const SOURCES: [string, string][] = [
+      ["client/public/pnl-card/app.js", "pnl card"],
+      ["client/public/pnl-card/style.css", "pnl card styling"],
+      ["client/public/callers.html", "caller board page"],
+      ["client/public/callouts.html", "track-record page"],
+      ["client/src/stage/screens.ts", "screen renderer"],
+      ["client/src/stage/room.ts", "the room"],
+      ["client/src/stage/fx.ts", "stage fx"],
+      ["client/src/ui/subtitles.ts", "subtitle engine"],
+      ["client/src/media/recorder.ts", "clip recorder"],
+    ];
+    const VERBS = ["refactor", "quick fix", "cleanup pass", "tweaking", "midnight rewrite", "optimizing"];
+    try {
+      const [rel, label] = SOURCES[Math.floor(Math.random() * SOURCES.length)];
+      const full = path.resolve(cfg.root, "..", rel);
+      let lines: string[] = [];
+      try {
+        lines = fs.readFileSync(full, "utf8").split(/\r?\n/);
+      } catch { return; } // file not in this deploy — skip silently
+      if (lines.length < 30) return;
+      const start = Math.floor(Math.random() * Math.max(1, lines.length - 45));
+      const chunk = lines.slice(start, start + 40).map((l) => l.slice(0, 92));
+      const title = `${path.basename(rel)} — ${VERBS[Math.floor(Math.random() * VERBS.length)]}`;
+
+      this.think("coding");
+      await this.loco.walkTo("terminal");
+      this.hub.cue({ t: "camera", preset: "terminal" });
+      this.loco.sit(true);
+      // type it out: 1-2 lines per tick, human-ish pauses
+      const shown: string[] = [];
+      for (const line of chunk) {
+        shown.push(line);
+        this.hub.cue({ t: "takeover", view: { kind: "script", title, lines: [...shown], state: "running" } });
+        await realSleep(600 + Math.random() * 700);
+        if (Math.random() < 0.06) await realSleep(2500); // stares at it. we've all been there
+      }
+      this.hub.cue({ t: "takeover", view: { kind: "script", title, lines: shown, state: "done" } });
+      // sometimes he comments on his own code; usually he just works
+      if (Math.random() < 0.35) {
+        await this.sayVaried(
+          `Just touching up my ${label}. I build my own tools — the desk doesn't run itself.`,
+          "neutral",
+        );
+      }
+      await realSleep(2000);
+    } catch (e) {
+      log.warn("beats", `coding beat failed: ${String(e).slice(0, 80)}`);
+    } finally {
+      this.hub.cue({ t: "takeover", view: null });
+      this.loco.sit(false);
+      this.hub.cue({ t: "camera", preset: "wide" });
+    }
+  }
+
   /** THE INVESTMENT DESK — the half-hourly mid-cap check, visually its own
    *  thing (gold memo card, not the research terminal). Passes are content:
    *  RIKU reading an established coin's tape and refusing it is half the bit. */
