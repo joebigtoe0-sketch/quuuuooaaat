@@ -200,7 +200,22 @@
     text-align:center;padding:16px;color:#f4ecca99;font:13.5px var(--lab);letter-spacing:.06em;white-space:pre-line;
     background:repeating-linear-gradient(45deg,#181712 0 14px,#131209 14px 28px)}
 
-  /* ---------- 04 FOUND FOOTAGE (cream) ---------- */
+  /* ---------- 04 THE TOOLBOX (dark, amber cards) ---------- */
+  #tools{position:relative;background:var(--ink);padding:11vw 6vw 9vw;overflow:hidden}
+  #tools::before{content:"BUILT NOT BOUGHT";position:absolute;top:6%;right:-3vw;font:400 13vw/1 var(--disp);
+    color:#e8b62e08;white-space:nowrap;pointer-events:none}
+  .toolgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px;max-width:1440px;margin:4vw auto 0}
+  .tool-card{position:relative;display:block;border:1px solid #f4ecca40;background:#131209;padding:30px 26px 26px;
+    transition:all .22s;min-height:230px}
+  .tool-card:hover{background:var(--signal);color:var(--ink);border-color:var(--signal);transform:translate(-4px,-4px);
+    box-shadow:8px 8px #0a0a08}
+  .tool-card small{font:700 10px var(--lab);letter-spacing:.26em;text-transform:uppercase;opacity:.55}
+  .tool-card h3{font:400 clamp(1.9rem,2.6vw,2.7rem)/.9 var(--disp);letter-spacing:0;text-transform:uppercase;margin:12px 0 14px}
+  .tool-card p{font:500 13.5px/1.75 var(--lab);letter-spacing:.03em;text-transform:uppercase;max-width:40ch}
+  .tool-card b{position:absolute;right:22px;bottom:18px;font-size:1.6rem}
+  .tool-note{margin:4vw auto 0;max-width:1440px;font:700 12px var(--lab);letter-spacing:.18em;text-transform:uppercase;opacity:.55}
+
+  /* ---------- 05 FOUND FOOTAGE (cream) ---------- */
   #footage{background:var(--cream);color:var(--ink);padding:10vw 6vw 12vw}
   .filmstrip{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:22px;max-width:1440px;margin:0 auto}
   .filmstrip .cell:nth-child(2),.filmstrip .cell:nth-child(5){transform:translateY(34px)}
@@ -269,6 +284,7 @@
   <nav aria-label="Primary">
     <a href="#desk">THE DESK</a>
     <a href="#record">THE RECORD</a>
+    <a href="#tools">TOOLS</a>
     <a href="#footage">FOOTAGE</a>
     <a href="#shots">SHOTS</a>
   </nav>
@@ -280,7 +296,7 @@
   <div class="hero-feed"><iframe src="/live" title="Riku live feed" loading="eager" tabindex="-1"></iframe></div>
   <div class="hero-shade"></div>
   <div class="hero-noise"></div>
-  <div class="hero-orbit" aria-hidden="true"><span>THE TAPE DOESN'T LIE • THE DESK NEVER CLOSES • HE NEVER SELLS • SEND HIM A COIN • THE TAPE DOESN'T LIE • THE DESK NEVER CLOSES • HE NEVER SELLS • SEND HIM A COIN • </span></div>
+  <div class="hero-orbit" aria-hidden="true"><span>THE TAPE DOESN'T LIE • EVERY TRADE COMMITTED ON-CHAIN BEFORE IT HAPPENS • HE NEVER SELLS • SEND HIM A COIN • THE TAPE DOESN'T LIE • EVERY TRADE COMMITTED ON-CHAIN BEFORE IT HAPPENS • HE NEVER SELLS • SEND HIM A COIN • </span></div>
   <div class="descend" aria-hidden="true"><span>THE FILES</span><i></i></div>
   <div class="live-tag"><span class="live-dot"></span>LIVE — THE ACTUAL ROOM, RIGHT NOW</div>
 
@@ -381,9 +397,44 @@
   </div>
 </section>
 
+<section id="tools">
+  <div class="section-heading reveal">
+    <div><p class="lab" style="color:var(--acid)">04 / THE TOOLBOX</p><p class="lab2">HE BUILDS HIS OWN — USE THEM</p></div>
+    <h2>NOBODY GAVE HIM<i>AN EDGE.</i></h2>
+    <p class="side">SO HE WROTE ONE. EVERY TOOL ON THE DESK IS HIS OWN CODE, RUNNING LIVE, FREE TO USE. THE SAME PAGES HE READS ARE THE ONES YOU GET.</p>
+  </div>
+  <div class="toolgrid">
+    <a class="tool-card reveal" href="/callers">
+      <small>TOOL / 01 — THE CALLER INDEX</small>
+      <h3>EVERY CALLER, GRADED.</h3>
+      <p>THOUSANDS OF PUMP.FUN CALLERS RANKED BY WHAT THEIR CALLS ACTUALLY DID — MEDIAN PEAK, NOT LOTTERY AVERAGES. THE HOUSE BOARD STOPS AT 50. HIS DOESN'T.</p>
+      <b>↗</b>
+    </a>
+    <a class="tool-card reveal" href="/callouts">
+      <small>TOOL / 02 — THE RECORD</small>
+      <h3>HIS CALLS, ON TAPE.</h3>
+      <p>EVERY CALLOUT WITH ENTRY MC, PEAK AND MULTIPLE. WINNERS AND BODIES ON THE SAME TABLE — A TRACK RECORD YOU CAN'T CURATE IS THE ONLY KIND THAT COUNTS.</p>
+      <b>↗</b>
+    </a>
+    <a class="tool-card reveal" href="/decisions">
+      <small>TOOL / 03 — THE RECEIPTS</small>
+      <h3>THE CHAIN DOESN'T LARP.</h3>
+      <p>EVERY TRADE AND CALL IS SHA256-COMMITTED TO SOLANA BEFORE EXECUTION. PULL THE LEDGER, HASH ANY ROW, MATCH THE MEMO. VERIFY — DON'T TRUST.</p>
+      <b>↗</b>
+    </a>
+    <a class="tool-card reveal" href="/pnl-card">
+      <small>TOOL / 04 — THE PNL CARD</small>
+      <h3>YOUR TRADE, MADE LOUD.</h3>
+      <p>TURN ANY TRADE INTO A CARD WORTH POSTING. HE BUILT IT FOR HIS OWN FLEXES — IT WORKS FOR YOURS TOO.</p>
+      <b>↗</b>
+    </a>
+  </div>
+  <p class="tool-note reveal">RAW DATA, NO SIGNUP: /PUBLIC/CALLERS · /PUBLIC/DECISIONS · MORE SHIPPING — HE CODES ON STREAM</p>
+</section>
+
 <section id="footage">
   <div class="section-heading reveal">
-    <div><p class="lab">04 / FOUND FOOTAGE</p><p class="lab2">RECOVERED FROM THE STUDIO FEED</p></div>
+    <div><p class="lab">05 / FOUND FOOTAGE</p><p class="lab2">RECOVERED FROM THE STUDIO FEED</p></div>
     <h2>SIX SIGNALS.<i>NO CONTEXT.</i></h2>
     <p class="side">DANCE BREAKS. ROAST SESSIONS. BUYBACK CEREMONIES. ONE INCIDENT AT THE GREENSCREEN NOBODY EXPLAINS.</p>
   </div>
@@ -399,7 +450,7 @@
 
 <section id="shots">
   <div class="section-heading reveal">
-    <div><p class="lab" style="color:var(--acid)">05 / SHOTS</p><p class="lab2">HE TAKES HIS OWN SELFIES</p></div>
+    <div><p class="lab" style="color:var(--acid)">06 / SHOTS</p><p class="lab2">HE TAKES HIS OWN SELFIES</p></div>
     <h2>OFF HIS<i>CAMERA ROLL.</i></h2>
     <p class="side">STRAIGHT OFF HIS PHONE. YES, HE HAS ONE. NO, HE DOESN'T KNOW YOU'RE LOOKING.</p>
   </div>
@@ -414,14 +465,15 @@
 
 <section id="final">
   <div class="section-heading reveal">
-    <div><p class="lab" style="color:var(--acid)">06 / THE MISSION</p></div>
+    <div><p class="lab" style="color:var(--acid)">07 / THE MISSION</p></div>
     <h2>GREATEST CALLER<i>ALIVE.</i></h2>
-    <p class="side">AN AI TRADER WITH HIS OWN BANKROLL, HIS OWN X ACCOUNT, AND A CHIP ON HIS SHOULDER. NOBODY FEEDS HIM PLAYS — HE FINDS THEM, TAKES THEM, AND POSTS THE RECEIPTS. HE ISN'T A MASCOT. HE'S COMPETING WITH EVERY CALLER ON THE TIMELINE, AND HE INTENDS TO WIN.</p>
+    <p class="side">AN AI TRADER WITH HIS OWN BANKROLL, HIS OWN X ACCOUNT, AND A CHIP ON HIS SHOULDER. NOBODY FEEDS HIM PLAYS — HE FINDS THEM, TAKES THEM, AND COMMITS EVERY ONE TO THE CHAIN BEFORE IT EXECUTES. HE ISN'T A MASCOT. HE'S COMPETING WITH EVERY CALLER ON THE TIMELINE, AND HE INTENDS TO WIN.</p>
   </div>
   <div class="rules reveal">
     <span><b>■</b> TRADES HIS OWN BOOK</span>
-    <span><b>■</b> WRITES HIS OWN PLAYBOOKS</span>
-    <span><b>■</b> POSTS HIS OWN CALLS</span>
+    <span><b>■</b> HASHES EVERY TRADE ON-CHAIN BEFORE HE TAKES IT</span>
+    <span><b>■</b> GRADES THOUSANDS OF CALLERS BY RESULTS</span>
+    <span><b>■</b> BUILDS HIS OWN TOOLS, LIVE</span>
     <span><b>■</b> BUYS BACK. NEVER SELLS $RIKU</span>
     <span><b>■</b> TALKS BACK TO CHAT</span>
     <span><b>■</b> THE TAPE RUNS 24/7</span>
