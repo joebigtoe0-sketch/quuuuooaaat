@@ -7,7 +7,7 @@ import { simT } from "../config.js";
 import crypto from "node:crypto";
 
 const STATIONS: StationId[] = [
-  "idle_spot", "inbox", "terminal", "bigscreen", "vault", "conveyor", "camera_mark", "greenscreen",
+  "idle_spot", "inbox", "terminal", "bigscreen", "vault", "conveyor", "camera_mark", "greenscreen", "tiktok",
 ];
 
 const SELFIE_ANIMS = [
@@ -39,7 +39,12 @@ export type PlayStep =
   | { do: "callout"; text: string; symbol?: string }
   | { do: "think"; text?: string }
   | { do: "selfie"; anim?: string; expr?: string }
-  | { do: "film"; spoken: string; dance?: boolean };
+  | { do: "film"; spoken: string; dance?: boolean }
+  // ---- tiktok studio (offline filming) ----
+  | { do: "tiktok"; on: boolean; mode?: "studio" | "facecam" }
+  | { do: "tiktokcam"; cam?: "front" | "left" | "right" }
+  | { do: "record"; id: string; on: boolean }
+  | { do: "wait"; ms: number };
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, simT(ms)));
 
@@ -71,6 +76,25 @@ export async function runPlayScript(
         case "sit": {
           loco.sit(step.on !== false);
           await sleep(300);
+          break;
+        }
+        case "tiktok": {
+          hub.cue({ t: "tiktok", on: step.on !== false, ...(step.mode ? { mode: step.mode } : {}) });
+          await sleep(400);
+          break;
+        }
+        case "tiktokcam": {
+          hub.cue({ t: "camera", preset: ("tiktok_" + (step.cam ?? "front")) as any });
+          await sleep(350);
+          break;
+        }
+        case "record": {
+          hub.cue({ t: "record", on: step.on !== false, id: String(step.id) });
+          if (step.on !== false) await sleep(1000); // recorder warmup before action
+          break;
+        }
+        case "wait": {
+          await sleep(Math.min(15_000, Math.max(50, Number(step.ms) || 500)));
           break;
         }
         case "say": {
@@ -225,7 +249,7 @@ export function sanitizeScript(raw: unknown): PlayStep[] {
   for (const s of raw.slice(0, 40)) {
     if (!s || typeof s !== "object" || typeof (s as any).do !== "string") continue;
     const do_ = String((s as any).do);
-    if (!["goto", "camera", "sit", "say", "anim", "fx", "inspect", "compose", "callout", "think", "selfie", "film"].includes(do_)) continue;
+    if (!["goto", "camera", "sit", "say", "anim", "fx", "inspect", "compose", "callout", "think", "selfie", "film", "tiktok", "tiktokcam", "record", "wait"].includes(do_)) continue;
     out.push(s as PlayStep);
   }
   return out;

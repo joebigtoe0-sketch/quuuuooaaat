@@ -8,7 +8,8 @@ export type StationId =
   | "vault"
   | "conveyor"
   | "camera_mark"
-  | "greenscreen";
+  | "greenscreen"
+  | "tiktok";
 
 export interface CheckRow {
   label: string;
@@ -105,10 +106,11 @@ export type Cue =
   | { t: "screen_callouts"; cards: CalloutCard[] }
   | { t: "conveyor_add"; item: ConveyorItem }
   | { t: "conveyor_pick"; mint: string }
-  | { t: "camera"; preset: "wide" | "terminal" | "facecam" | "vault" | "film" | "bigscreen" }
+  | { t: "camera"; preset: "wide" | "terminal" | "facecam" | "vault" | "film" | "bigscreen" | "tiktok_front" | "tiktok_left" | "tiktok_right" }
   | { t: "fx"; kind: "stamp_rekt" | "stamp_called" | "confetti" | "ding" | "buzzer" }
   | { t: "mood"; mood: "neutral" | "excited" | "disgusted" | "thinking" }
   | { t: "record"; on: boolean; id: string }
+  | { t: "tiktok"; on: boolean; mode?: "studio" | "facecam" } // burned subs + green-key facecam filming
   | { t: "selfie"; id: string; anim?: string; expr?: string }
   | { t: "feed"; entry: { at: number; kind: string; text: string } }
   | { t: "board"; lines: string[] }
@@ -148,4 +150,5 @@ export const STATIONS: Record<StationId, { x: number; z: number; face: number }>
   idle_spot: { x: -0.6, z: 1.2, face: 0 },
   camera_mark: { x: 1.8, z: 1.6, face: 0 },
   greenscreen: { x: 5.6, z: 0.2, face: Math.PI / 2 },
+  tiktok: { x: 6.5, z: 3.0, face: 0 },
 };

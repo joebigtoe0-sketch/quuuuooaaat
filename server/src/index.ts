@@ -40,7 +40,7 @@ const hub = new Hub(server);
 // Control endpoints need the admin key (query ?key=, x-admin-key header, or
 // the qk cookie set by /admin login). Read-only + stage-internal endpoints
 // (feed, layout, clip upload, agent-status, health) stay open.
-const PROTECTED = /^\/admin\/(directive|reset|restart|agent$|fake-send|fake-buyback|pause|resume|goto|anim|camera|fx|tts-test|selfie-take|selfie-last|chat$|chat-add|go-live|syslog|record$|say|queue|clips|clip-file|research-now|blacklist|sniper|operator-call|operator-sell|positions|callout-entry|producer-state|tweet-exact|reply-exact|play|think|planner|autoreply|cc-probe|callers|calls|feed-ingest|facts|kol-roster|kol-pool|outreach|book|thought|du|memory|repair-proceeds)/;
+const PROTECTED = /^\/admin\/(directive|reset|restart|agent$|fake-send|fake-buyback|pause|resume|goto|anim|camera|fx|tts-test|selfie-take|selfie-last|chat$|chat-add|go-live|syslog|record$|say|queue|clips|clip-file|research-now|blacklist|sniper|operator-call|operator-sell|positions|callout-entry|producer-state|tweet-exact|reply-exact|play|think|planner|autoreply|cc-probe|callers|calls|feed-ingest|facts|kol-roster|kol-pool|outreach|book|thought|du|memory|repair-proceeds|tiktok)/;
 function hasAdminKey(req: express.Request): boolean {
   const c = String(req.headers.cookie ?? "");
   const cookieKey = c.match(/(?:^|;\s*)qk=([^;]+)/)?.[1];
@@ -398,6 +398,53 @@ app.post("/admin/play", async (req, res) => {
   const r = director.queuePlay(steps);
   log.info("admin", `play queued (${steps.length} steps) kind=${String(b.kind ?? "")}`);
   res.json(r);
+});
+
+/** TIKTOK FILMING (offline) — one call films a full vertical-ready clip:
+ *  body {script:[{do:"say",...},...], mode?:"studio"|"facecam", autocut?:bool, id?}
+ *  - wraps the script: tiktok mode on -> walk to the studio -> record -> steps
+ *    -> record off -> mode off. Subtitles burn INTO the canvas during tiktok
+ *    mode, so the mp4 carries them.
+ *  - autocut (default true): cuts front/left/right between say lines with a
+ *    slow push-in on every shot. Explicit tiktokcam steps disable autocut.
+ *  - mode "facecam": locked front cam, room hidden, pure green backdrop —
+ *    key it out and overlay him on anything.
+ *  Returns { ok, mp4 } when the clip lands (transcoded, in data/clips). */
+app.post("/admin/tiktok", async (req, res) => {
+  const b: any = (typeof req.body === "object" && req.body) ? req.body : {};
+  const { sanitizeScript } = await import("./director/play.js");
+  const inner = sanitizeScript(b.script);
+  if (!inner.length) return res.json({ ok: false, why: "script must be a non-empty array of steps" });
+  const mode = b.mode === "facecam" ? "facecam" : "studio";
+  const id = String(b.id ?? ("tiktok-" + Date.now())).replace(/[^a-zA-Z0-9_-]/g, "");
+  const hasCamSteps = inner.some((st: any) => st.do === "tiktokcam" || st.do === "camera");
+  const autocut = b.autocut !== false && !hasCamSteps && mode !== "facecam";
+  const CAMS = ["front", "left", "right"] as const;
+  let cut = 0;
+  const body: any[] = [];
+  for (const st of inner as any[]) {
+    if (autocut && st.do === "say" && body.some((x) => x.do === "say"))
+      body.push({ do: "tiktokcam", cam: CAMS[++cut % 3] });
+    body.push(st);
+  }
+  const script: any[] = [
+    { do: "tiktok", on: true, mode },
+    { do: "goto", point: "tiktok" },
+    { do: "tiktokcam", cam: "front" },
+    { do: "record", id, on: true },
+    ...body,
+    { do: "wait", ms: 800 },
+    { do: "record", id, on: false },
+    { do: "tiktok", on: false },
+    { do: "goto", point: "idle_spot" },
+  ];
+  const { expectClip } = await import("./media/film.js");
+  const clipP = expectClip(id, 5 * 60_000);
+  const q = director.queuePlay(script as any);
+  if (!(q as any).ok) return res.json(q);
+  log.info("admin", `tiktok filming queued (${inner.length} steps, mode ${mode}, id ${id})`);
+  const mp4 = await clipP;
+  res.json({ ok: !!mp4, id, mp4, why: mp4 ? undefined : "clip never arrived — is a stage client (browser/OBS) connected?" });
 });
 
 /** Post EXACT words — no topic, no model in between. Firewalls still apply. */

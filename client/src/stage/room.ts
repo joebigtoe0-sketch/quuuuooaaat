@@ -506,7 +506,20 @@ function adoptGlbRoom(scene: THREE.Scene, root: THREE.Object3D): StageLayout {
   console.info(
     `[stage] greenscreen:${greenscreenNode ? (greenscreenNode as any).name || "by-color" : "NOT FOUND"} tripod:${tripodNode ? (tripodNode as any).name : "none"}`,
   );
-  for (const id of ["idle_spot", "inbox", "terminal", "bigscreen", "vault", "conveyor", "camera_mark"] as const) {
+  // tiktok studio: stand on the authored spot, facing the front tiktok camera
+  {
+    const spot = findAll(root, "tiktokstandingspot")[0] ?? null;
+    if (spot) {
+      spot.updateWorldMatrix(true, false);
+      const p = spot.getWorldPosition(new THREE.Vector3());
+      const camN = findAll(root, "TiktokCameraFront")[0] ?? null;
+      const lookAt = camN
+        ? camN.getWorldPosition(new THREE.Vector3())
+        : p.clone().add(front.clone().multiplyScalar(2));
+      put("tiktok", new THREE.Vector3(p.x, 0, p.z), new THREE.Vector3(lookAt.x, 0, lookAt.z));
+    }
+  }
+  for (const id of ["idle_spot", "inbox", "terminal", "bigscreen", "vault", "conveyor", "camera_mark", "tiktok"] as const) {
     if (!stations[id]) stations[id] = { ...STATIONS[id] };
   }
 
@@ -576,8 +589,11 @@ function adoptGlbRoom(scene: THREE.Scene, root: THREE.Object3D): StageLayout {
     vault: /^(Camera_vault|VaultCamera)$/i,
     film: /^(Camera_film|GreenscreenCamera|FilmCamera)$/i,
     bigscreen: /^(Camera_bigscreen|BigscreenCamera|BigScreenCamera)$/i,
+    tiktok_front: /^(Camera_tiktok_front|TiktokCameraFront)$/i,
+    tiktok_left: /^(Camera_tiktok_left|TiktokCameraLeft)$/i,
+    tiktok_right: /^(Camera_tiktok_right|TiktokCameraRight)$/i,
   };
-  for (const key of ["wide", "terminal", "facecam", "vault", "film", "bigscreen"] as const) {
+  for (const key of ["wide", "terminal", "facecam", "vault", "film", "bigscreen", "tiktok_front", "tiktok_left", "tiktok_right"] as const) {
     const camNode = findByRegex(CAM_ALIASES[key]);
     if (!camNode) continue;
     camNode.updateWorldMatrix(true, false);

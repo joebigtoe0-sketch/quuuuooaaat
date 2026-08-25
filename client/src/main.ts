@@ -73,6 +73,10 @@ const CAM = {
   vault: { pos: new THREE.Vector3(-2.4, 2.4, 2.2), look: new THREE.Vector3(-4.2, 1.4, -2.2) },
   film: { pos: new THREE.Vector3(4.0, 1.6, 1.6), look: new THREE.Vector3(5.6, 1.45, 0.2) },
   bigscreen: { pos: new THREE.Vector3(-3.4, 2.1, 1.6), look: new THREE.Vector3(-5.8, 1.7, -3.5) },
+  // tiktok studio fallbacks — the glb TiktokCamera* nodes override these
+  tiktok_front: { pos: new THREE.Vector3(6.5, 1.6, 5.2), look: new THREE.Vector3(6.5, 1.5, 3.0) },
+  tiktok_left: { pos: new THREE.Vector3(5.2, 1.7, 4.6), look: new THREE.Vector3(6.5, 1.4, 3.0) },
+  tiktok_right: { pos: new THREE.Vector3(7.8, 1.7, 4.6), look: new THREE.Vector3(6.5, 1.4, 3.0) },
 };
 let camTarget = CAM.wide;
 let camDolly = 0;
@@ -137,7 +141,7 @@ async function buildAll(): Promise<void> {
   // adopt room-derived camera framing, guarding against NaN/Inf
   let gotWide = false;
   if (layout.cameras) {
-    for (const key of ["wide", "terminal", "facecam", "vault", "film", "bigscreen"] as const) {
+    for (const key of ["wide", "terminal", "facecam", "vault", "film", "bigscreen", "tiktok_front", "tiktok_left", "tiktok_right"] as const) {
       const v = layout.cameras[key];
       if (v && finite3(v.pos) && finite3(v.look)) {
         CAM[key].pos.set(v.pos[0], v.pos[1], v.pos[2]);
@@ -184,6 +188,94 @@ async function buildAll(): Promise<void> {
 const pose = { x: -0.6, z: 1.2, heading: 0, targetX: -0.6, targetZ: 1.2, targetHeading: 0, anim: "idle", seated: false };
 let oneShotUntil = 0;
 
+// ---------- TIKTOK MODE ----------
+// Burned-in subtitles (drawn INTO the WebGL canvas so recordings carry them),
+// green-key facecam mode (room hidden, pure green ground), and shot movement.
+let tiktokMode: "studio" | "facecam" | null = null;
+let tiktokHidden: { obj: THREE.Object3D; was: boolean }[] = [];
+let tiktokPrevClear = new THREE.Color(0x000000);
+let camCutAt = 0; // push-in clock, resets on every camera cut
+let camPresetName = "wide";
+let burnLine: { words: { word: string; atMs: number }[]; text: string; startedAt: number; durMs: number } | null = null;
+
+const burnCanvas = document.createElement("canvas");
+burnCanvas.width = 1024; burnCanvas.height = 320;
+const burnCtx = burnCanvas.getContext("2d")!;
+const burnTex = new THREE.CanvasTexture(burnCanvas);
+const burnMat = new THREE.MeshBasicMaterial({ map: burnTex, transparent: true, depthTest: false, depthWrite: false });
+// sized to survive a 9:16 CENTER CROP of the 16:9 canvas — tiktok edits crop vertical
+const burnPlane = new THREE.Mesh(new THREE.PlaneGeometry(0.62, 0.2), burnMat);
+burnPlane.position.set(0, -0.34, -1.35); // lower-center of frame, in front of the camera
+burnPlane.renderOrder = 999;
+burnPlane.visible = false;
+camera.add(burnPlane);
+scene.add(camera); // camera must live in the scene for its children to render
+
+function drawBurnSubs(): void {
+  if (!tiktokMode || !burnLine) { burnPlane.visible = false; return; }
+  const t = performance.now() - burnLine.startedAt;
+  if (t > burnLine.durMs + 600) { burnPlane.visible = false; burnLine = null; return; }
+  const words = burnLine.words.length
+    ? burnLine.words
+    : burnLine.text.split(/\s+/).map((w, i, arr) => ({ word: w, atMs: (i * burnLine!.durMs) / arr.length }));
+  // active word + a rolling window of ~5 words (tiktok caption style)
+  let active = 0;
+  for (let i = 0; i < words.length; i++) if (t >= words[i].atMs) active = i;
+  const start = Math.max(0, Math.min(active - 1, words.length - 5));
+  const win = words.slice(start, start + 5);
+  const g = burnCtx;
+  g.clearRect(0, 0, burnCanvas.width, burnCanvas.height);
+  g.textAlign = "center"; g.textBaseline = "middle";
+  g.font = "900 92px Arial, sans-serif";
+  // measure and lay the window out on up to 2 lines
+  const lines: { word: string; idx: number }[][] = [[]];
+  let width = 0;
+  win.forEach((w, i) => {
+    const wpx = g.measureText(w.word.toUpperCase() + " ").width;
+    if (width + wpx > 940 && lines[lines.length - 1].length) { lines.push([]); width = 0; }
+    lines[lines.length - 1].push({ word: w.word, idx: start + i });
+    width += wpx;
+  });
+  lines.slice(0, 2).forEach((ln, li) => {
+    const y = 110 + li * 108;
+    let x = burnCanvas.width / 2 - ln.reduce((acc, w) => acc + g.measureText(w.word.toUpperCase() + " ").width, 0) / 2;
+    for (const w of ln) {
+      const up = w.word.toUpperCase() + " ";
+      const wpx = g.measureText(up).width;
+      g.lineWidth = 16; g.strokeStyle = "#000";
+      g.strokeText(up, x + wpx / 2, y);
+      g.fillStyle = w.idx === active ? "#ffe600" : "#ffffff";
+      g.fillText(up, x + wpx / 2, y);
+      x += wpx;
+    }
+  });
+  burnTex.needsUpdate = true;
+  burnPlane.visible = true;
+}
+
+function setTiktokMode(on: boolean, mode: "studio" | "facecam" = "studio"): void {
+  // restore anything a previous mode hid
+  for (const h of tiktokHidden) h.obj.visible = h.was;
+  tiktokHidden = [];
+  if (tiktokMode === "facecam" || !on) renderer.setClearColor(tiktokPrevClear, 1);
+  tiktokMode = on ? mode : null;
+  if (!on) { burnPlane.visible = false; burnLine = null; return; }
+  if (mode === "facecam") {
+    // hide EVERYTHING except the avatar and lights — pure green key backdrop
+    renderer.getClearColor(tiktokPrevClear);
+    renderer.setClearColor(0x00b140, 1); // chroma green
+    scene.children.forEach((obj) => {
+      if (obj === camera || obj === (avatar as any)?.group) return;
+      if ((obj as any).isLight) return;
+      let hasLight = false;
+      obj.traverse((o) => { if ((o as any).isLight) hasLight = true; });
+      if (hasLight) return; // keep light rigs so he stays lit
+      tiktokHidden.push({ obj, was: obj.visible });
+      obj.visible = false;
+    });
+  }
+}
+
 function applyTick(m: TickMsg): void {
   pose.targetX = m.x;
   pose.targetZ = m.z;
@@ -202,6 +294,7 @@ function applyCue(cue: Cue): void {
       break;
     }
     case "speak":
+      if (tiktokMode) burnLine = { words: cue.words ?? [], text: cue.subtitle, startedAt: performance.now(), durMs: cue.durMs };
       subtitles.speak({
         audioUrl: cue.audioUrl ? httpBase + cue.audioUrl : null,
         subtitle: cue.subtitle,
@@ -237,6 +330,8 @@ function applyCue(cue: Cue): void {
       break;
     case "camera":
       camTarget = CAM[cue.preset];
+      camPresetName = cue.preset;
+      camCutAt = performance.now();
       cameraLook.setCam(cue.preset);
       break;
     case "fx":
@@ -255,6 +350,9 @@ function applyCue(cue: Cue): void {
     case "record":
       if (cue.on) recorder.start(cue.id);
       else recorder.stop();
+      break;
+    case "tiktok":
+      setTiktokMode(cue.on, cue.mode ?? "studio");
       break;
     case "selfie":
       void takeSelfie(cue);
@@ -356,11 +454,20 @@ function frame(): void {
       ? camTarget
       : CAM.wide;
   const sway = safe === CAM.wide ? Math.sin(camDolly * 0.3) * 0.4 : 0;
-  camera.position.lerp(
-    new THREE.Vector3(safe.pos.x + sway, safe.pos.y, safe.pos.z),
-    Math.min(1, dt * 1.8),
-  );
+  let goal = new THREE.Vector3(safe.pos.x + sway, safe.pos.y, safe.pos.z);
+  if (camPresetName.startsWith("tiktok")) {
+    // tiktok grammar: every shot slowly pushes in + micro-drifts — dead-static
+    // frames read as a screenshot, and screenshots get scrolled past
+    const tShot = (performance.now() - camCutAt) / 1000;
+    const push = Math.min(0.42, tShot * 0.035);
+    const dir = new THREE.Vector3().subVectors(safe.look, safe.pos).normalize();
+    goal = goal.addScaledVector(dir, push);
+    goal.x += Math.sin(tShot * 0.7) * 0.03;
+    goal.y += Math.sin(tShot * 0.9 + 1) * 0.02;
+  }
+  camera.position.lerp(goal, Math.min(1, dt * (camPresetName.startsWith("tiktok") ? 3.2 : 1.8)));
   camera.lookAt(safe.look);
+  drawBurnSubs();
 
   renderer.render(scene, camera);
 }

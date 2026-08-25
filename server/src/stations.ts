@@ -18,6 +18,7 @@ const DEFAULTS: Record<StationId, { x: number; z: number; face: number }> = {
   idle_spot: { x: -0.6, z: -0.8, face: 0 }, // ~2m back from the original 1.2 — wide cam wants him small
   camera_mark: { x: 1.8, z: 1.6, face: 0 },
   greenscreen: { x: 5.6, z: 0.2, face: Math.PI / 2 },
+  tiktok: { x: 6.5, z: 3.0, face: 0 }, // placeholder — the glb tiktokstandingspot overrides via layout
 };
 
 export const STATIONS: Record<StationId, { x: number; z: number; face: number }> = { ...DEFAULTS };
