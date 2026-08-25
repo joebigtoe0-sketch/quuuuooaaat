@@ -110,7 +110,9 @@ export async function runPlayScript(
         }
         case "anim": {
           hub.cue({ t: "anim", clip: String(step.clip ?? "wave") });
-          await sleep(1800);
+          // short beat only — the emote keeps playing INTO the next line,
+          // which reads natural; a full-clip wait was 2s of dead air per emote
+          await sleep(450);
           break;
         }
         case "fx": {
