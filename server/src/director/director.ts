@@ -173,14 +173,18 @@ export class Director {
     const { openPositions } = await import("../chain/trader.js");
     const held = new Set(openPositions().map((p) => p.mint));
     const { touchBan } = await import("../agent/tokenguard.js");
-    const eligible = (mint: string) =>
-      mint.endsWith("pump") &&
+    // Entertainment checkups must actually happen. Strict filters first
+    // (pump suffix, not recently dug). If those empty out, loosen rather
+    // than skip and leave the stream idle.
+    const eligible = (mint: string, loose = false) =>
+      !!mint &&
       mint !== cfg.ownMint &&
       !held.has(mint) &&
       !this.recentlyResearched.has(mint) &&
-      !this.planner.researchedRecently(mint, 8) &&
-      !(store.seenAt(mint) && Date.now() - store.seenAt(mint)! < 6 * 3600_000) &&
-      !touchBan(mint);
+      !touchBan(mint) &&
+      (loose || mint.endsWith("pump")) &&
+      (loose || !this.planner.researchedRecently(mint, 8)) &&
+      (loose || !(store.seenAt(mint) && Date.now() - store.seenAt(mint)! < 6 * 3600_000));
     const take = (mint: string) => {
       this.recentlyResearched.add(mint);
       if (this.recentlyResearched.size > 300) this.recentlyResearched = new Set([...this.recentlyResearched].slice(-150));
@@ -188,6 +192,11 @@ export class Director {
     };
     const shuffle = (a: string[]) =>
       a.map((v) => [Math.random(), v] as const).sort((x, y) => x[0] - y[0]).map(([, v]) => v);
+    const pumpFirst = (mints: string[]) => {
+      const pump = mints.filter((m) => m.endsWith("pump"));
+      const rest = mints.filter((m) => !m.endsWith("pump"));
+      return [...shuffle(pump), ...shuffle(rest)];
+    };
     try {
       const { scoutAll } = await import("../social/scout.js");
       const hits = await Promise.race([
@@ -195,31 +204,27 @@ export class Director {
         new Promise<[]>((r) => setTimeout(() => r([]), 10_000)),
       ]);
       const now = Date.now();
-      // trending first (they have momentum), then the launch pool aged 3 min -
-      // 4 h (old enough to read, young enough to still be a story)
-      const candidates = [
-        ...shuffle((hits ?? []).map((h) => h.mint).filter(eligible)),
-        ...shuffle(this.launchPool
-          .filter((l) => now - l.at > 3 * 60_000 && eligible(l.mint))
-          .map((l) => l.mint)),
-      ];
+      const scoutMints = (hits ?? []).map((h) => h.mint);
+      const launchMints = this.launchPool
+        .filter((l) => now - l.at > 3 * 60_000)
+        .map((l) => l.mint);
+      const pool = [...scoutMints, ...launchMints];
+      let candidates = pumpFirst(pool.filter((m) => eligible(m, false)));
+      if (!candidates.length) candidates = pumpFirst(pool.filter((m) => eligible(m, true)));
       if (!candidates.length) return null;
-      // SURVIVORS ONLY: one batched RPC sweep reads every candidate's bonding
-      // progress. Random checkups only dig into coins that actually CLIMBED —
-      // at least minResearchProgress bonded (graduated counts as done). Dead
-      // launches never reach the desk again.
+      // SURVIVORS FIRST. If the bar yields nothing (pump boards empty),
+      // pick anyway — a roast of a thin coin is still TV.
       const { curveProgressBatch } = await import("../chain/pump.js");
       const prog = await curveProgressBatch(candidates.slice(0, 200));
       const alive = candidates.filter((m) => (prog.get(m) ?? 0) >= cfg.minResearchProgress);
       if (alive.length) return take(alive[Math.floor(Math.random() * Math.min(alive.length, 6))]);
-      // nothing at the bar this cycle — settle for the liveliest thing that's
-      // at least MOVING (>=10% bonded), never a flatline
       let best: string | null = null;
       let bestP = 0.1;
       for (const [m, p] of prog) {
         if (p >= bestP && p < 1) { best = m; bestP = p; }
       }
-      return best ? take(best) : null;
+      if (best) return take(best);
+      return take(candidates[0]);
     } catch {
       return null;
     }
