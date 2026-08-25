@@ -30,6 +30,8 @@ import { expectClip } from "../media/film.js";
 import { genTweetImage } from "../media/imagegen.js";
 import { readMentions, uploadImage } from "../social/x.js";
 import type { AgentAction } from "../agent/actions.js";
+import { runPlayScript, type PlayStep } from "./play.js";
+export type { PlayStep };
 
 const realSleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 // posting budget, enforced at EXECUTION time (plans queue faster than counters
@@ -1157,6 +1159,15 @@ export class Beats {
     this.loco.sit(false);
     this.hub.cue({ t: "camera", preset: "wide" });
     this.loco.stateName = "IDLE";
+  }
+
+  async playBeat(script: PlayStep[]): Promise<void> {
+    await runPlayScript({
+      hub: this.hub,
+      loco: this.loco,
+      dir: this.dir,
+      speak: (text, mood) => this.speak(text, mood),
+    }, script);
   }
 
   // ================== AGENT BEATS (v2) ==================

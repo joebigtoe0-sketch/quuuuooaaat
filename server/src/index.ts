@@ -40,7 +40,7 @@ const hub = new Hub(server);
 // Control endpoints need the admin key (query ?key=, x-admin-key header, or
 // the qk cookie set by /admin login). Read-only + stage-internal endpoints
 // (feed, layout, clip upload, agent-status, health) stay open.
-const PROTECTED = /^\/admin\/(directive|reset|restart|agent$|fake-send|fake-buyback|pause|resume|goto|anim|camera|fx|tts-test|selfie-take|selfie-last|chat$|chat-add|go-live|syslog|record$|say|queue|clips|clip-file|research-now|blacklist|sniper|operator-call|operator-sell|positions|callout-entry|producer-state|tweet-exact|reply-exact|planner|autoreply|cc-probe|callers|calls|feed-ingest|facts|kol-roster|kol-pool|outreach|book|thought|du|memory)/;
+const PROTECTED = /^\/admin\/(directive|reset|restart|agent$|fake-send|fake-buyback|pause|resume|goto|anim|camera|fx|tts-test|selfie-take|selfie-last|chat$|chat-add|go-live|syslog|record$|say|queue|clips|clip-file|research-now|blacklist|sniper|operator-call|operator-sell|positions|callout-entry|producer-state|tweet-exact|reply-exact|play|think|planner|autoreply|cc-probe|callers|calls|feed-ingest|facts|kol-roster|kol-pool|outreach|book|thought|du|memory)/;
 function hasAdminKey(req: express.Request): boolean {
   const c = String(req.headers.cookie ?? "");
   const cookieKey = c.match(/(?:^|;\s*)qk=([^;]+)/)?.[1];
@@ -375,6 +375,22 @@ app.get("/admin/producer-state", async (_req, res) => {
   }
 });
 
+
+/** Exact on-stage playback. No LLM. No buy. Queued as a real beat so it is not dropped. */
+app.post("/admin/play", async (req, res) => {
+  const b: any = (typeof req.body === "object" && req.body) ? req.body : {};
+  let script = b.script;
+  if (typeof req.body === "string") {
+    try { script = JSON.parse(req.body).script; } catch { /* keep */ }
+  }
+  const { sanitizeScript } = await import("./director/play.js");
+  const steps = sanitizeScript(script);
+  if (!steps.length) return res.json({ ok: false, why: "script must be a non-empty array of {do:...} steps" });
+  const r = director.queuePlay(steps);
+  log.info("admin", `play queued (${steps.length} steps) kind=${String(b.kind ?? "")}`);
+  res.json(r);
+});
+
 /** Post EXACT words — no topic, no model in between. Firewalls still apply. */
 app.post("/admin/tweet-exact", async (req, res) => {
   const text = String((req.body as any)?.text ?? req.query.text ?? "").trim();
@@ -474,6 +490,23 @@ app.get("/admin/du", async (_req, res) => {
 app.post("/admin/du/sweep", async (_req, res) => {
   const { sweepDisk } = await import("./janitor.js");
   sweepDisk();
+  res.json({ ok: true });
+});
+
+
+/** Producer thought. Same as /admin/thought so old tools keep working. */
+app.post("/admin/think", async (req, res) => {
+  const b: any = (typeof req.body === "object" && req.body) ? req.body : {};
+  let text = String(b.text ?? req.query.text ?? "").trim();
+  if (!text && typeof req.body === "string") {
+    try { text = String(JSON.parse(req.body).text ?? "").trim(); } catch { text = String(req.body).trim(); }
+  }
+  if (text.length < 2) return res.json({ ok: false, why: "no text" });
+  const { pushFeed } = await import("./feed.js");
+  const { pickThinkClip } = await import("./director/thoughts.js");
+  hub.cue({ t: "mood", mood: "thinking" });
+  hub.cue({ t: "anim", clip: pickThinkClip() });
+  pushFeed("thought", text.slice(0, 500));
   res.json({ ok: true });
 });
 
@@ -739,7 +772,12 @@ startLaunchFeed(
 );
 armDevSniper(director);
 // the agent brain (plans its own tweets/films/trades/scouts)
-if (cfg.agentEnabled) director.planner.start();
+if (cfg.agentEnabled && !cfg.playbackProducer) director.planner.start();
+if (cfg.playbackProducer) {
+  store.kvSet("planner:off", "1");
+  store.kvSet("autoreply:off", "1");
+  log.warn("boot", "PLAYBACK_PRODUCER on — in-process planner/autoreply off; timer checkups still run");
+}
 startStatsCache();
 // the positions ledger drifts from the chain whenever a sell lands without
 // being recorded — reconcile at boot and every 10 min so exit watchers never

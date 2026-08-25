@@ -200,6 +200,8 @@ export const cfg = {
 
   // ---------- agent v2 ----------
   agentEnabled: bool("AGENT_ENABLED", true),
+  // outside brain owns public words; timer checkups (conveyor/commentary) still run
+  playbackProducer: bool("PLAYBACK_PRODUCER", false),
   planMin: num("AGENT_PLAN_MIN", 12),
   tradeDryRun: liveArmed ? forceDry : bool("TRADE_DRY_RUN", true),
   paperStartSol: num("PAPER_START_SOL", 1.0), // paper-trading starting bankroll

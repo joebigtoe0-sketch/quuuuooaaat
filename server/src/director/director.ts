@@ -15,6 +15,7 @@ import type {
 export type InvestNote = Extract<TakeoverView, { kind: "investdesk" }>;
 import { Locomotion } from "./locomotion.js";
 import { Beats } from "./beats.js";
+import type { PlayStep } from "./play.js";
 import type { InboxEvent } from "../chain/inbox.js";
 import type { PendingBuyback } from "../chain/buyback.js";
 import { solBalance, walletHoldings } from "../chain/wallet.js";
@@ -41,7 +42,8 @@ type Job =
   | { kind: "investnote"; p: InvestNote; at: number }
   | { kind: "kolfeed"; at: number }
   | { kind: "replyx"; at: number }
-  | { kind: "commentary"; at: number };
+  | { kind: "commentary"; at: number }
+  | { kind: "play"; script: PlayStep[]; at: number };
 
 export class Director {
   readonly loco: Locomotion;
@@ -256,9 +258,20 @@ export class Director {
     if (this.investQ.length < 2) this.investQ.push(p);
   }
 
+  private playQ: PlayStep[][] = [];
+  /** Producer playback: exact script, no LLM, no desk. Queued as a real beat. */
+  queuePlay(script: PlayStep[]): { ok: true; queued: number } | { ok: false; why: string } {
+    if (!script.length) return { ok: false, why: "empty script" };
+    if (this.playQ.length >= 4) return { ok: false, why: "play queue full" };
+    this.playQ.push(script);
+    return { ok: true, queued: this.playQ.length };
+  }
+
   private nextJob(): Job | null {
     const rv = this.revealQ.shift();
     if (rv) return { kind: "reveal", mint: rv.mint, sol: rv.sol, revealKind: rv.revealKind, at: Date.now() };
+    const pl = this.playQ.shift();
+    if (pl) return { kind: "play", script: pl, at: Date.now() };
     const ex = this.exitQ.shift();
     if (ex) return { kind: "exitnote", ...ex, at: Date.now() };
     const inv = this.investQ.shift();
@@ -332,6 +345,7 @@ export class Director {
         else if (job.kind === "buyback") await this.beats.buybackBeat(job.p.sol);
         else if (job.kind === "agent") await this.beats.agentBeat(job.qa.action, job.qa.manual === true);
         else if (job.kind === "commentary") await this.beats.commentaryBeat();
+        else if (job.kind === "play") await this.beats.playBeat(job.script);
       } catch (e) {
         log.error("director", `beat crashed: ${String(e).slice(0, 200)}`);
         this.loco.stateName = "RECOVER";
