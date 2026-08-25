@@ -77,6 +77,7 @@ const CAM = {
   tiktok_front: { pos: new THREE.Vector3(6.5, 1.6, 5.2), look: new THREE.Vector3(6.5, 1.5, 3.0) },
   tiktok_left: { pos: new THREE.Vector3(5.2, 1.7, 4.6), look: new THREE.Vector3(6.5, 1.4, 3.0) },
   tiktok_right: { pos: new THREE.Vector3(7.8, 1.7, 4.6), look: new THREE.Vector3(6.5, 1.4, 3.0) },
+  tiktok_face: { pos: new THREE.Vector3(6.5, 1.5, 4.0), look: new THREE.Vector3(6.5, 1.5, 3.0) },
 };
 let camTarget = CAM.wide;
 let camDolly = 0;
@@ -141,7 +142,7 @@ async function buildAll(): Promise<void> {
   // adopt room-derived camera framing, guarding against NaN/Inf
   let gotWide = false;
   if (layout.cameras) {
-    for (const key of ["wide", "terminal", "facecam", "vault", "film", "bigscreen", "tiktok_front", "tiktok_left", "tiktok_right"] as const) {
+    for (const key of ["wide", "terminal", "facecam", "vault", "film", "bigscreen", "tiktok_front", "tiktok_left", "tiktok_right", "tiktok_face"] as const) {
       const v = layout.cameras[key];
       if (v && finite3(v.pos) && finite3(v.look)) {
         CAM[key].pos.set(v.pos[0], v.pos[1], v.pos[2]);
@@ -195,7 +196,7 @@ let tiktokMode: "studio" | "facecam" | null = null;
 let tiktokPace: "chill" | "hype" = "hype";
 let tiktokAutocut = true;
 let tiktokNextCutAt = 0;
-let tiktokCam: "front" | "left" | "right" = "front";
+let tiktokCam: "front" | "left" | "right" | "face" = "front";
 let tiktokBgVideo: HTMLVideoElement | null = null;
 let tiktokPrevBg: THREE.Texture | THREE.Color | null | undefined = undefined;
 let tiktokHidden: { obj: THREE.Object3D; was: boolean }[] = [];
@@ -271,7 +272,7 @@ function drawBurnSubs(): void {
 }
 
 /** Hard cut to a tiktok camera: teleport + fresh shot-move. */
-function tiktokSnap(cam: "front" | "left" | "right"): void {
+function tiktokSnap(cam: "front" | "left" | "right" | "face"): void {
   tiktokCam = cam;
   const preset = ("tiktok_" + cam) as keyof typeof CAM;
   camTarget = CAM[preset];
@@ -292,7 +293,11 @@ function tiktokRhythm(now: number): void {
   if (tiktokCam !== "front") {
     tiktokSnap("front");
     tiktokNextCutAt = now + (1000 + Math.random() * 1200) * mul;
-  } else if (Math.random() < 0.55) {
+  } else if (Math.random() < 0.2) {
+    // face punch-in: the dramatic beat — held a touch longer than side stabs
+    tiktokSnap("face");
+    tiktokNextCutAt = now + (700 + Math.random() * 500) * mul;
+  } else if (Math.random() < 0.45) {
     tiktokSnap(Math.random() < 0.5 ? "left" : "right");
     tiktokNextCutAt = now + (400 + Math.random() * 300) * mul;
   } else {

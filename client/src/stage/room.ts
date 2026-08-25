@@ -610,8 +610,9 @@ function adoptGlbRoom(scene: THREE.Scene, root: THREE.Object3D): StageLayout {
     tiktok_front: /^(Camera_tiktok_front|TiktokCameraFront)$/i,
     tiktok_left: /^(Camera_tiktok_left|TiktokCameraLeft)$/i,
     tiktok_right: /^(Camera_tiktok_right|TiktokCameraRight)$/i,
+    tiktok_face: /^(Camera_tiktok_face|TiktokCameraFace)$/i,
   };
-  for (const key of ["wide", "terminal", "facecam", "vault", "film", "bigscreen", "tiktok_front", "tiktok_left", "tiktok_right"] as const) {
+  for (const key of ["wide", "terminal", "facecam", "vault", "film", "bigscreen", "tiktok_front", "tiktok_left", "tiktok_right", "tiktok_face"] as const) {
     const camNode = findByRegex(CAM_ALIASES[key]);
     if (!camNode) continue;
     camNode.updateWorldMatrix(true, false);
@@ -633,10 +634,25 @@ function adoptGlbRoom(scene: THREE.Scene, root: THREE.Object3D): StageLayout {
     // camera objects export facing -Z while empties face +Z, and guessing
     // wrong films the wall behind the studio (take two taught this)
     if (key.startsWith("tiktok") && stations.tiktok) {
-      look = new THREE.Vector3(stations.tiktok.x, 1.45, stations.tiktok.z);
+      // wide shots aim at BODY CENTER (~0.9m) so the full body frames up;
+      // the face cam aims at the head — that is its whole job
+      const aimY = key === "tiktok_face" ? 1.5 : 0.9;
+      look = new THREE.Vector3(stations.tiktok.x, aimY, stations.tiktok.z);
     }
     cameras[key] = { pos: [p.x, p.y, p.z], look: [look.x, look.y, look.z] };
     console.info(`[stage] camera '${key}' ← Unity '${camNode.name}'${tgtNode ? " (+target)" : " (own rotation)"}`);
+  }
+
+  // face cam fallback when not authored in the model: the front tiktok cam
+  // pulled in tight to head height, aimed at the head. An authored
+  // TiktokCameraFace overrides this via the adoption loop above.
+  if (!cameras.tiktok_face && cameras.tiktok_front && stations.tiktok) {
+    const head = new THREE.Vector3(stations.tiktok.x, 1.5, stations.tiktok.z);
+    const from = new THREE.Vector3(...cameras.tiktok_front.pos);
+    const pos = from.clone().lerp(head, 0.62);
+    pos.y = Math.max(1.42, pos.y);
+    cameras.tiktok_face = { pos: [pos.x, pos.y, pos.z], look: [head.x, head.y, head.z] };
+    console.info("[stage] camera 'tiktok_face' derived from tiktok_front (author TiktokCameraFace to override)");
   }
 
   // idle: dead-center of the FINAL wide shot — stand 55% of the way from the

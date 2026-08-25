@@ -106,7 +106,7 @@ export type Cue =
   | { t: "screen_callouts"; cards: CalloutCard[] }
   | { t: "conveyor_add"; item: ConveyorItem }
   | { t: "conveyor_pick"; mint: string }
-  | { t: "camera"; preset: "wide" | "terminal" | "facecam" | "vault" | "film" | "bigscreen" | "tiktok_front" | "tiktok_left" | "tiktok_right" }
+  | { t: "camera"; preset: "wide" | "terminal" | "facecam" | "vault" | "film" | "bigscreen" | "tiktok_front" | "tiktok_left" | "tiktok_right" | "tiktok_face" }
   | { t: "fx"; kind: "stamp_rekt" | "stamp_called" | "confetti" | "ding" | "buzzer" }
   | { t: "mood"; mood: "neutral" | "excited" | "disgusted" | "thinking" }
   | { t: "record"; on: boolean; id: string }

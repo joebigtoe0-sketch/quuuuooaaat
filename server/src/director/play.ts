@@ -42,7 +42,7 @@ export type PlayStep =
   | { do: "film"; spoken: string; dance?: boolean }
   // ---- tiktok studio (offline filming) ----
   | { do: "tiktok"; on: boolean; mode?: "studio" | "facecam"; bg?: string; pace?: "chill" | "hype"; autocut?: boolean }
-  | { do: "tiktokcam"; cam?: "front" | "left" | "right" }
+  | { do: "tiktokcam"; cam?: "front" | "left" | "right" | "face" }
   | { do: "record"; id: string; on: boolean }
   | { do: "wait"; ms: number };
 
