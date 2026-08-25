@@ -285,17 +285,63 @@ export async function uploadVideo(mp4Path: string): Promise<string | null> {
 }
 
 
-/** Mentions of our handle — official X API first, twitterapi.io fallback. */
+export type XPost = { id: string; author: string; text: string };
+export type Mention = XPost & {
+  conversationId?: string;
+  parent?: XPost;
+};
+
+function cleanText(s: unknown): string {
+  return String(s ?? "").replace(/https?:\/\/\S+/g, "").trim();
+}
+function usersById(j: any): Map<string, string> {
+  return new Map((j?.includes?.users ?? []).map((u: any) => [String(u.id), String(u.username)]));
+}
+function includedTweets(j: any): Map<string, any> {
+  return new Map((j?.includes?.tweets ?? []).map((t: any) => [String(t.id), t]));
+}
+function parentFrom(t: any, users: Map<string, string>, tweets: Map<string, any>): XPost | undefined {
+  const replied = (t?.referenced_tweets ?? []).find((r: any) => r?.type === "replied_to");
+  if (!replied?.id) return undefined;
+  const p = tweets.get(String(replied.id));
+  if (!p) return { id: String(replied.id), author: "?", text: "" };
+  return {
+    id: String(p.id),
+    author: users.get(String(p.author_id)) ?? "?",
+    text: cleanText(p.text),
+  };
+}
+const THREAD_FIELDS =
+  "expansions=author_id,referenced_tweets.id,referenced_tweets.id.author_id&user.fields=username&tweet.fields=author_id,conversation_id,referenced_tweets,created_at";
+
+function parseMentionRows(j: any): Mention[] {
+  const users = usersById(j);
+  const tweets = includedTweets(j);
+  const rows = Array.isArray(j?.data) ? j.data : [];
+  return rows
+    .map((t: any) => ({
+      id: String(t.id ?? ""),
+      author: users.get(String(t.author_id)) ?? "?",
+      text: cleanText(t.text),
+      conversationId: t.conversation_id ? String(t.conversation_id) : undefined,
+      parent: parentFrom(t, users, tweets),
+    }))
+    .filter((t: Mention) => t.id && t.text);
+}
+
+/** Mentions of our handle — official X API first, twitterapi.io fallback.
+ *  Includes conversationId + the immediate parent tweet when the API expands it.
+ *  Full thread is readTweetThread (call that only when you are about to reply). */
 export async function readMentions(
   sinceMinutes = 720,
-): Promise<{ id: string; text: string; author: string }[]> {
+): Promise<Mention[]> {
   if (!HANDLE) return [];
   if (BEARER) {
     const me = await userId(HANDLE);
     if (me) {
       const start = new Date(Date.now() - sinceMinutes * 60_000).toISOString();
-      const j = await v2(`/users/${me}/mentions?max_results=25&start_time=${start}&expansions=author_id&user.fields=username&tweet.fields=author_id`);
-      if (j) return v2Texts(j).filter((t) => t.id && t.text).slice(0, 12);
+      const j = await v2(`/users/${me}/mentions?max_results=25&start_time=${start}&${THREAD_FIELDS}`);
+      if (j) return parseMentionRows(j).slice(0, 12);
     }
   }
   if (!READ_KEY) return [];
@@ -309,16 +355,93 @@ export async function readMentions(
     const j: any = await res.json();
     const tweets: any[] = j?.tweets ?? j?.data ?? [];
     return tweets
-      .map((t) => ({
-        id: String(t?.id ?? ""),
-        text: String(t?.text ?? ""),
-        author: String(t?.author?.userName ?? t?.author?.screen_name ?? "?"),
-      }))
+      .map((t) => {
+        const replyTo = String(t?.inReplyToId ?? t?.inReplyToStatusId ?? t?.in_reply_to_status_id ?? "");
+        const parentText = cleanText(t?.inReplyToText ?? t?.referencedTweet?.text ?? "");
+        const parentAuthor = String(t?.inReplyToUserName ?? t?.referencedTweet?.author?.userName ?? "");
+        const parent: XPost | undefined = replyTo
+          ? { id: replyTo, author: parentAuthor || "?", text: parentText }
+          : undefined;
+        return {
+          id: String(t?.id ?? t?.id_str ?? ""),
+          text: String(t?.text ?? ""),
+          author: String(t?.author?.userName ?? t?.author?.screen_name ?? "?"),
+          conversationId: t?.conversationId || t?.conversation_id ? String(t.conversationId ?? t.conversation_id) : undefined,
+          parent,
+        };
+      })
       .filter((t) => t.id && t.text)
       .slice(0, 12);
   } catch {
     return [];
   }
+}
+
+/** Chronological posts in the same conversation as tweetId (last 12, 7-day window). */
+export async function readTweetThread(tweetId: string): Promise<XPost[]> {
+  const id = String(tweetId ?? "").replace(/\D/g, "");
+  if (!id) return [];
+
+  if (BEARER) {
+    const one = await v2(`/tweets/${id}?${THREAD_FIELDS}`);
+    const conversationId = String(one?.data?.conversation_id ?? id);
+    const q = encodeURIComponent(`conversation_id:${conversationId}`);
+    const j = await v2(`/tweets/search/recent?query=${q}&max_results=25&${THREAD_FIELDS}&sort_order=recency`);
+    if (j?.data?.length) {
+      const newestFirst = parseMentionRows(j);
+      const out: XPost[] = [];
+      const have = new Set<string>();
+      for (const t of [...newestFirst].reverse()) {
+        if (t.parent?.id && t.parent.text && !have.has(t.parent.id)) {
+          out.push({ id: t.parent.id, author: t.parent.author, text: t.parent.text });
+          have.add(t.parent.id);
+        }
+        if (!have.has(t.id)) {
+          out.push({ id: t.id, author: t.author, text: t.text });
+          have.add(t.id);
+        }
+      }
+      if (out.length) return out.slice(-12);
+    }
+    // at least return the target + its parent
+    if (one?.data) {
+      const users = usersById(one);
+      const parent = parentFrom(one.data, users, includedTweets(one));
+      const self: XPost = {
+        id: String(one.data.id),
+        author: users.get(String(one.data.author_id)) ?? "?",
+        text: cleanText(one.data.text),
+      };
+      return [parent, self].filter((p): p is XPost => Boolean(p?.id && p.text));
+    }
+  }
+
+  if (READ_KEY) {
+    try {
+      const conv = encodeURIComponent(`conversation_id:${id}`);
+      const res = await fetch(
+        `https://api.twitterapi.io/twitter/tweet/advanced_search?query=${conv}&queryType=Latest`,
+        { headers: { "X-API-Key": READ_KEY } },
+      );
+      if (res.ok) {
+        const data: any = await res.json();
+        const tweets: any[] = data.tweets ?? data.data ?? [];
+        const rows = tweets
+          .map((t: any) => ({
+            id: String(t?.id ?? t?.id_str ?? ""),
+            author: String(t?.author?.userName ?? t?.author?.username ?? t?.author?.screen_name ?? "?"),
+            text: cleanText(t?.text),
+            at: Date.parse(String(t?.createdAt ?? t?.created_at ?? "")) || 0,
+          }))
+          .filter((t: { id: string; text: string }) => t.id && t.text)
+          .sort((a: { at: number }, b: { at: number }) => a.at - b.at);
+        if (rows.length) return rows.map(({ id, author, text }: any) => ({ id, author, text })).slice(-12);
+      }
+    } catch {
+      /* fall through */
+    }
+  }
+  return [];
 }
 
 let followersCache: { n: number; at: number } | null = null;

@@ -376,6 +376,15 @@ app.get("/admin/producer-state", async (_req, res) => {
 });
 
 
+/** Conversation around a tweet — last 12 posts, chronological. Use before a reply. */
+app.get("/admin/x-thread", async (req, res) => {
+  const id = String(req.query.id ?? "").replace(/\D/g, "");
+  if (!id) return res.status(400).json({ ok: false, why: "id" });
+  const x = await import("./social/x.js");
+  const tweets = await x.readTweetThread(id).catch(() => []);
+  res.json({ ok: true, id, tweets });
+});
+
 /** Exact on-stage playback. No LLM. No buy. Queued as a real beat so it is not dropped. */
 app.post("/admin/play", async (req, res) => {
   const b: any = (typeof req.body === "object" && req.body) ? req.body : {};
