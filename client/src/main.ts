@@ -194,8 +194,19 @@ let oneShotUntil = 0;
 let tiktokMode: "studio" | "facecam" | null = null;
 let tiktokHidden: { obj: THREE.Object3D; was: boolean }[] = [];
 let tiktokPrevClear = new THREE.Color(0x000000);
-let camCutAt = 0; // push-in clock, resets on every camera cut
+let camCutAt = 0; // shot clock, resets on every camera cut
 let camPresetName = "wide";
+// per-shot move rolled on every tiktok cut — tiktok grammar is CONSTANT motion
+let shotMove: { type: "pushin" | "pullout" | "zoomin" | "zoomout" | "truck"; dir: number; speed: number } | null = null;
+let baseFov = 0;
+function rollShotMove(): void {
+  const types = ["pushin", "pushin", "zoomin", "pullout", "zoomout", "truck", "truck"] as const;
+  shotMove = {
+    type: types[Math.floor(Math.random() * types.length)],
+    dir: Math.random() < 0.5 ? -1 : 1,
+    speed: 0.7 + Math.random() * 0.9,
+  };
+}
 let burnLine: { words: { word: string; atMs: number }[]; text: string; startedAt: number; durMs: number } | null = null;
 
 const burnCanvas = document.createElement("canvas");
@@ -328,12 +339,25 @@ function applyCue(cue: Cue): void {
     case "conveyor_pick":
       conveyor.pick(cue.mint);
       break;
-    case "camera":
+    case "camera": {
+      const wasTiktok = camPresetName.startsWith("tiktok");
       camTarget = CAM[cue.preset];
       camPresetName = cue.preset;
       camCutAt = performance.now();
+      if (cue.preset.startsWith("tiktok")) {
+        // tiktok cuts are CUTS — teleport, never a dolly glide between cams
+        if (baseFov === 0) baseFov = camera.fov;
+        camera.position.set(camTarget.pos.x, camTarget.pos.y, camTarget.pos.z);
+        camera.lookAt(camTarget.look);
+        rollShotMove();
+      } else if (wasTiktok && baseFov > 0) {
+        camera.fov = baseFov;
+        camera.updateProjectionMatrix();
+        shotMove = null;
+      }
       cameraLook.setCam(cue.preset);
       break;
+    }
     case "fx":
       if (cue.kind === "stamp_rekt") fx.stamp("REKT", "#ff4d6d");
       else if (cue.kind === "stamp_called") fx.stamp("CALLED", "#39ff88");
@@ -455,17 +479,28 @@ function frame(): void {
       : CAM.wide;
   const sway = safe === CAM.wide ? Math.sin(camDolly * 0.3) * 0.4 : 0;
   let goal = new THREE.Vector3(safe.pos.x + sway, safe.pos.y, safe.pos.z);
-  if (camPresetName.startsWith("tiktok")) {
-    // tiktok grammar: every shot slowly pushes in + micro-drifts — dead-static
-    // frames read as a screenshot, and screenshots get scrolled past
+  if (camPresetName.startsWith("tiktok") && shotMove) {
+    // tiktok grammar: every shot MOVES — push, pull, zoom or truck, plus
+    // handheld micro-shake. dead-static frames get scrolled past
     const tShot = (performance.now() - camCutAt) / 1000;
-    const push = Math.min(0.42, tShot * 0.035);
-    const dir = new THREE.Vector3().subVectors(safe.look, safe.pos).normalize();
-    goal = goal.addScaledVector(dir, push);
-    goal.x += Math.sin(tShot * 0.7) * 0.03;
-    goal.y += Math.sin(tShot * 0.9 + 1) * 0.02;
+    const view = new THREE.Vector3().subVectors(safe.look, safe.pos).normalize();
+    const side = new THREE.Vector3().crossVectors(view, new THREE.Vector3(0, 1, 0)).normalize();
+    const amt = Math.min(0.55, tShot * 0.09 * shotMove.speed);
+    if (shotMove.type === "pushin") goal.addScaledVector(view, amt);
+    else if (shotMove.type === "pullout") goal.addScaledVector(view, -amt * 0.7);
+    else if (shotMove.type === "truck") goal.addScaledVector(side, Math.sin(tShot * 0.55) * 0.3 * shotMove.dir);
+    if (shotMove.type === "zoomin" || shotMove.type === "zoomout") {
+      const fovGoal = shotMove.type === "zoomin"
+        ? baseFov - Math.min(16, tShot * 3.4 * shotMove.speed)
+        : baseFov + Math.min(10, tShot * 2.6 * shotMove.speed);
+      camera.fov += (fovGoal - camera.fov) * Math.min(1, dt * 5);
+      camera.updateProjectionMatrix();
+    }
+    // handheld: quick multi-frequency jitter, small but alive
+    goal.x += (Math.sin(tShot * 1.7) * 0.028 + Math.sin(tShot * 4.3) * 0.012) * shotMove.speed;
+    goal.y += (Math.sin(tShot * 2.1 + 1) * 0.02 + Math.sin(tShot * 5.1) * 0.009) * shotMove.speed;
   }
-  camera.position.lerp(goal, Math.min(1, dt * (camPresetName.startsWith("tiktok") ? 3.2 : 1.8)));
+  camera.position.lerp(goal, Math.min(1, dt * (camPresetName.startsWith("tiktok") ? 6 : 1.8)));
   camera.lookAt(safe.look);
   drawBurnSubs();
 

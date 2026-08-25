@@ -419,12 +419,19 @@ app.post("/admin/tiktok", async (req, res) => {
   const id = String(b.id ?? ("tiktok-" + Date.now())).replace(/[^a-zA-Z0-9_-]/g, "");
   const hasCamSteps = inner.some((st: any) => st.do === "tiktokcam" || st.do === "camera");
   const autocut = b.autocut !== false && !hasCamSteps && mode !== "facecam";
-  const CAMS = ["front", "left", "right"] as const;
-  let cut = 0;
+  // tiktok cut grammar: FRONT is home base. Between lines: usually a fresh
+  // front shot (new movement pattern rolls on every cut, even same cam),
+  // sometimes a fast punch to a side cam — and always back to front after.
+  let lastCam = "front";
+  const nextCam = (): string => {
+    if (lastCam !== "front") return (lastCam = "front");
+    if (Math.random() < 0.4) return (lastCam = Math.random() < 0.5 ? "left" : "right");
+    return "front"; // re-cut to front = re-rolled movement, still reads as a cut
+  };
   const body: any[] = [];
   for (const st of inner as any[]) {
     if (autocut && st.do === "say" && body.some((x) => x.do === "say"))
-      body.push({ do: "tiktokcam", cam: CAMS[++cut % 3] });
+      body.push({ do: "tiktokcam", cam: nextCam() });
     body.push(st);
   }
   const script: any[] = [
