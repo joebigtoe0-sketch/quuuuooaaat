@@ -377,69 +377,73 @@ export async function readMentions(
   }
 }
 
-/** Chronological posts in the same conversation as tweetId (last 12, 7-day window). */
+function postFromLookup(j: any): { post?: XPost; parentId?: string } {
+  const t = j?.data;
+  if (!t) return {};
+  const users = usersById(j);
+  const post: XPost = {
+    id: String(t.id),
+    author: users.get(String(t.author_id)) ?? "?",
+    text: cleanText(t.text),
+  };
+  return { post, parentId: parentFrom(t, users, includedTweets(j))?.id };
+}
+
+/** Reply chain only: walk `replied_to` up from tweetId to the root (max 12 hops).
+ *  Chronological (root first). Does NOT pull sibling replies in a big conversation. */
 export async function readTweetThread(tweetId: string): Promise<XPost[]> {
   const id = String(tweetId ?? "").replace(/\D/g, "");
   if (!id) return [];
 
   if (BEARER) {
-    const one = await v2(`/tweets/${id}?${THREAD_FIELDS}`);
-    const conversationId = String(one?.data?.conversation_id ?? id);
-    const q = encodeURIComponent(`conversation_id:${conversationId}`);
-    const j = await v2(`/tweets/search/recent?query=${q}&max_results=25&${THREAD_FIELDS}&sort_order=recency`);
-    if (j?.data?.length) {
-      const newestFirst = parseMentionRows(j);
-      const out: XPost[] = [];
-      const have = new Set<string>();
-      for (const t of [...newestFirst].reverse()) {
-        if (t.parent?.id && t.parent.text && !have.has(t.parent.id)) {
-          out.push({ id: t.parent.id, author: t.parent.author, text: t.parent.text });
-          have.add(t.parent.id);
-        }
-        if (!have.has(t.id)) {
-          out.push({ id: t.id, author: t.author, text: t.text });
-          have.add(t.id);
-        }
-      }
-      if (out.length) return out.slice(-12);
+    const leafFirst: XPost[] = [];
+    const have = new Set<string>();
+    let cur: string | undefined = id;
+    for (let hops = 0; cur && hops < 12; hops++) {
+      if (have.has(cur)) break;
+      have.add(cur);
+      const { post, parentId } = postFromLookup(await v2(`/tweets/${cur}?${THREAD_FIELDS}`));
+      if (!post?.id) break;
+      leafFirst.push(post);
+      cur = parentId;
     }
-    // at least return the target + its parent
-    if (one?.data) {
-      const users = usersById(one);
-      const parent = parentFrom(one.data, users, includedTweets(one));
-      const self: XPost = {
-        id: String(one.data.id),
-        author: users.get(String(one.data.author_id)) ?? "?",
-        text: cleanText(one.data.text),
-      };
-      return [parent, self].filter((p): p is XPost => Boolean(p?.id && p.text));
-    }
+    if (leafFirst.length) return leafFirst.reverse();
   }
 
   if (READ_KEY) {
-    try {
-      const conv = encodeURIComponent(`conversation_id:${id}`);
-      const res = await fetch(
-        `https://api.twitterapi.io/twitter/tweet/advanced_search?query=${conv}&queryType=Latest`,
-        { headers: { "X-API-Key": READ_KEY } },
-      );
-      if (res.ok) {
+    const leafFirst: XPost[] = [];
+    const have = new Set<string>();
+    let cur: string | undefined = id;
+    for (let hops = 0; cur && hops < 12; hops++) {
+      if (have.has(cur)) break;
+      have.add(cur);
+      try {
+        const res = await fetch(
+          `https://api.twitterapi.io/twitter/tweets?tweet_ids=${cur}`,
+          { headers: { "X-API-Key": READ_KEY } },
+        );
+        if (!res.ok) break;
         const data: any = await res.json();
-        const tweets: any[] = data.tweets ?? data.data ?? [];
-        const rows = tweets
-          .map((t: any) => ({
-            id: String(t?.id ?? t?.id_str ?? ""),
-            author: String(t?.author?.userName ?? t?.author?.username ?? t?.author?.screen_name ?? "?"),
-            text: cleanText(t?.text),
-            at: Date.parse(String(t?.createdAt ?? t?.created_at ?? "")) || 0,
-          }))
-          .filter((t: { id: string; text: string }) => t.id && t.text)
-          .sort((a: { at: number }, b: { at: number }) => a.at - b.at);
-        if (rows.length) return rows.map(({ id, author, text }: any) => ({ id, author, text })).slice(-12);
+        const t = data?.tweet ?? (Array.isArray(data?.tweets) ? data.tweets[0] : data?.data);
+        const row = Array.isArray(t) ? t[0] : t;
+        if (!row) break;
+        const author = row.author ?? row.user ?? {};
+        const post: XPost = {
+          id: String(row.id ?? row.id_str ?? cur),
+          author: String(author.userName ?? author.username ?? author.screen_name ?? "?"),
+          text: cleanText(row.text),
+        };
+        if (!post.id || !post.text) break;
+        leafFirst.push(post);
+        const parentId = String(
+          row.inReplyToId ?? row.inReplyToStatusId ?? row.in_reply_to_status_id ?? row.referencedTweet?.id ?? "",
+        ).replace(/\D/g, "");
+        cur = parentId || undefined;
+      } catch {
+        break;
       }
-    } catch {
-      /* fall through */
     }
+    if (leafFirst.length) return leafFirst.reverse();
   }
   return [];
 }

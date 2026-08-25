@@ -376,7 +376,7 @@ app.get("/admin/producer-state", async (_req, res) => {
 });
 
 
-/** Conversation around a tweet — last 12 posts, chronological. Use before a reply. */
+/** Reply chain for a tweet — walk parents to the root, max 12, chronological. Use before a reply. */
 app.get("/admin/x-thread", async (req, res) => {
   const id = String(req.query.id ?? "").replace(/\D/g, "");
   if (!id) return res.status(400).json({ ok: false, why: "id" });
