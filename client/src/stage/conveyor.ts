@@ -99,16 +99,15 @@ export class Conveyor {
     group.add(back);
 
     // async: swap the ticker face for the real token image when it loads.
-    // ipfs gateways are flaky — on error, retry the same hash on alternates.
+    // ipfs.io and gateway.pinata now 403/timeout, so the fallback is our own
+    // server's img-proxy (same-origin: no CORS worries for the WebGL texture,
+    // and it retries live gateways server-side).
     if (item.image) {
       const hash = item.image.match(/\/ipfs\/([^/?#]+)/)?.[1];
+      const proxied = `/img-proxy?u=${encodeURIComponent(item.image)}`;
       const urls = hash
-        ? [
-            `https://pump.mypinata.cloud/ipfs/${hash}?img-width=256&img-dpr=1`,
-            `https://ipfs.io/ipfs/${hash}`,
-            `https://gateway.pinata.cloud/ipfs/${hash}`,
-          ]
-        : [item.image];
+        ? [`https://pump.mypinata.cloud/ipfs/${hash}?img-width=256&img-dpr=1`, proxied]
+        : [item.image, proxied];
       const tryLoad = (idx: number): void => {
         if (idx >= urls.length) return; // all failed → keep ticker face
         this.texLoader.load(

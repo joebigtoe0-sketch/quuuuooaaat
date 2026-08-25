@@ -179,11 +179,12 @@ export function registerPnlCard(app: Express) {
     }
   });
 
-  // token images proxied same-origin so the canvas stays untainted for MediaRecorder.
-  // ipfs.io 403s datacenter IPs, and half of pump.fun's image_uris point there —
-  // rewrite /ipfs/CID URLs through gateways that actually answer (pump.fun's own
-  // pinata first), original URL as the last resort.
-  app.get("/pnl-card/api/img", async (req, res) => {
+  // token images proxied same-origin so canvases stay untainted (pnl-card
+  // MediaRecorder, conveyor WebGL textures) and viewers never hit ipfs.io,
+  // which 403s most callers while half of pump.fun's image_uris point there —
+  // /ipfs/CID URLs are rewritten through gateways that actually answer
+  // (pump.fun's own pinata first), original URL as the last resort.
+  const imgProxy = async (req: any, res: any) => {
     try {
       const u = String(req.query.u || "");
       if (!/^https:\/\//.test(u)) return res.status(400).end("https only");
@@ -207,5 +208,7 @@ export function registerPnlCard(app: Express) {
     } catch {
       res.status(502).end();
     }
-  });
+  };
+  app.get("/pnl-card/api/img", imgProxy);
+  app.get("/img-proxy", imgProxy); // desk surfaces (wallet panel, conveyor) use this alias
 }

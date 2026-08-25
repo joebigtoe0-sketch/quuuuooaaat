@@ -174,7 +174,8 @@ export function mountPanels(stageEl: HTMLElement, httpBase: string, toggleLog?: 
             return (
               `<div class="prow">` +
               (h.image
-                ? `<img src="${h.image}" style="width:22px;height:22px;border-radius:50%;object-fit:cover">`
+                ? // via the server's img-proxy: ipfs.io 403s browsers too, the proxy rewrites to live gateways
+                  `<img src="${httpBase}/img-proxy?u=${encodeURIComponent(h.image)}" style="width:22px;height:22px;border-radius:50%;object-fit:cover">`
                 : `<div style="width:22px;height:22px;border-radius:50%;background:#1c2740"></div>`) +
               `<span style="color:${h.paper ? "#8fd0ff" : "#e8f0ff"};font-weight:bold">$${String(h.symbol).slice(0, 10)}${h.paper ? " ᴾ" : ""}</span>` +
               `<span style="color:#7d8aa5;margin-left:auto">${fmtAmt(h.amount)}</span>` +
