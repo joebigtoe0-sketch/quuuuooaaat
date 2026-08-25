@@ -95,19 +95,19 @@ function transcode(inPath: string, outPath: string, startAt = 0): Promise<boolea
       outPath,
     ];
     const proc = spawn(ffmpegPath as unknown as string, args, { stdio: "ignore" });
+    // long takes on a busy machine encode slower than realtime — 120s was
+    // killing ffmpeg mid-write on a ~90s tiktok (the "corrupted file")
     const t = setTimeout(() => {
       proc.kill();
       resolve(false);
-    }, 120_000);
+    }, 300_000);
     proc.on("exit", (code) => {
       clearTimeout(t);
-      // MediaRecorder webms often end with a malformed tail on long clips —
-      // ffmpeg finishes the whole transcode, THEN exits non-zero on the trailing
-      // garbage. Judge the OUTPUT, not the exit code (13MB of valid mp4 was
-      // being thrown away as "failed").
-      const wrote = fs.existsSync(outPath) && fs.statSync(outPath).size > 100_000;
-      if (wrote && code !== 0) log.warn("film", `ffmpeg exit ${code} but output looks complete — accepting`);
-      resolve(wrote || (code === 0 && fs.existsSync(outPath) && fs.statSync(outPath).size > 10_000));
+      const ok = code === 0 && fs.existsSync(outPath) && fs.statSync(outPath).size > 10_000;
+      // a killed/failed run leaves an unfinalized mp4 (no moov atom — looks
+      // big, plays nowhere): delete it so only real clips ever sit in clips/
+      if (!ok) try { fs.unlinkSync(outPath); } catch {}
+      resolve(ok);
     });
     proc.on("error", () => {
       clearTimeout(t);
