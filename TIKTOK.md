@@ -38,6 +38,29 @@ curl -X POST http://localhost:8490/admin/tiktok -H "content-type: application/js
   green (#00b140) — key it out in CapCut/Premiere and overlay him on the
   thing he's reacting to.
 
+## Background replacement (facecam mode)
+
+Pass `"bg"` with an image or video URL — it renders BEHIND him in-engine, so
+the clip comes out finished, no keying needed:
+
+```bash
+curl -X POST http://localhost:8490/admin/tiktok -H "content-type: application/json" -d '{
+  "mode": "facecam",
+  "bg": "/media/bg/chart.mp4",
+  "script": [ { "do": "say", "text": "chat. look at this chart. LOOK at it." } ]
+}'
+```
+
+Drop bg files in `client/public/media/bg/` (mp4/webm loops autoplay muted;
+png/jpg are static). No `bg` = pure chroma green for keying in the editor.
+
+## Pace
+
+`"pace": "hype"` (default) — front cam holds 1-2s, side stabs 0.4-0.7s,
+fast zooms/moves. `"pace": "chill"` — roughly half the cut rate, gentler
+moves. The rhythm runs client-side the whole time filming is on; explicit
+tiktokcam steps in your script disable it (manual direction).
+
 ## Notes
 
 - Response returns `{ ok, mp4 }` — the transcoded file path under data/clips.

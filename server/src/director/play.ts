@@ -41,7 +41,7 @@ export type PlayStep =
   | { do: "selfie"; anim?: string; expr?: string }
   | { do: "film"; spoken: string; dance?: boolean }
   // ---- tiktok studio (offline filming) ----
-  | { do: "tiktok"; on: boolean; mode?: "studio" | "facecam" }
+  | { do: "tiktok"; on: boolean; mode?: "studio" | "facecam"; bg?: string; pace?: "chill" | "hype"; autocut?: boolean }
   | { do: "tiktokcam"; cam?: "front" | "left" | "right" }
   | { do: "record"; id: string; on: boolean }
   | { do: "wait"; ms: number };
@@ -79,7 +79,13 @@ export async function runPlayScript(
           break;
         }
         case "tiktok": {
-          hub.cue({ t: "tiktok", on: step.on !== false, ...(step.mode ? { mode: step.mode } : {}) });
+          hub.cue({
+            t: "tiktok", on: step.on !== false,
+            ...(step.mode ? { mode: step.mode } : {}),
+            ...(step.bg ? { bg: String(step.bg) } : {}),
+            ...(step.pace ? { pace: step.pace } : {}),
+            ...(step.autocut === false ? { autocut: false } : {}),
+          });
           await sleep(400);
           break;
         }

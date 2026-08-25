@@ -611,6 +611,12 @@ function adoptGlbRoom(scene: THREE.Scene, root: THREE.Object3D): StageLayout {
       look = p.clone().addScaledVector(fwd, 4);
       if (fwd.lengthSq() < 0.5) look = new THREE.Vector3(interior.x, 1.3, interior.z);
     }
+    // tiktok cams aim at the TALENT, not their authored forward — Unity
+    // camera objects export facing -Z while empties face +Z, and guessing
+    // wrong films the wall behind the studio (take two taught this)
+    if (key.startsWith("tiktok") && stations.tiktok) {
+      look = new THREE.Vector3(stations.tiktok.x, 1.45, stations.tiktok.z);
+    }
     cameras[key] = { pos: [p.x, p.y, p.z], look: [look.x, look.y, look.z] };
     console.info(`[stage] camera '${key}' ← Unity '${camNode.name}'${tgtNode ? " (+target)" : " (own rotation)"}`);
   }

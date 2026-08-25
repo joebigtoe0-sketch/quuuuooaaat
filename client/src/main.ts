@@ -192,6 +192,12 @@ let oneShotUntil = 0;
 // Burned-in subtitles (drawn INTO the WebGL canvas so recordings carry them),
 // green-key facecam mode (room hidden, pure green ground), and shot movement.
 let tiktokMode: "studio" | "facecam" | null = null;
+let tiktokPace: "chill" | "hype" = "hype";
+let tiktokAutocut = true;
+let tiktokNextCutAt = 0;
+let tiktokCam: "front" | "left" | "right" = "front";
+let tiktokBgVideo: HTMLVideoElement | null = null;
+let tiktokPrevBg: THREE.Texture | THREE.Color | null | undefined = undefined;
 let tiktokHidden: { obj: THREE.Object3D; was: boolean }[] = [];
 let tiktokPrevClear = new THREE.Color(0x000000);
 let camCutAt = 0; // shot clock, resets on every camera cut
@@ -264,13 +270,71 @@ function drawBurnSubs(): void {
   burnPlane.visible = true;
 }
 
+/** Hard cut to a tiktok camera: teleport + fresh shot-move. */
+function tiktokSnap(cam: "front" | "left" | "right"): void {
+  tiktokCam = cam;
+  const preset = ("tiktok_" + cam) as keyof typeof CAM;
+  camTarget = CAM[preset];
+  camPresetName = "tiktok_" + cam;
+  camCutAt = performance.now();
+  if (baseFov === 0) baseFov = camera.fov;
+  camera.position.set(camTarget.pos.x, camTarget.pos.y, camTarget.pos.z);
+  camera.lookAt(camTarget.look);
+  rollShotMove();
+}
+
+/** The cut rhythm: front is home (1-2.2s holds), sides are fast stabs
+ *  (0.4-0.7s), always back to front. chill pace roughly doubles the holds. */
+function tiktokRhythm(now: number): void {
+  if (!tiktokMode || !tiktokAutocut) return;
+  if (now < tiktokNextCutAt) return;
+  const mul = tiktokPace === "chill" ? 2.1 : 1;
+  if (tiktokCam !== "front") {
+    tiktokSnap("front");
+    tiktokNextCutAt = now + (1000 + Math.random() * 1200) * mul;
+  } else if (Math.random() < 0.55) {
+    tiktokSnap(Math.random() < 0.5 ? "left" : "right");
+    tiktokNextCutAt = now + (400 + Math.random() * 300) * mul;
+  } else {
+    tiktokSnap("front"); // same cam, fresh move — still reads as a cut
+    tiktokNextCutAt = now + (900 + Math.random() * 900) * mul;
+  }
+}
+
+function setTiktokBg(url: string | undefined): void {
+  // restore previous background first
+  if (tiktokPrevBg !== undefined) {
+    scene.background = tiktokPrevBg as any;
+    tiktokPrevBg = undefined;
+  }
+  if (tiktokBgVideo) { tiktokBgVideo.pause(); tiktokBgVideo.src = ""; tiktokBgVideo = null; }
+  if (!url) return;
+  tiktokPrevBg = scene.background as any;
+  if (/\.(mp4|webm|mov)(\?|$)/i.test(url)) {
+    const v = document.createElement("video");
+    v.src = url; v.muted = true; v.loop = true; v.playsInline = true; v.crossOrigin = "anonymous";
+    void v.play().catch(() => {});
+    const tex = new THREE.VideoTexture(v);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    scene.background = tex;
+    tiktokBgVideo = v;
+  } else {
+    new THREE.TextureLoader().load(url, (tex) => {
+      tex.colorSpace = THREE.SRGBColorSpace;
+      if (tiktokMode) scene.background = tex;
+    });
+  }
+}
+
 function setTiktokMode(on: boolean, mode: "studio" | "facecam" = "studio"): void {
   // restore anything a previous mode hid
   for (const h of tiktokHidden) h.obj.visible = h.was;
   tiktokHidden = [];
   if (tiktokMode === "facecam" || !on) renderer.setClearColor(tiktokPrevClear, 1);
   tiktokMode = on ? mode : null;
-  if (!on) { burnPlane.visible = false; burnLine = null; return; }
+  if (!on) { burnPlane.visible = false; burnLine = null; setTiktokBg(undefined); tiktokNextCutAt = 0; return; }
+  tiktokNextCutAt = performance.now() + 800;
+  tiktokCam = "front";
   if (mode === "facecam") {
     // hide EVERYTHING except the avatar and lights — pure green key backdrop
     renderer.getClearColor(tiktokPrevClear);
@@ -376,7 +440,10 @@ function applyCue(cue: Cue): void {
       else recorder.stop();
       break;
     case "tiktok":
+      tiktokPace = cue.pace ?? "hype";
+      tiktokAutocut = cue.autocut !== false;
       setTiktokMode(cue.on, cue.mode ?? "studio");
+      if (cue.on) setTiktokBg(cue.bg);
       break;
     case "selfie":
       void takeSelfie(cue);
@@ -479,20 +546,23 @@ function frame(): void {
       : CAM.wide;
   const sway = safe === CAM.wide ? Math.sin(camDolly * 0.3) * 0.4 : 0;
   let goal = new THREE.Vector3(safe.pos.x + sway, safe.pos.y, safe.pos.z);
+  tiktokRhythm(performance.now());
   if (camPresetName.startsWith("tiktok") && shotMove) {
     // tiktok grammar: every shot MOVES — push, pull, zoom or truck, plus
     // handheld micro-shake. dead-static frames get scrolled past
     const tShot = (performance.now() - camCutAt) / 1000;
     const view = new THREE.Vector3().subVectors(safe.look, safe.pos).normalize();
     const side = new THREE.Vector3().crossVectors(view, new THREE.Vector3(0, 1, 0)).normalize();
-    const amt = Math.min(0.55, tShot * 0.09 * shotMove.speed);
+    const paceMul = tiktokPace === "hype" ? 2.2 : 1;
+    const amt = Math.min(0.6, tShot * 0.09 * shotMove.speed * paceMul);
     if (shotMove.type === "pushin") goal.addScaledVector(view, amt);
     else if (shotMove.type === "pullout") goal.addScaledVector(view, -amt * 0.7);
     else if (shotMove.type === "truck") goal.addScaledVector(side, Math.sin(tShot * 0.55) * 0.3 * shotMove.dir);
     if (shotMove.type === "zoomin" || shotMove.type === "zoomout") {
+      const zMul = tiktokPace === "hype" ? 2.4 : 1;
       const fovGoal = shotMove.type === "zoomin"
-        ? baseFov - Math.min(16, tShot * 3.4 * shotMove.speed)
-        : baseFov + Math.min(10, tShot * 2.6 * shotMove.speed);
+        ? baseFov - Math.min(18, tShot * 3.4 * shotMove.speed * zMul)
+        : baseFov + Math.min(11, tShot * 2.6 * shotMove.speed * zMul);
       camera.fov += (fovGoal - camera.fov) * Math.min(1, dt * 5);
       camera.updateProjectionMatrix();
     }

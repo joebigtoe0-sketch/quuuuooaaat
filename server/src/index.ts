@@ -418,24 +418,14 @@ app.post("/admin/tiktok", async (req, res) => {
   const mode = b.mode === "facecam" ? "facecam" : "studio";
   const id = String(b.id ?? ("tiktok-" + Date.now())).replace(/[^a-zA-Z0-9_-]/g, "");
   const hasCamSteps = inner.some((st: any) => st.do === "tiktokcam" || st.do === "camera");
+  // the cut RHYTHM lives client-side now (sub-second stabs need renderer
+  // timing, not HTTP timing) — explicit tiktokcam steps switch it off
   const autocut = b.autocut !== false && !hasCamSteps && mode !== "facecam";
-  // tiktok cut grammar: FRONT is home base. Between lines: usually a fresh
-  // front shot (new movement pattern rolls on every cut, even same cam),
-  // sometimes a fast punch to a side cam — and always back to front after.
-  let lastCam = "front";
-  const nextCam = (): string => {
-    if (lastCam !== "front") return (lastCam = "front");
-    if (Math.random() < 0.4) return (lastCam = Math.random() < 0.5 ? "left" : "right");
-    return "front"; // re-cut to front = re-rolled movement, still reads as a cut
-  };
-  const body: any[] = [];
-  for (const st of inner as any[]) {
-    if (autocut && st.do === "say" && body.some((x) => x.do === "say"))
-      body.push({ do: "tiktokcam", cam: nextCam() });
-    body.push(st);
-  }
+  const pace = b.pace === "chill" ? "chill" : "hype";
+  const bg = typeof b.bg === "string" && b.bg.length > 1 ? b.bg : undefined;
+  const body: any[] = [...(inner as any[])];
   const script: any[] = [
-    { do: "tiktok", on: true, mode },
+    { do: "tiktok", on: true, mode, pace, ...(bg ? { bg } : {}), ...(autocut ? {} : { autocut: false }) },
     { do: "goto", point: "tiktok" },
     { do: "tiktokcam", cam: "front" },
     { do: "record", id, on: true },
