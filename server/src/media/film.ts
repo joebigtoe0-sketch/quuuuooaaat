@@ -89,7 +89,14 @@ function transcode(inPath: string, outPath: string, startAt = 0): Promise<boolea
       "-crf", "23",
       "-pix_fmt", "yuv420p",
       "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2", // even dims for h264
+      // MediaRecorder canvas capture is VARIABLE framerate — when the GPU
+      // stutters mid-take the timestamps go uneven and playback judders even
+      // though no frame is missing. Resample to a hard 30fps CFR and keep
+      // audio glued to it.
+      "-r", "30",
+      "-fps_mode", "cfr",
       "-c:a", "aac",
+      "-af", "aresample=async=1:first_pts=0",
       "-b:a", "128k",
       "-movflags", "+faststart",
       outPath,
