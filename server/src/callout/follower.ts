@@ -297,8 +297,10 @@ async function watchTick(): Promise<void> {
         hooks?.narrateExit(mint, pos.symbol, reason, r.solReceived ?? 0, pos.costSol * cfg.callerFollowTpFraction);
       } else {
         log.info("follower", `EXITED $${pos.symbol}: ${reason}${r.dry ? " [dry]" : ""}`);
-        const costShare = phase === "runner" ? pos.costSol * (1 - cfg.callerFollowTpFraction) : pos.costSol;
-        hooks?.narrateExit(mint, pos.symbol, reason, r.solReceived ?? 0, costShare);
+        // round trip: 75% TP + runner stop is one trade. Scoring only the
+        // last slice against 25% of cost calls a winner a loser.
+        const totalGot = pos.soldSol ?? r.solReceived ?? 0;
+        hooks?.narrateExit(mint, pos.symbol, reason, totalGot, pos.costSol);
         delete st.pos[mint];
         save();
       }

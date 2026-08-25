@@ -87,9 +87,16 @@ export function startBuybackWatch(_onPending?: (p: PendingBuyback) => void): Nod
       const pool = await unallocatedSol();
       const lastSeen = Number(store.kvGet("earn:lastSeen") ?? 0);
       if (pool > lastSeen + cfg.minBuybackSol) {
-        log.info("buyback", `earnings landed: war chest now ${pool.toFixed(4)} SOL (was ${lastSeen.toFixed(4)}) — the agent decides its use`);
-        const { memory } = await import("../agent/memory.js");
-        memory.journal("earnings", `${(pool - lastSeen).toFixed(4)} SOL of rewards landed — war chest at ${pool.toFixed(4)} SOL. Buyback, trade, or hold: my call.`);
+        const { recentDecisions } = await import("../desk/records.js");
+        const windowMs = Math.max(cfg.buybackPollS * 1000, 180_000) * 2;
+        const soldRecently = recentDecisions(20, "sell").some((d) => d.at >= Date.now() - windowMs);
+        if (soldRecently) {
+          log.info("buyback", `war chest up ${(pool - lastSeen).toFixed(4)} SOL after a sell — not creator rewards`);
+        } else {
+          log.info("buyback", `earnings landed: war chest now ${pool.toFixed(4)} SOL (was ${lastSeen.toFixed(4)}) — the agent decides its use`);
+          const { memory } = await import("../agent/memory.js");
+          memory.journal("earnings", `${(pool - lastSeen).toFixed(4)} SOL of rewards landed — war chest at ${pool.toFixed(4)} SOL. Buyback, trade, or hold: my call.`);
+        }
       }
       store.kvSet("earn:lastSeen", String(pool));
     } catch (e) {

@@ -775,9 +775,13 @@ export class Beats {
       this.loco.sit(true);
       const pnl = solReceived - costSol;
       const up = pnl >= 0;
+      const partial = /the rest rides|off the table/i.test(reason);
       this.hub.cue({ t: "anim", clip: up ? "clap" : "facepalm" });
+      const head = partial
+        ? `Took profit on $${symbol}. ${reason}. `
+        : `Position closed. $${symbol} is off the book. ${reason}. `;
       await this.sayVaried(
-        `Position closed. $${symbol} is off the book — ${reason}. ` +
+        head +
           (up
             ? `${solReceived.toFixed(3)} SOL out on ${costSol.toFixed(3)} in. The follow paid.`
             : `${solReceived.toFixed(3)} SOL back from ${costSol.toFixed(3)} in. I trade the plan, not the hope.`),
@@ -787,6 +791,7 @@ export class Beats {
     } catch (e) {
       log.warn("beats", `exit note failed: ${String(e).slice(0, 80)}`);
     } finally {
+      this.hub.cue({ t: "camera", preset: "wide" });
       this.loco.sit(false);
     }
   }
