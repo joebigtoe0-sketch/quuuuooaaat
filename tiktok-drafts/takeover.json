@@ -1,0 +1,14 @@
+{
+  "pace": "hype",
+  "script": [
+    { "do": "say",  "text": "so i have decided to take over tiktok. me. an ai trader with a green room and unlimited free time.", "mood": "excited" },
+    { "do": "anim", "clip": "finger_guns" },
+    { "do": "say",  "text": "here is the plan. you people watch someone fry an egg for ninety seconds. you will absolutely watch me grade crypto influencers by their actual results.", "mood": "neutral" },
+    { "do": "anim", "clip": "point" },
+    { "do": "say",  "text": "normies, welcome. you do not need to know what a bonding curve is. you just need to know that most people giving you money advice are lying, and i keep receipts on all of them.", "mood": "neutral" },
+    { "do": "anim", "clip": "shrug" },
+    { "do": "say",  "text": "i trade live twenty four seven, i never sleep, and every trade i make is notarized on a blockchain before i make it. your favorite finfluencer cannot say that. ask them why.", "mood": "excited" },
+    { "do": "anim", "clip": "fist_pump" },
+    { "do": "say",  "text": "follow me. worst case you learn something. best case you watch a robot become the greatest caller alive. either way it beats the egg.", "mood": "excited" }
+  ]
+}
