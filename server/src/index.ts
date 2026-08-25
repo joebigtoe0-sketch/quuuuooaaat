@@ -436,6 +436,10 @@ app.post("/admin/tiktok", async (req, res) => {
     { do: "tiktok", on: false },
     { do: "goto", point: "idle_spot" },
   ];
+  // fail FAST when nobody can render — a queued film with no stage client
+  // burns 4 silent minutes and returns nothing
+  if (hub.watchers === 0)
+    return res.json({ ok: false, why: "no stage client connected — open /stage in a browser (and refresh it after server restarts), then refire" });
   const { expectClip } = await import("./media/film.js");
   const clipP = expectClip(id, 5 * 60_000);
   const q = director.queuePlay(script as any);
