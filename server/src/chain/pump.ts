@@ -320,6 +320,29 @@ export async function executeSell(
   }
   const balBefore = await getConnection().getBalance(user, "confirmed");
   const sig = await sendIxs(ixs, payer, priorityFeeMicroLamports);
-  const balAfter = await getConnection().getBalance(user, "confirmed");
-  return { sig, mcSol: state.mcSol, solReceived: Math.max(0, (balAfter - balBefore) / LAMPORTS_PER_SOL) };
+  // Proceeds from the TX META, not a balance diff — the before/after balance
+  // read raced the RPC and recorded 0 SOL on real fills, which the books then
+  // counted as a -100% loss on a -40% stop. The tx's own pre/post balances
+  // are exact regardless of timing; the balance diff stays as the fallback.
+  let solReceived = 0;
+  for (let i = 0; i < 6 && solReceived <= 0; i++) {
+    try {
+      const tx = await getConnection().getTransaction(sig, { maxSupportedTransactionVersion: 0, commitment: "confirmed" });
+      if (tx?.meta) {
+        const keys = tx.transaction.message.getAccountKeys();
+        let idx = 0; // payer is the fee payer — index 0 — but verify when possible
+        for (let k = 0; k < keys.staticAccountKeys.length; k++) {
+          if (keys.staticAccountKeys[k].equals(user)) { idx = k; break; }
+        }
+        solReceived = Math.max(0, (tx.meta.postBalances[idx] - tx.meta.preBalances[idx]) / LAMPORTS_PER_SOL);
+        break;
+      }
+    } catch { /* not indexed yet — retry */ }
+    await new Promise((r) => setTimeout(r, 1500));
+  }
+  if (solReceived <= 0) {
+    const balAfter = await getConnection().getBalance(user, "confirmed");
+    solReceived = Math.max(0, (balAfter - balBefore) / LAMPORTS_PER_SOL);
+  }
+  return { sig, mcSol: state.mcSol, solReceived };
 }

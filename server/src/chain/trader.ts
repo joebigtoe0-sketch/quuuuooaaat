@@ -363,6 +363,45 @@ export async function tradeSell(
   }
 }
 
+/** One-shot book repair: closed live positions recorded with 0 proceeds
+ *  (the balance-diff race) get their REAL proceeds recovered from each sell
+ *  tx's meta via the decision ledger's txSigs. Idempotent — only touches
+ *  rows still at 0. */
+export async function repairProceeds(): Promise<{ fixed: number; details: string[] }> {
+  const { decisionsForMint } = await import("../desk/records.js");
+  const { getConnection } = await import("./solana.js");
+  const { LAMPORTS_PER_SOL, PublicKey } = await import("@solana/web3.js");
+  const me = loadWallet()?.publicKey;
+  if (!me) return { fixed: 0, details: ["no wallet"] };
+  const details: string[] = [];
+  let fixed = 0;
+  for (const p of positions) {
+    if (!p.closed || p.dry || (p.soldSol ?? 0) > 0) continue;
+    const sells = decisionsForMint(p.mint).filter((d: any) => d.kind === "sell" && d.txSig);
+    let total = 0;
+    for (const d of sells as any[]) {
+      try {
+        const tx = await getConnection().getTransaction(d.txSig, { maxSupportedTransactionVersion: 0, commitment: "confirmed" });
+        if (!tx?.meta) continue;
+        const keys = tx.transaction.message.getAccountKeys();
+        let idx = 0;
+        for (let k = 0; k < keys.staticAccountKeys.length; k++)
+          if (keys.staticAccountKeys[k].equals(new PublicKey(me))) { idx = k; break; }
+        total += Math.max(0, (tx.meta.postBalances[idx] - tx.meta.preBalances[idx]) / LAMPORTS_PER_SOL);
+      } catch { /* tx pruned or RPC hiccup — skip */ }
+      await new Promise((r) => setTimeout(r, 300));
+    }
+    if (total > 0) {
+      p.soldSol = total;
+      p.closed.solReceived = total;
+      fixed++;
+      details.push(`$${p.symbol}: recovered ${total.toFixed(4)} SOL from ${sells.length} sell tx(s)`);
+    }
+  }
+  if (fixed) save();
+  return { fixed, details };
+}
+
 export async function positionsSummary(): Promise<{
   open: number;
   realizedSol: number;
