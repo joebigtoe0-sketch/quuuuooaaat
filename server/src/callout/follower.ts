@@ -101,6 +101,13 @@ export async function attemptFollowBuy(
     // no skin, no trade — their wallet IS our exit signal
     if (!c.skin || c.skin.costUsd < 10) return false;
     if (!(c.mcAtCall > 0) || !(rep.med > 1)) return false;
+    // THE H2 GATE — the 14-trade autopsy's one clean separator: losers came
+    // from spray-callers (median 17 graded calls, 21% hit-2x); winners from
+    // callers who actually land 2x. Median alone lets the spammers through.
+    if (rep.h2 <= cfg.callerFollowMinH2) {
+      log.info("follower", `pass ${c.mint.slice(0, 8)}… — ${c.username || "caller"} h2 ${rep.h2}% ≤ ${cfg.callerFollowMinH2}% bar (${rep.calls} calls — spray, not skill)`);
+      return false;
+    }
 
     // sub-$10k "calls" are launch snipes wearing a caller costume — NEEDLE
     // (called at $2,890 by a 5-call "8.1x median" farmer) taught this gate

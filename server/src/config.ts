@@ -139,6 +139,7 @@ export const cfg = {
   callerFollowMaxFromFirstCall: num("CALLER_FOLLOW_MAX_FROM_FIRST_CALL", 1.4), // mcNow vs EARLIEST call's mc — later = the move already happened
   callerFollowMedCap: num("CALLER_FOLLOW_MED_CAP", 3), // clamp the median used in room/target math — an 8x med over 5 calls is a pump farmer, not a target
   callerFollowMinCallMc: num("CALLER_FOLLOW_MIN_CALL_MC", 10_000), // calls on sub-$10k coins are launch snipes wearing a caller costume
+  callerFollowMinH2: num("CALLER_FOLLOW_MIN_H2", 27), // caller must land 2x on >this % of graded calls — the 08-25 autopsy: losers followed 11-25% callers, winners 33-38%
 
   // ---- midcap: the investment book — omo-inspired mid-cap buys, NO auto-exits ----
   midcap: bool("MIDCAP", true),
