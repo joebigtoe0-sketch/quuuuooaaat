@@ -221,8 +221,8 @@ const burnCtx = burnCanvas.getContext("2d")!;
 const burnTex = new THREE.CanvasTexture(burnCanvas);
 const burnMat = new THREE.MeshBasicMaterial({ map: burnTex, transparent: true, depthTest: false, depthWrite: false });
 // sized to survive a 9:16 CENTER CROP of the 16:9 canvas — tiktok edits crop vertical
-const burnPlane = new THREE.Mesh(new THREE.PlaneGeometry(0.62, 0.2), burnMat);
-burnPlane.position.set(0, -0.34, -1.35); // lower-center of frame, in front of the camera
+const burnPlane = new THREE.Mesh(new THREE.PlaneGeometry(0.64, 0.2), burnMat);
+burnPlane.position.set(0, -0.5, -1.35); // lower-center of the 9:16 frame
 burnPlane.renderOrder = 999;
 burnPlane.visible = false;
 camera.add(burnPlane);
@@ -326,7 +326,18 @@ function setTiktokBg(url: string | undefined): void {
   }
 }
 
+function setStageAspect(vertical: boolean): void {
+  // 9:16 drawing buffer while filming tiktoks — the recording IS the canvas.
+  // CSS box stays 16:9 (the preview squishes; the file is correct).
+  const w = vertical ? 1080 : 1920;
+  const h = vertical ? 1920 : 1080;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+
 function setTiktokMode(on: boolean, mode: "studio" | "facecam" = "studio"): void {
+  setStageAspect(on);
   // restore anything a previous mode hid
   for (const h of tiktokHidden) h.obj.visible = h.was;
   tiktokHidden = [];

@@ -279,11 +279,29 @@ function adoptGlbRoom(scene: THREE.Scene, root: THREE.Object3D): StageLayout {
   // and lands in its cork region. Recreate the authored look instead: the
   // Synty prototype YELLOW GRID, generated as a seamless tile and box-projected
   // in world space so squares tile per half-meter exactly like in Unity.
+  const inStudioGroup = (o: THREE.Object3D): boolean => {
+    let p: THREE.Object3D | null = o;
+    while (p) {
+      if (/^(tiktok|podcast)$/i.test(p.name?.trim() ?? "")) return true;
+      p = p.parent;
+    }
+    return false;
+  };
   root.traverse((o) => {
     const m = o as THREE.Mesh;
     if (!m.isMesh || !m.material) return;
     const mats = Array.isArray(m.material) ? m.material : [m.material];
     if (!mats.some((mat: any) => /PolygonPrototype/i.test(mat?.name ?? ""))) return;
+    // the STUDIOS keep their authored look — walls/floor there are the
+    // chroma key, and the yellow-grid swap was repainting them (takes 2+3)
+    if (inStudioGroup(m)) {
+      const green = mats.map((mat: any) =>
+        /PolygonPrototype/i.test(mat?.name ?? "")
+          ? new THREE.MeshStandardMaterial({ name: "ChromaGreen", color: 0x00b140, roughness: 1 })
+          : mat);
+      m.material = Array.isArray(m.material) ? green : green[0];
+      return;
+    }
     const allProto = mats.every((mat: any) => /PolygonPrototype/i.test(mat?.name ?? ""));
     if (allProto) boxProjectUVs(m, 0.5); // safe: no other material shares these UVs
     const isFloor = /floor/i.test(m.name);

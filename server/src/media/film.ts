@@ -35,7 +35,10 @@ export async function receiveClip(id: string, webm: Buffer): Promise<string | nu
     const webmPath = path.join(cfg.clipsDir, `${id}.webm`);
     fs.writeFileSync(webmPath, webm);
     const mp4Path = path.join(cfg.clipsDir, `${id}.mp4`);
-    const ok = await transcode(webmPath, mp4Path);
+    // tiktok clips: chop the dead lead-in (recorder warmup + TTS latency) —
+    // silent opening seconds lose the scroll
+    const startAt = id.startsWith("tiktok-") ? await detectFirstSound(webmPath) : 0;
+    const ok = await transcode(webmPath, mp4Path, startAt);
     // the webm is only worth keeping when the transcode failed (it's the
     // sole copy then) — otherwise it just doubles clip disk
     if (ok) try { fs.unlinkSync(webmPath); } catch {}
@@ -54,11 +57,32 @@ export async function receiveClip(id: string, webm: Buffer): Promise<string | nu
   }
 }
 
-function transcode(inPath: string, outPath: string): Promise<boolean> {
+/** First audible moment (s) via silencedetect — 0 if audio starts hot. */
+function detectFirstSound(inPath: string): Promise<number> {
+  return new Promise((resolve) => {
+    if (!ffmpegPath) return resolve(0);
+    const proc = spawn(ffmpegPath as unknown as string,
+      ["-i", inPath, "-af", "silencedetect=noise=-40dB:d=0.3", "-f", "null", "-"],
+      { stdio: ["ignore", "ignore", "pipe"] });
+    let err = "";
+    proc.stderr!.on("data", (d) => (err += String(d)));
+    const t = setTimeout(() => { proc.kill(); resolve(0); }, 30_000);
+    proc.on("exit", () => {
+      clearTimeout(t);
+      // leading silence = a silence that STARTS at ~0; its end is our cut
+      const m = err.match(/silence_start:\s*(-?[\d.]+)[\s\S]*?silence_end:\s*([\d.]+)/);
+      if (m && parseFloat(m[1]) < 0.4) return resolve(Math.max(0, parseFloat(m[2]) - 0.25));
+      resolve(0);
+    });
+  });
+}
+
+function transcode(inPath: string, outPath: string, startAt = 0): Promise<boolean> {
   return new Promise((resolve) => {
     if (!ffmpegPath) return resolve(false);
     const args = [
       "-y",
+      ...(startAt > 0.05 ? ["-ss", startAt.toFixed(2)] : []),
       "-i", inPath,
       "-c:v", "libx264",
       "-preset", "veryfast",
