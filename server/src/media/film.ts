@@ -101,7 +101,13 @@ function transcode(inPath: string, outPath: string, startAt = 0): Promise<boolea
     }, 120_000);
     proc.on("exit", (code) => {
       clearTimeout(t);
-      resolve(code === 0 && fs.existsSync(outPath) && fs.statSync(outPath).size > 10_000);
+      // MediaRecorder webms often end with a malformed tail on long clips —
+      // ffmpeg finishes the whole transcode, THEN exits non-zero on the trailing
+      // garbage. Judge the OUTPUT, not the exit code (13MB of valid mp4 was
+      // being thrown away as "failed").
+      const wrote = fs.existsSync(outPath) && fs.statSync(outPath).size > 100_000;
+      if (wrote && code !== 0) log.warn("film", `ffmpeg exit ${code} but output looks complete — accepting`);
+      resolve(wrote || (code === 0 && fs.existsSync(outPath) && fs.statSync(outPath).size > 10_000));
     });
     proc.on("error", () => {
       clearTimeout(t);
