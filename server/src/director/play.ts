@@ -41,7 +41,7 @@ export type PlayStep =
   | { do: "selfie"; anim?: string; expr?: string }
   | { do: "film"; spoken: string; dance?: boolean }
   // ---- tiktok studio (offline filming) ----
-  | { do: "tiktok"; on: boolean; mode?: "studio" | "facecam"; bg?: string; pace?: "chill" | "hype"; autocut?: boolean }
+  | { do: "tiktok"; on: boolean; mode?: "studio" | "facecam"; bg?: string; pace?: "chill" | "hype"; autocut?: boolean; set?: "green" | "homeoffice" }
   | { do: "tiktokcam"; cam?: "front" | "left" | "right" | "face" }
   | { do: "record"; id: string; on: boolean }
   | { do: "wait"; ms: number };
@@ -85,6 +85,7 @@ export async function runPlayScript(
             ...(step.bg ? { bg: String(step.bg) } : {}),
             ...(step.pace ? { pace: step.pace } : {}),
             ...(step.autocut === false ? { autocut: false } : {}),
+            ...(step.set ? { set: step.set } : {}),
           });
           await sleep(400);
           break;

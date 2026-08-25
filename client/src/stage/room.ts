@@ -282,6 +282,9 @@ function adoptGlbRoom(scene: THREE.Scene, root: THREE.Object3D): StageLayout {
   const inStudioGroup = (o: THREE.Object3D): boolean => {
     let p: THREE.Object3D | null = o;
     while (p) {
+      // the HomeOffice set inside the studio keeps its authored look —
+      // only the bare studio shell is the chroma key
+      if (/^homeoffice$/i.test(p.name?.trim() ?? "")) return false;
       if (/^(tiktok|podcast)$/i.test(p.name?.trim() ?? "")) return true;
       p = p.parent;
     }

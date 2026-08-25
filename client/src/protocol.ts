@@ -110,7 +110,7 @@ export type Cue =
   | { t: "fx"; kind: "stamp_rekt" | "stamp_called" | "confetti" | "ding" | "buzzer" }
   | { t: "mood"; mood: "neutral" | "excited" | "disgusted" | "thinking" }
   | { t: "record"; on: boolean; id: string }
-  | { t: "tiktok"; on: boolean; mode?: "studio" | "facecam"; bg?: string; pace?: "chill" | "hype"; autocut?: boolean } // filming mode: burned subs, bg replace, client cut rhythm
+  | { t: "tiktok"; on: boolean; mode?: "studio" | "facecam"; bg?: string; pace?: "chill" | "hype"; autocut?: boolean; set?: "green" | "homeoffice" } // filming mode: burned subs, bg replace, client cut rhythm
   | { t: "selfie"; id: string; anim?: string; expr?: string }
   | { t: "feed"; entry: { at: number; kind: string; text: string } }
   | { t: "board"; lines: string[] }

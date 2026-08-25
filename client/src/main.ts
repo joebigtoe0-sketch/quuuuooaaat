@@ -198,6 +198,24 @@ let tiktokAutocut = true;
 let tiktokNextCutAt = 0;
 let tiktokCam: "front" | "left" | "right" | "face" = "front";
 let tiktokBgVideo: HTMLVideoElement | null = null;
+let tiktokSetRestore: { obj: THREE.Object3D; was: boolean }[] = [];
+
+/** Studio set dressing: "green" hides the HomeOffice, "homeoffice" shows it
+ *  and hides the chroma-green shell. Restored when filming ends. */
+function setTiktokSet(set: "green" | "homeoffice"): void {
+  for (const h of tiktokSetRestore) h.obj.visible = h.was;
+  tiktokSetRestore = [];
+  const flip = (obj: THREE.Object3D, vis: boolean) => {
+    tiktokSetRestore.push({ obj, was: obj.visible });
+    obj.visible = vis;
+  };
+  scene.traverse((o) => {
+    if (/^homeoffice$/i.test(o.name?.trim() ?? "")) flip(o, set === "homeoffice");
+    const m = o as THREE.Mesh;
+    if (m.isMesh && m.material && !Array.isArray(m.material) && (m.material as any).name === "ChromaGreen")
+      flip(m, set === "green");
+  });
+}
 let tiktokPrevBg: THREE.Texture | THREE.Color | null | undefined = undefined;
 let tiktokHidden: { obj: THREE.Object3D; was: boolean }[] = [];
 let tiktokPrevClear = new THREE.Color(0x000000);
@@ -348,7 +366,12 @@ function setTiktokMode(on: boolean, mode: "studio" | "facecam" = "studio"): void
   tiktokHidden = [];
   if (tiktokMode === "facecam" || !on) renderer.setClearColor(tiktokPrevClear, 1);
   tiktokMode = on ? mode : null;
-  if (!on) { burnPlane.visible = false; burnLine = null; setTiktokBg(undefined); tiktokNextCutAt = 0; return; }
+  if (!on) {
+    burnPlane.visible = false; burnLine = null; setTiktokBg(undefined); tiktokNextCutAt = 0;
+    for (const h of tiktokSetRestore) h.obj.visible = h.was;
+    tiktokSetRestore = [];
+    return;
+  }
   tiktokNextCutAt = performance.now() + 800;
   tiktokCam = "front";
   if (mode === "facecam") {
@@ -459,7 +482,10 @@ function applyCue(cue: Cue): void {
       tiktokPace = cue.pace ?? "hype";
       tiktokAutocut = cue.autocut !== false;
       setTiktokMode(cue.on, cue.mode ?? "studio");
-      if (cue.on) setTiktokBg(cue.bg);
+      if (cue.on) {
+        setTiktokBg(cue.bg);
+        if ((cue.mode ?? "studio") === "studio") setTiktokSet(cue.set ?? "green");
+      }
       break;
     case "selfie":
       void takeSelfie(cue);

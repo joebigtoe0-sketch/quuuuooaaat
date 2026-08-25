@@ -424,8 +424,9 @@ app.post("/admin/tiktok", async (req, res) => {
   const pace = b.pace === "chill" ? "chill" : "hype";
   const bg = typeof b.bg === "string" && b.bg.length > 1 ? b.bg : undefined;
   const body: any[] = [...(inner as any[])];
+  const set = b.set === "homeoffice" ? "homeoffice" : undefined;
   const script: any[] = [
-    { do: "tiktok", on: true, mode, pace, ...(bg ? { bg } : {}), ...(autocut ? {} : { autocut: false }) },
+    { do: "tiktok", on: true, mode, pace, ...(bg ? { bg } : {}), ...(set ? { set } : {}), ...(autocut ? {} : { autocut: false }) },
     { do: "goto", point: "tiktok" },
     { do: "tiktokcam", cam: "front" },
     { do: "record", id, on: true },
