@@ -509,7 +509,7 @@ app.post("/admin/film", async (req, res) => {
   if (!inner.length) return res.json({ ok: false, why: "script must be a non-empty array of steps" });
   if (hub.watchers === 0) return res.json({ ok: false, why: "no stage client connected — open /stage first" });
   const id = String(b.id ?? ("film-" + Date.now())).replace(/[^a-zA-Z0-9_-]/g, "");
-  const script: any[] = [{ do: "record", id, on: true }, ...inner, { do: "wait", ms: 900 }, { do: "record", id, on: false }];
+  const script: any[] = [{ do: "burnsubs", on: true }, { do: "record", id, on: true }, ...inner, { do: "wait", ms: 900 }, { do: "record", id, on: false }, { do: "burnsubs", on: false }];
   const { expectClip } = await import("./media/film.js");
   const clipP = expectClip(id, 6 * 60_000);
   const q = director.queuePlay(script as any);

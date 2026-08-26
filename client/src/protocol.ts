@@ -118,7 +118,8 @@ export type Cue =
   | { t: "guest_pose"; x: number; y?: number; z: number; heading: number; anim: string; seated: boolean }
   | { t: "podcast_chat"; title: string; lines: { user: string; text: string }[] }
   | { t: "record"; on: boolean; id: string }
-  | { t: "tiktok"; on: boolean; mode?: "studio" | "facecam"; bg?: string; pace?: "chill" | "hype"; autocut?: boolean; set?: "green" | "homeoffice" } // filming mode: burned subs, bg replace, client cut rhythm
+  | { t: "tiktok"; on: boolean; mode?: "studio" | "facecam"; bg?: string; pace?: "chill" | "hype"; autocut?: boolean; set?: "green" | "homeoffice" }
+  | { t: "burnsubs"; on: boolean } // burned-in subtitles for 16:9 films (tiktok mode has its own) // filming mode: burned subs, bg replace, client cut rhythm
   | { t: "selfie"; id: string; anim?: string; expr?: string }
   | { t: "feed"; entry: { at: number; kind: string; text: string } }
   | { t: "board"; lines: string[] }

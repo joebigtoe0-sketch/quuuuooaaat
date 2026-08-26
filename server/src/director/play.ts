@@ -45,7 +45,8 @@ export type PlayStep =
   | { do: "tiktok"; on: boolean; mode?: "studio" | "facecam"; bg?: string; pace?: "chill" | "hype"; autocut?: boolean; set?: "green" | "homeoffice" }
   | { do: "tiktokcam"; cam?: "front" | "left" | "right" | "face" }
   | { do: "record"; id: string; on: boolean }
-  | { do: "wait"; ms: number };
+  | { do: "wait"; ms: number }
+  | { do: "burnsubs"; on: boolean };
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, simT(ms)));
 
@@ -99,6 +100,10 @@ export async function runPlayScript(
         case "record": {
           hub.cue({ t: "record", on: step.on !== false, id: String(step.id) });
           if (step.on !== false) await sleep(1000); // recorder warmup before action
+          break;
+        }
+        case "burnsubs": {
+          hub.cue({ t: "burnsubs", on: step.on !== false });
           break;
         }
         case "wait": {
@@ -259,7 +264,7 @@ export function sanitizeScript(raw: unknown): PlayStep[] {
   for (const s of raw.slice(0, 40)) {
     if (!s || typeof s !== "object" || typeof (s as any).do !== "string") continue;
     const do_ = String((s as any).do);
-    if (!["goto", "camera", "sit", "say", "anim", "fx", "inspect", "compose", "callout", "think", "selfie", "film", "tiktok", "tiktokcam", "record", "wait"].includes(do_)) continue;
+    if (!["goto", "camera", "sit", "say", "anim", "fx", "inspect", "compose", "callout", "think", "selfie", "film", "tiktok", "tiktokcam", "record", "wait", "burnsubs"].includes(do_)) continue;
     out.push(s as PlayStep);
   }
   return out;

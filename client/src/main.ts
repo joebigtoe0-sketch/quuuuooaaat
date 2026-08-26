@@ -216,6 +216,7 @@ function despawnGuest(): void {
 // Burned-in subtitles (drawn INTO the WebGL canvas so recordings carry them),
 // green-key facecam mode (room hidden, pure green ground), and shot movement.
 let tiktokMode: "studio" | "facecam" | null = null;
+let burnSubsOn = false; // burned subs for 16:9 films (independent of tiktok mode)
 let tiktokPace: "chill" | "hype" = "hype";
 let tiktokAutocut = true;
 let tiktokNextCutAt = 0;
@@ -271,7 +272,11 @@ camera.add(burnPlane);
 scene.add(camera); // camera must live in the scene for its children to render
 
 function drawBurnSubs(): void {
-  if (!tiktokMode || !burnLine) { burnPlane.visible = false; return; }
+  if ((!tiktokMode && !burnSubsOn) || !burnLine) { burnPlane.visible = false; return; }
+  // placement differs by frame: 9:16 tiktok sits low; 16:9 film a bit higher
+  // and wider so the words carry at landscape sizes
+  burnPlane.position.y = tiktokMode ? -0.5 : -0.4;
+  burnPlane.scale.setScalar(tiktokMode ? 1 : 1.5);
   const t = performance.now() - burnLine.startedAt;
   if (t > burnLine.durMs + 600) { burnPlane.visible = false; burnLine = null; return; }
   const words = burnLine.words.length
@@ -513,7 +518,7 @@ function applyCue(cue: Cue): void {
       screens?.drawPodcastChat?.(cue.title, cue.lines);
       break;
     case "speak":
-      if (tiktokMode) burnLine = { words: cue.words ?? [], text: cue.subtitle, startedAt: performance.now(), durMs: cue.durMs };
+      if (tiktokMode || burnSubsOn) burnLine = { words: cue.words ?? [], text: cue.subtitle, startedAt: performance.now(), durMs: cue.durMs };
       if (cue.actor === "guest") {
         guest?.lipsync?.(cue.durMs, cue.words, () => subtitles.speechClock());
         subtitles.speak({
@@ -600,6 +605,10 @@ function applyCue(cue: Cue): void {
     case "record":
       if (cue.on) recorder.start(cue.id);
       else recorder.stop();
+      break;
+    case "burnsubs":
+      burnSubsOn = cue.on;
+      if (!cue.on && !tiktokMode) { burnPlane.visible = false; burnLine = null; }
       break;
     case "tiktok":
       tiktokPace = cue.pace ?? "hype";
