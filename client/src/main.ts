@@ -405,6 +405,10 @@ function hideLensBlockers(pos: THREE.Vector3): void {
     try { box = new THREE.Box3().setFromObject(m); } catch { return; }
     if (box.isEmpty()) return;
     // distance from the camera to the closest point of the mesh
+    // walls and stage decks ARE the set — hiding them exposed the room
+    // behind. Only small props (a tripod leg, a plant frond) get pulled.
+    const size = box.getSize(new THREE.Vector3());
+    if (Math.max(size.x, size.y, size.z) > 1.6) return;
     const near = box.clampPoint(p, new THREE.Vector3()).distanceTo(p);
     if (near < 0.75) {
       m.visible = false;
@@ -551,9 +555,6 @@ function applyCue(cue: Cue): void {
         camera.position.set(camTarget.pos.x, camTarget.pos.y, camTarget.pos.z);
         camera.lookAt(camTarget.look);
         shotMove = null;
-        // clip anything grazing the glass (a tripod leg, a wall corner)
-        camera.near = 0.9;
-        camera.updateProjectionMatrix();
         hideLensBlockers(camTarget.pos);
       } else if (cue.preset.startsWith("tiktok")) {
         // tiktok cuts are CUTS — teleport, never a dolly glide between cams
@@ -561,12 +562,8 @@ function applyCue(cue: Cue): void {
         camera.position.set(camTarget.pos.x, camTarget.pos.y, camTarget.pos.z);
         camera.lookAt(camTarget.look);
         rollShotMove();
-      } else if (!cue.preset.startsWith("podcast")) {
-        if (lensHidden.length) restoreLens();
-        if (camera.near !== 0.1) {
-          camera.near = 0.1;
-          camera.updateProjectionMatrix();
-        }
+      } else if (!cue.preset.startsWith("podcast") && lensHidden.length) {
+        restoreLens();
       }
       if (wasTiktok && baseFov > 0 && !cue.preset.startsWith("tiktok")) {
         camera.fov = baseFov;

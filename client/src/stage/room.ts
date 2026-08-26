@@ -298,13 +298,17 @@ function adoptGlbRoom(scene: THREE.Scene, root: THREE.Object3D): StageLayout {
     const m = o as THREE.Mesh;
     if (!m.isMesh || !m.material) return;
     const mats = Array.isArray(m.material) ? m.material : [m.material];
-    if (!mats.some((mat: any) => /PolygonPrototype/i.test(mat?.name ?? ""))) return;
+    // STRUCTURE inside a studio (walls, stage decks) gets painted whatever its
+    // material is called — one wall piece shipped with a non-prototype white
+    // material and rendered as a big white streak across every podcast shot.
+    const structural = /^(SM_Buildings_|SM_Bld_)/i.test(m.name ?? "") || /^(SM_Buildings_|SM_Bld_)/i.test(m.parent?.name ?? "");
+    if (!mats.some((mat: any) => /PolygonPrototype/i.test(mat?.name ?? "")) && !(structural && studioOf(m))) return;
     // the STUDIOS keep their authored look — walls/floor there are the
     // chroma key, and the yellow-grid swap was repainting them (takes 2+3)
     const studio = studioOf(m);
     if (studio) {
       const paint = mats.map((mat: any) =>
-        /PolygonPrototype/i.test(mat?.name ?? "")
+        /PolygonPrototype/i.test(mat?.name ?? "") || structural
           ? (studio === "tiktok"
               ? new THREE.MeshStandardMaterial({ name: "ChromaGreen", color: 0x00b140, roughness: 1 })
               : new THREE.MeshStandardMaterial({ name: "PodcastBlack", color: 0x121212, roughness: 0.9 }))
