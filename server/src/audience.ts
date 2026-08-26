@@ -11,6 +11,10 @@ import { allChat } from "./social/livechat.js";
  *   - distinct chatters in the last AUDIENCE_WINDOW_MIN minutes
  *   - whether anything is even rendering the stream (watchers > 0)
  *
+ * QUIET = nobody has said anything for AUDIENCE_WINDOW_MIN minutes. People
+ * lurk far more than they type, so ONE message is enough to call the room
+ * live again — the saver is for genuinely dead hours, not slow ones.
+ *
  * Quiet room → the show costs less: research runs less often and the brain
  * drops to the cheap model. Nobody is watching the expensive verdict.
  *
@@ -35,9 +39,9 @@ export function audience(): Audience {
   const recent = allChat(200).filter((m) => m.at >= since);
   const chatters = new Set(recent.map((m) => m.user.toLowerCase())).size;
   const watchers = watchersFn?.() ?? 0;
-  // a room is LIVE if people are talking in it; with nothing rendering at all
-  // it is quiet by definition
-  const quiet = watchers === 0 || chatters < cfg.audienceQuietChatters;
+  // ONE message in the window wakes the room up; silence for the whole
+  // window (or nothing rendering at all) means save.
+  const quiet = watchers === 0 || recent.length === 0;
   return { chatters, messages: recent.length, watchers, quiet };
 }
 
