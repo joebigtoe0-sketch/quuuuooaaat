@@ -430,7 +430,14 @@ function hideLensBlockers(pos: THREE.Vector3): void {
         }
       }
     }
-    if (seen.size) console.info("[podcast] near-frame objects:", [...seen.keys()].join(" | "));
+    if (seen.size) {
+      const msg = "[near-frame] " + [...seen.keys()].join(" | ");
+      console.info(msg);
+      void fetch(httpBase + "/admin/clientlog", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ msg }),
+      }).catch(() => {});
+    }
   } catch { /* diagnostic only */ }
 }
 

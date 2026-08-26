@@ -40,7 +40,7 @@ const hub = new Hub(server);
 // Control endpoints need the admin key (query ?key=, x-admin-key header, or
 // the qk cookie set by /admin login). Read-only + stage-internal endpoints
 // (feed, layout, clip upload, agent-status, health) stay open.
-const PROTECTED = /^\/admin\/(directive|reset|restart|agent$|fake-send|fake-buyback|pause|resume|goto|anim|camera|fx|tts-test|selfie-take|selfie-last|chat$|chat-add|go-live|syslog|record$|say|queue|clips|clip-file|research-now|blacklist|sniper|operator-call|operator-sell|positions|callout-entry|producer-state|tweet-exact|reply-exact|play|think|planner|autoreply|cc-probe|callers|calls|feed-ingest|facts|kol-roster|kol-pool|outreach|book|thought|du|memory|repair-proceeds|tiktok|podcast)/;
+const PROTECTED = /^\/admin\/(directive|reset|restart|agent$|fake-send|fake-buyback|pause|resume|goto|anim|camera|fx|tts-test|selfie-take|selfie-last|chat$|chat-add|go-live|syslog|record$|say|queue|clips|clip-file|research-now|blacklist|sniper|operator-call|operator-sell|positions|callout-entry|producer-state|tweet-exact|reply-exact|play|think|planner|autoreply|cc-probe|callers|calls|feed-ingest|facts|kol-roster|kol-pool|outreach|book|thought|du|memory|repair-proceeds|tiktok|podcast|film|clientlog)/;
 function hasAdminKey(req: express.Request): boolean {
   const c = String(req.headers.cookie ?? "");
   const cookieKey = c.match(/(?:^|;\s*)qk=([^;]+)/)?.[1];
@@ -490,6 +490,33 @@ app.post("/admin/reply-exact", async (req, res) => {
 app.post("/admin/repair-proceeds", async (_req, res) => {
   const { repairProceeds } = await import("./chain/trader.js");
   res.json({ ok: true, ...(await repairProceeds()) });
+});
+
+/** The stage client reporting something it can see and the server cannot. */
+app.post("/admin/clientlog", (req, res) => {
+  const msg = String((req.body as any)?.msg ?? "").slice(0, 400);
+  if (msg) log.info("client", msg);
+  res.json({ ok: true });
+});
+
+/** FILM ANYTHING — runs a play script with the recorder on and returns the
+ *  mp4. Same machinery as /admin/tiktok but no tiktok mode: normal 16:9,
+ *  normal subtitles, any camera/station. For set pieces and announcements. */
+app.post("/admin/film", async (req, res) => {
+  const b: any = (typeof req.body === "object" && req.body) ? req.body : {};
+  const { sanitizeScript } = await import("./director/play.js");
+  const inner = sanitizeScript(b.script);
+  if (!inner.length) return res.json({ ok: false, why: "script must be a non-empty array of steps" });
+  if (hub.watchers === 0) return res.json({ ok: false, why: "no stage client connected — open /stage first" });
+  const id = String(b.id ?? ("film-" + Date.now())).replace(/[^a-zA-Z0-9_-]/g, "");
+  const script: any[] = [{ do: "record", id, on: true }, ...inner, { do: "wait", ms: 900 }, { do: "record", id, on: false }];
+  const { expectClip } = await import("./media/film.js");
+  const clipP = expectClip(id, 6 * 60_000);
+  const q = director.queuePlay(script as any);
+  if (!(q as any).ok) return res.json(q);
+  log.info("admin", `film queued (${inner.length} steps, id ${id})`);
+  const mp4 = await clipP;
+  res.json({ ok: !!mp4, id, mp4, why: mp4 ? undefined : "clip never arrived" });
 });
 
 // ---------- RIKUPOD — the podcast ----------
