@@ -53,6 +53,19 @@ export function startPumpChat(mint: string): void {
     } catch {}
   });
 
+  // DISCOVERY: pump.fun may broadcast an audience/participant count on some
+  // event we do not listen for. Log unknown event names once each — if a real
+  // viewer number exists, this finds it (and then the audience saver can use
+  // people instead of a chat proxy).
+  const seenEvents = new Set<string>();
+  (s as any).onAny?.((ev: string, ...args: any[]) => {
+    if (ev === "newMessage" || seenEvents.has(ev)) return;
+    seenEvents.add(ev);
+    let shape = "";
+    try { shape = JSON.stringify(args[0] ?? null).slice(0, 200); } catch {}
+    log.info("pumpchat", `event "${ev}" ${shape}`);
+  });
+
   s.on("connect_error", (e) => log.warn("pumpchat", `connect_error: ${String(e?.message ?? e).slice(0, 100)}`));
   s.on("disconnect", (r) => log.info("pumpchat", `livechat disconnected (${r}) — reconnecting`));
 }

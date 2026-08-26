@@ -151,6 +151,16 @@ export const cfg = {
   // so filming and podcasts own the stage. Local default for shoot sessions.
   studioMode: bool("STUDIO_MODE", false),
 
+  // ---- audience saver: a quiet room costs less to run ----
+  // There is NO real viewer count (pump.fun's socket carries only chat), so
+  // "quiet" = fewer than N distinct chatters in the window, or nothing
+  // rendering at all. When quiet: research runs less often and show writing
+  // drops to the cheap model.
+  audienceSaver: bool("AUDIENCE_SAVER", true),
+  audienceWindowMin: num("AUDIENCE_WINDOW_MIN", 30),
+  audienceQuietChatters: num("AUDIENCE_QUIET_CHATTERS", 5),
+  quietResearchMult: num("QUIET_RESEARCH_MULT", 3), // research interval x this when quiet
+
   midcap: bool("MIDCAP", true),
   midcapTickMin: num("MIDCAP_TICK_MIN", 30),
   midcapSol: num("MIDCAP_SOL", 0.05), // FLOOR per buy

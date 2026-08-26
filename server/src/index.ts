@@ -492,6 +492,12 @@ app.post("/admin/repair-proceeds", async (_req, res) => {
   res.json({ ok: true, ...(await repairProceeds()) });
 });
 
+/** How busy the room is (and whether the cost saver is engaged). */
+app.get("/admin/audience", async (_req, res) => {
+  const { audience } = await import("./audience.js");
+  res.json({ ok: true, ...audience(), saverOn: cfg.audienceSaver });
+});
+
 /** The stage client reporting something it can see and the server cannot. */
 app.post("/admin/clientlog", (req, res) => {
   const msg = String((req.body as any)?.msg ?? "").slice(0, 400);
@@ -1541,6 +1547,7 @@ server.listen(cfg.port, cfg.host, () => {
     "quant",
     `brain: ${hasApiKey() ? "LIVE" : "MOCK (no LLM_API_KEY)"} | tts: ${cfg.ttsProvider} | callouts: ${cfg.calloutDryRun ? "DRY RUN" : "LIVE"}`,
   );
+  void import("./audience.js").then((m) => m.bindWatchers(() => hub.watchers));
   director.start();
   if (cfg.studioMode) log.warn("quant", "STUDIO MODE — autonomous show is OFF (no research, discovery, replies, kol, commentary, coding, planner, trades). Filming + podcasts only.");
   // caller-intel harvester: one CC lookup / CALLER_HARVEST_S, always yields to

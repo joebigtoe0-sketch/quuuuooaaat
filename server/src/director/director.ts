@@ -25,6 +25,7 @@ import { memory } from "../agent/memory.js";
 import type { ActionEvent } from "../protocol.js";
 import type { TTSProvider } from "../voice/tts.js";
 import { Planner, type QueuedAction } from "../agent/planner.js";
+import { isQuiet } from "../audience.js";
 
 /**
  * The show director: one loop, one priority queue, beats run to completion
@@ -299,7 +300,13 @@ export class Director {
     // research a DISCOVERED coin on the timer, or immediately when forced from
     // admin. The target is resolved at execution (trending + fresh launch pool),
     // so we no longer gate on the visual belt having items.
-    if (this.forcedResearch > 0 || idleMin >= cfg.conveyorPickMin) {
+    // a quiet room does not need a research segment every few minutes —
+    // stretch the cadence (and the LLM bill) until people show up
+    const quiet = (() => {
+      try { return isQuiet(); } catch { return false; }
+    })();
+    const pickEvery = cfg.conveyorPickMin * (quiet ? cfg.quietResearchMult : 1);
+    if (this.forcedResearch > 0 || idleMin >= pickEvery) {
       if (this.forcedResearch > 0) this.forcedResearch--;
       const item = this.conveyor[this.conveyor.length - 1] ?? { mint: "", name: "", symbol: "" };
       if (item.mint) this.conveyor = this.conveyor.filter((c) => c.mint !== item.mint);

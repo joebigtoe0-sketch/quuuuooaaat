@@ -8,7 +8,7 @@ import type { Locomotion } from "./locomotion.js";
 import type { Director } from "./director.js";
 import { analyze, type Analysis } from "../analysis/engine.js";
 import { verdictPrompt, mutterPrompt, commentaryPrompt } from "../brain/prompts.js";
-import { callJson, callFreeform, FRAGMENT_MODEL } from "../brain/adapter.js";
+import { callJson, callFreeform, FRAGMENT_MODEL, MODEL } from "../brain/adapter.js";
 import { factsFor as factsBlock } from "../agent/facts.js";
 import { mockVerdict, mockMutter, mockCommentary } from "../brain/mock.js";
 import { calloutPreflight, calloutCapReached, executeCallout } from "../callout/post.js";
@@ -24,6 +24,7 @@ import { readChat, unreadChat } from "../social/livechat.js";
 import { evaluateStrategies, factsFor, createStrategy, updateStrategy, retireStrategy, getStrategy, noteStrategyBuy, type StrategyRead } from "../agent/strategies.js";
 import { runSandboxed } from "../agent/sandbox.js";
 import { thinkAloud, pickThinkClip } from "./thoughts.js";
+import { showModel } from "../audience.js";
 import { z as zod } from "zod";
 import { tradeBuy, tradeSell, openPositions } from "../chain/trader.js";
 import { expectClip } from "../media/film.js";
@@ -240,7 +241,10 @@ export class Beats {
   /** LLM with watchdog + mock fallback. */
   private async verdictLines(a: Analysis, hold = false): Promise<{ speech: string; callout_text: string; headline: string }> {
     const p = verdictPrompt(a, hold);
-    const j = await Promise.race([callJson(p.system, p.user, 500), realSleep(20000).then(() => null)]);
+    // nobody in the room? write the verdict on the cheap model — the
+    // expensive one exists for an audience
+    const model = showModel(MODEL, FRAGMENT_MODEL);
+    const j = await Promise.race([callJson(p.system, p.user, 500, model), realSleep(20000).then(() => null)]);
     if (j && typeof j.speech === "string" && j.speech.length > 10) {
       return {
         speech: String(j.speech).slice(0, 600),
