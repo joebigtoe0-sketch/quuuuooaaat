@@ -9,7 +9,7 @@ export interface CamView {
 export interface StageLayout {
   screens: Record<string, THREE.Mesh>;
   npc: { x: number; z: number; heading: number; model: string } | null;
-  stations: Record<string, { x: number; z: number; face: number }> | null;
+  stations: Record<string, { x: number; z: number; face: number; y?: number }> | null;
   cameras: Record<string, CamView> | null;
   conveyorPath: { start: [number, number, number]; end: [number, number, number] } | null;
   board: { set(lines: string[]): void } | null;
@@ -410,9 +410,14 @@ function adoptGlbRoom(scene: THREE.Scene, root: THREE.Object3D): StageLayout {
   const viewerRight = new THREE.Vector3().crossVectors(front.clone().negate(), new THREE.Vector3(0, 1, 0)).normalize();
 
   // ---- stations ----
-  const stations: Record<string, { x: number; z: number; face: number }> = {};
-  const put = (id: string, p: THREE.Vector3, faceToward: THREE.Vector3) =>
-    (stations[id] = { x: p.x, z: p.z, face: yawTo(flat(p), flat(faceToward)) });
+  const stations: Record<string, { x: number; z: number; face: number; y?: number }> = {};
+  const put = (id: string, p: THREE.Vector3, faceToward: THREE.Vector3, face?: number) =>
+    (stations[id] = {
+      x: p.x, z: p.z,
+      face: face ?? yawTo(flat(p), flat(faceToward)),
+      // y matters on the podcast stage (raised platform) — 0 everywhere else
+      ...(Math.abs(p.y) > 0.02 ? { y: p.y } : {}),
+    });
 
   // terminal: sit AT the chair nearest TV_2, facing that TV
   if (seat) put("terminal", flat(worldBox(seat).c), tv2C ?? interior.clone().sub(front));
@@ -549,18 +554,26 @@ function adoptGlbRoom(scene: THREE.Scene, root: THREE.Object3D): StageLayout {
       o.updateWorldMatrix(true, false);
       return o.getWorldPosition(new THREE.Vector3());
     };
+    const yawOf = (n: string): number | undefined => {
+      const o = findAll(root, n)[0] ?? null;
+      if (!o) return undefined;
+      o.updateWorldMatrix(true, false);
+      const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(o.getWorldQuaternion(new THREE.Quaternion()));
+      if (fwd.lengthSq() < 0.01) return undefined;
+      return Math.atan2(fwd.x, fwd.z);
+    };
     const hs = at("HostSeat"), gs = at("GuestSeat");
     const pi = at("podcastidle"), pe = at("podcastenter");
     if (hs && gs) {
-      put("host_seat", new THREE.Vector3(hs.x, 0, hs.z), new THREE.Vector3(gs.x, 0, gs.z));
-      put("guest_seat", new THREE.Vector3(gs.x, 0, gs.z), new THREE.Vector3(hs.x, 0, hs.z));
+      // sit the way the CHAIR faces (authored), not facing each other —
+      // two people sitting sideways-on looked exactly as wrong as it sounds
+      put("host_seat", hs, new THREE.Vector3(gs.x, 0, gs.z), yawOf("HostSeat"));
+      put("guest_seat", gs, new THREE.Vector3(hs.x, 0, hs.z), yawOf("GuestSeat"));
     }
     const wideCam = findAll(root, "PodcastCamera")[0] ?? null;
     const camPos = wideCam ? wideCam.getWorldPosition(new THREE.Vector3()) : null;
-    if (pi) put("podcast_idle", new THREE.Vector3(pi.x, 0, pi.z),
-      camPos ? new THREE.Vector3(camPos.x, 0, camPos.z) : new THREE.Vector3(pi.x, 0, pi.z + 2));
-    if (pe) put("podcast_enter", new THREE.Vector3(pe.x, 0, pe.z),
-      pi ? new THREE.Vector3(pi.x, 0, pi.z) : new THREE.Vector3(pe.x, 0, pe.z + 2));
+    if (pi) put("podcast_idle", pi, camPos ? new THREE.Vector3(camPos.x, 0, camPos.z) : new THREE.Vector3(pi.x, 0, pi.z + 2));
+    if (pe) put("podcast_enter", pe, pi ? new THREE.Vector3(pi.x, 0, pi.z) : new THREE.Vector3(pe.x, 0, pe.z + 2));
   }
   for (const id of ["idle_spot", "inbox", "terminal", "bigscreen", "vault", "conveyor", "camera_mark", "tiktok",
                     "podcast_idle", "podcast_enter", "host_seat", "guest_seat"] as const) {

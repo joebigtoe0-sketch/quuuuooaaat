@@ -9,7 +9,7 @@ import type { StationId } from "./protocol.js";
  * positions from room.glb and POSTs them to /admin/layout). Persisted so the
  * override survives a restart.
  */
-const DEFAULTS: Record<StationId, { x: number; z: number; face: number }> = {
+const DEFAULTS: Record<StationId, { x: number; z: number; face: number; y?: number }> = {
   conveyor: { x: 0.0, z: -3.2, face: Math.PI },
   vault: { x: -4.2, z: -2.2, face: Math.PI },
   bigscreen: { x: -1.4, z: -2.4, face: Math.PI },
@@ -26,17 +26,21 @@ const DEFAULTS: Record<StationId, { x: number; z: number; face: number }> = {
   guest_seat: { x: -7.6, z: 1.0, face: -Math.PI / 2 },
 };
 
-export const STATIONS: Record<StationId, { x: number; z: number; face: number }> = { ...DEFAULTS };
+export const STATIONS: Record<StationId, { x: number; z: number; face: number; y?: number }> = { ...DEFAULTS };
 export const WALK_SPEED = 1.5; // m/s
 
 const LAYOUT_FILE = path.join(cfg.dataDir, "layout.json");
 
 /** Merge a partial station map (unknown ids ignored) and persist. */
-export function applyLayout(stations: Record<string, { x: number; z: number; face?: number }>): string[] {
+export function applyLayout(stations: Record<string, { x: number; z: number; face?: number; y?: number }>): string[] {
   const applied: string[] = [];
   for (const [id, s] of Object.entries(stations ?? {})) {
     if (id in STATIONS && typeof s?.x === "number" && typeof s?.z === "number") {
-      STATIONS[id as StationId] = { x: s.x, z: s.z, face: typeof s.face === "number" ? s.face : STATIONS[id as StationId].face };
+      STATIONS[id as StationId] = {
+        x: s.x, z: s.z,
+        face: typeof s.face === "number" ? s.face : STATIONS[id as StationId].face,
+        ...(typeof s.y === "number" ? { y: s.y } : {}),
+      };
       applied.push(id);
     }
   }

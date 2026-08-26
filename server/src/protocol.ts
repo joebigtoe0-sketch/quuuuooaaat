@@ -132,7 +132,7 @@ export type Cue =
   | { t: "mood"; mood: "neutral" | "excited" | "disgusted" | "thinking"; actor?: "riku" | "guest" }
   // ---- podcast: the second body + the chat TV ----
   | { t: "guest"; on: boolean; model?: string; name?: string }
-  | { t: "guest_pose"; x: number; z: number; heading: number; anim: string; seated: boolean }
+  | { t: "guest_pose"; x: number; y?: number; z: number; heading: number; anim: string; seated: boolean }
   | { t: "podcast_chat"; title: string; lines: { user: string; text: string }[] }
   | { t: "record"; on: boolean; id: string }
   | { t: "tiktok"; on: boolean; mode?: "studio" | "facecam"; bg?: string; pace?: "chill" | "hype"; autocut?: boolean; set?: "green" | "homeoffice" } // filming mode: burned subs, bg replace, client cut rhythm
@@ -145,6 +145,7 @@ export type Cue =
 export interface TickMsg {
   t: "tick";
   x: number;
+  y?: number; // floor height at the station (the podcast stage is raised)
   z: number;
   heading: number;
   anim: string; // current locomotion loop: idle | walk

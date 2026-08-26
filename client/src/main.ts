@@ -191,19 +191,19 @@ async function buildAll(): Promise<void> {
 }
 
 // server-authoritative pose, smoothed on the client
-const pose = { x: -0.6, z: 1.2, heading: 0, targetX: -0.6, targetZ: 1.2, targetHeading: 0, anim: "idle", seated: false };
+const pose = { x: -0.6, y: 0, z: 1.2, heading: 0, targetX: -0.6, targetY: 0, targetZ: 1.2, targetHeading: 0, anim: "idle", seated: false };
 let oneShotUntil = 0;
 
 // ---------- GUEST BODY (podcast) ----------
 let guest: any = null;
 let guestOneShotUntil = 0;
-const guestPose = { x: 0, z: 0, heading: 0, targetX: 0, targetZ: 0, targetHeading: 0, anim: "idle", seated: false };
+const guestPose = { x: 0, y: 0, z: 0, heading: 0, targetX: 0, targetY: 0, targetZ: 0, targetHeading: 0, anim: "idle", seated: false };
 async function spawnGuest(model: string): Promise<void> {
   if (guest) despawnGuest();
   const { Avatar } = (await import("./avatar.js" as any)) as any;
   guest = new Avatar({ model, tex: "01_A" });
   scene.add(guest.group);
-  guest.group.position.set(guestPose.x, 0, guestPose.z);
+  guest.group.position.set(guestPose.x, guestPose.y, guestPose.z);
   guest.ready.then(() => guest?.play("idle")).catch(() => {});
 }
 function despawnGuest(): void {
@@ -415,6 +415,7 @@ function setTiktokMode(on: boolean, mode: "studio" | "facecam" = "studio"): void
 
 function applyTick(m: TickMsg): void {
   pose.targetX = m.x;
+  pose.targetY = m.y ?? 0;
   pose.targetZ = m.z;
   pose.targetHeading = m.heading;
   pose.seated = m.seated;
@@ -439,6 +440,7 @@ function applyCue(cue: Cue): void {
       break;
     case "guest_pose":
       guestPose.targetX = cue.x;
+      guestPose.targetY = cue.y ?? 0;
       guestPose.targetZ = cue.z;
       guestPose.targetHeading = cue.heading;
       guestPose.anim = cue.anim;
@@ -626,7 +628,8 @@ function frame(): void {
   while (dh > Math.PI) dh -= Math.PI * 2;
   while (dh < -Math.PI) dh += Math.PI * 2;
   pose.heading += dh * Math.min(1, dt * 10);
-  avatar.group.position.set(pose.x, 0, pose.z);
+  pose.y += ((pose.targetY ?? 0) - (pose.y ?? 0)) * Math.min(1, dt * 8);
+  avatar.group.position.set(pose.x, pose.y ?? 0, pose.z);
   avatar.group.rotation.y = pose.heading;
   avatar.setSeated?.(pose.seated);
   if (performance.now() > oneShotUntil && !avatar.busy) avatar.play(pose.anim === "walk" ? "walk" : pose.seated ? "idle" : "idle");
@@ -639,7 +642,8 @@ function frame(): void {
     while (gdh > Math.PI) gdh -= Math.PI * 2;
     while (gdh < -Math.PI) gdh += Math.PI * 2;
     guestPose.heading += gdh * Math.min(1, dt * 10);
-    guest.group.position.set(guestPose.x, 0, guestPose.z);
+    guestPose.y += (guestPose.targetY - guestPose.y) * Math.min(1, dt * 8);
+    guest.group.position.set(guestPose.x, guestPose.y, guestPose.z);
     guest.group.rotation.y = guestPose.heading;
     guest.setSeated?.(guestPose.seated);
     if (performance.now() > guestOneShotUntil && !guest.busy)

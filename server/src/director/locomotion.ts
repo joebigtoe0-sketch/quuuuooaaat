@@ -10,13 +10,14 @@ import type { Hub } from "../hub.js";
  */
 export class Locomotion {
   x = STATIONS.idle_spot.x;
+  y = 0; // floor height — the podcast stage is raised, the room floor is 0
   z = STATIONS.idle_spot.z;
   heading = STATIONS.idle_spot.face;
   anim = "idle";
   seated = false;
   stateName = "BOOT";
 
-  private target: { x: number; z: number; face: number } | null = null;
+  private target: { x: number; z: number; face: number; y?: number } | null = null;
   private arriveResolve: (() => void) | null = null;
 
   constructor(private hub: Hub) {
@@ -32,6 +33,7 @@ export class Locomotion {
       if (dist <= step) {
         this.x = this.target.x;
         this.z = this.target.z;
+        this.y = this.target.y ?? 0;
         this.heading = this.target.face;
         this.anim = "idle";
         this.target = null;
@@ -40,6 +42,8 @@ export class Locomotion {
       } else {
         this.x += (dx / dist) * step;
         this.z += (dz / dist) * step;
+        const ty = this.target.y ?? 0;
+        this.y += (ty - this.y) * Math.min(1, dt * 3);
         this.heading = Math.atan2(dx, dz);
         this.anim = "walk";
       }
@@ -47,6 +51,7 @@ export class Locomotion {
     this.hub.broadcast({
       t: "tick",
       x: Number(this.x.toFixed(3)),
+      y: Number(this.y.toFixed(3)),
       z: Number(this.z.toFixed(3)),
       heading: Number(this.heading.toFixed(3)),
       anim: this.anim,

@@ -397,9 +397,11 @@ export class Episode {
     try {
       // ---- 1. RIKU at the mark, guest at the door, camera CUTS to the set ----
       this.phase = "open";
-      await this.dir.loco.walkTo("podcast_idle");
+      // CUT to the set before he walks — the room's wide cam watching him
+      // hike across the building is not the opening shot
       this.cam("podcast_wide");
-      await sleep(600);
+      await this.dir.loco.walkTo("podcast_idle");
+      await sleep(700);
       const open = await this.take();
       if (open) await this.speak(open);
 
@@ -427,7 +429,17 @@ export class Episode {
       for (;;) {
         const turn = await this.take();
         if (!turn || this.stop) break;
+        const wasQuestions = this.phase === "questions";
         if (turn.kind === "question" || turn.kind === "answer") this.phase = "questions";
+        if (this.phase === "questions") {
+          // chat segment lives on the WIDE — the chat TV has to be in frame.
+          // Only cut to a talking head occasionally for punctuation.
+          if (!wasQuestions || Math.random() < 0.72) this.cam("podcast_wide");
+          else this.cam(turn.speaker === "riku" ? "podcast_host" : "podcast_guest");
+          await sleep(500);
+          await this.speak(turn);
+          continue;
+        }
         if (turn.kind === "outro") {
           // ---- 8-9. RIKU stands and walks back to the mark for the close ----
           this.phase = "closing";
@@ -448,19 +460,20 @@ export class Episode {
         // LISTENER for a reaction shot, which is what real shows do)
         if (++n % 3 === 0) {
           this.cam("podcast_wide");
-          await sleep(400);
+          await sleep(700);
         } else {
           this.cam(turn.speaker === "riku" ? "podcast_host" : "podcast_guest");
         }
-        const cutAway = turn.text.split(/\s+/).length > 22 && Math.random() < 0.75
+        const cutAway = turn.text.split(/\s+/).length > 34 && Math.random() < 0.5
           ? (Math.random() < 0.5 ? "podcast_wide" : (turn.speaker === "riku" ? "podcast_guest" : "podcast_host"))
           : null;
         if (cutAway) {
           const spoken = this.speak(turn);
-          // land the cut a beat into the line, then return to the speaker
-          await sleep(2600 + Math.random() * 1800);
+          // land the cut well into the line and HOLD it — quick flicks read as
+          // a glitch on a podcast; this is not tiktok
+          await sleep(5000 + Math.random() * 2500);
           this.cam(cutAway as any);
-          await sleep(2200 + Math.random() * 1600);
+          await sleep(4500 + Math.random() * 3000);
           this.cam(turn.speaker === "riku" ? "podcast_host" : "podcast_guest");
           await spoken;
         } else {
