@@ -280,16 +280,19 @@ function adoptGlbRoom(scene: THREE.Scene, root: THREE.Object3D): StageLayout {
   // and lands in its cork region. Recreate the authored look instead: the
   // Synty prototype YELLOW GRID, generated as a seamless tile and box-projected
   // in world space so squares tile per half-meter exactly like in Unity.
-  const inStudioGroup = (o: THREE.Object3D): boolean => {
+  /** Which studio shell a mesh belongs to — each gets its own paint:
+   *  tiktok = chroma green (keyable), podcast = black (a real set).
+   *  HomeOffice dressing inside the tiktok studio keeps its authored look. */
+  const studioOf = (o: THREE.Object3D): "tiktok" | "podcast" | null => {
     let p: THREE.Object3D | null = o;
     while (p) {
-      // the HomeOffice set inside the studio keeps its authored look —
-      // only the bare studio shell is the chroma key
-      if (/^homeoffice$/i.test(p.name?.trim() ?? "")) return false;
-      if (/^tiktok$/i.test(p.name?.trim() ?? "")) return true; // ONLY the tiktok shell is chroma — the podcast set keeps its authored look
+      const n = p.name?.trim() ?? "";
+      if (/^homeoffice$/i.test(n)) return null;
+      if (/^tiktok$/i.test(n)) return "tiktok";
+      if (/^podcast$/i.test(n)) return "podcast";
       p = p.parent;
     }
-    return false;
+    return null;
   };
   root.traverse((o) => {
     const m = o as THREE.Mesh;
@@ -298,12 +301,15 @@ function adoptGlbRoom(scene: THREE.Scene, root: THREE.Object3D): StageLayout {
     if (!mats.some((mat: any) => /PolygonPrototype/i.test(mat?.name ?? ""))) return;
     // the STUDIOS keep their authored look — walls/floor there are the
     // chroma key, and the yellow-grid swap was repainting them (takes 2+3)
-    if (inStudioGroup(m)) {
-      const green = mats.map((mat: any) =>
+    const studio = studioOf(m);
+    if (studio) {
+      const paint = mats.map((mat: any) =>
         /PolygonPrototype/i.test(mat?.name ?? "")
-          ? new THREE.MeshStandardMaterial({ name: "ChromaGreen", color: 0x00b140, roughness: 1 })
+          ? (studio === "tiktok"
+              ? new THREE.MeshStandardMaterial({ name: "ChromaGreen", color: 0x00b140, roughness: 1 })
+              : new THREE.MeshStandardMaterial({ name: "PodcastBlack", color: 0x121212, roughness: 0.9 }))
           : mat);
-      m.material = Array.isArray(m.material) ? green : green[0];
+      m.material = Array.isArray(m.material) ? paint : paint[0];
       return;
     }
     const allProto = mats.every((mat: any) => /PolygonPrototype/i.test(mat?.name ?? ""));
