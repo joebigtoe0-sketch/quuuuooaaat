@@ -382,6 +382,26 @@ function setStageAspect(vertical: boolean): void {
   camera.updateProjectionMatrix();
 }
 
+// Each podcast camera sits ON a tripod, so it films its own leg — a big
+// white streak across every shot. Hide whatever is basically inside the lens
+// and restore it when the camera moves on.
+let lensHidden: THREE.Object3D[] = [];
+function hideLensBlockers(pos: THREE.Vector3): void {
+  for (const o of lensHidden) o.visible = true;
+  lensHidden = [];
+  const p = new THREE.Vector3(pos.x, pos.y, pos.z);
+  scene.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (!m.isMesh || !m.visible) return;
+    if (!/tripod|camera_tripod/i.test(o.name ?? "") && !/tripod/i.test(o.parent?.name ?? "")) return;
+    const c = new THREE.Box3().setFromObject(m).getCenter(new THREE.Vector3());
+    if (c.distanceTo(p) < 2.2) {
+      m.visible = false;
+      lensHidden.push(m);
+    }
+  });
+}
+
 function setTiktokMode(on: boolean, mode: "studio" | "facecam" = "studio"): void {
   setStageAspect(on);
   // restore anything a previous mode hid
@@ -503,13 +523,18 @@ function applyCue(cue: Cue): void {
         camera.position.set(camTarget.pos.x, camTarget.pos.y, camTarget.pos.z);
         camera.lookAt(camTarget.look);
         shotMove = null;
+        hideLensBlockers(camTarget.pos);
       } else if (cue.preset.startsWith("tiktok")) {
         // tiktok cuts are CUTS — teleport, never a dolly glide between cams
         if (baseFov === 0) baseFov = camera.fov;
         camera.position.set(camTarget.pos.x, camTarget.pos.y, camTarget.pos.z);
         camera.lookAt(camTarget.look);
         rollShotMove();
-      } else if (wasTiktok && baseFov > 0) {
+      } else if (!cue.preset.startsWith("podcast") && lensHidden.length) {
+        for (const o of lensHidden) o.visible = true;
+        lensHidden = [];
+      }
+      if (wasTiktok && baseFov > 0 && !cue.preset.startsWith("tiktok")) {
         camera.fov = baseFov;
         camera.updateProjectionMatrix();
         shotMove = null;
