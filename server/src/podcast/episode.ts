@@ -443,14 +443,29 @@ export class Episode {
           await this.speak(turn);
           continue;
         }
-        // every few turns take the wide — two talking heads forever is deadly
-        if (++n % 5 === 0) {
+        // two locked talking heads is death — open on the wide every few
+        // turns, and on longer lines cut mid-sentence (to the wide, or to the
+        // LISTENER for a reaction shot, which is what real shows do)
+        if (++n % 3 === 0) {
           this.cam("podcast_wide");
           await sleep(400);
         } else {
           this.cam(turn.speaker === "riku" ? "podcast_host" : "podcast_guest");
         }
-        await this.speak(turn);
+        const cutAway = turn.text.split(/\s+/).length > 22 && Math.random() < 0.75
+          ? (Math.random() < 0.5 ? "podcast_wide" : (turn.speaker === "riku" ? "podcast_guest" : "podcast_host"))
+          : null;
+        if (cutAway) {
+          const spoken = this.speak(turn);
+          // land the cut a beat into the line, then return to the speaker
+          await sleep(2600 + Math.random() * 1800);
+          this.cam(cutAway as any);
+          await sleep(2200 + Math.random() * 1600);
+          this.cam(turn.speaker === "riku" ? "podcast_host" : "podcast_guest");
+          await spoken;
+        } else {
+          await this.speak(turn);
+        }
       }
     } finally {
       clearInterval(chatTimer);
