@@ -16,10 +16,11 @@ export interface StageLayout {
 }
 
 /** Scene-name → role mapping. Loose matching (case/space/parens ignored). */
-const TV_ROLE: Record<string, "inspection" | "callouts" | "treasury"> = {
+const TV_ROLE: Record<string, "inspection" | "callouts" | "treasury" | "podcastchat"> = {
   TV_2: "inspection",
   TV_1: "callouts",
   TV_left: "treasury",
+  podcasttv: "podcastchat", // the podcast set's live-chat screen
 };
 const SEAT_TERMINAL = "SM_Prop_Chair_07 (2)";
 const OBJ_CONVEYOR = "SM_Prop_Roller_Track_01";
@@ -540,7 +541,29 @@ function adoptGlbRoom(scene: THREE.Scene, root: THREE.Object3D): StageLayout {
       put("tiktok", new THREE.Vector3(p.x, 0, p.z), new THREE.Vector3(lookAt.x, 0, lookAt.z));
     }
   }
-  for (const id of ["idle_spot", "inbox", "terminal", "bigscreen", "vault", "conveyor", "camera_mark", "tiktok"] as const) {
+  // podcast set: two seats facing each other, a kickoff mark and a guest door
+  {
+    const at = (n: string) => {
+      const o = findAll(root, n)[0] ?? null;
+      if (!o) return null;
+      o.updateWorldMatrix(true, false);
+      return o.getWorldPosition(new THREE.Vector3());
+    };
+    const hs = at("HostSeat"), gs = at("GuestSeat");
+    const pi = at("podcastidle"), pe = at("podcastenter");
+    if (hs && gs) {
+      put("host_seat", new THREE.Vector3(hs.x, 0, hs.z), new THREE.Vector3(gs.x, 0, gs.z));
+      put("guest_seat", new THREE.Vector3(gs.x, 0, gs.z), new THREE.Vector3(hs.x, 0, hs.z));
+    }
+    const wideCam = findAll(root, "PodcastCamera")[0] ?? null;
+    const camPos = wideCam ? wideCam.getWorldPosition(new THREE.Vector3()) : null;
+    if (pi) put("podcast_idle", new THREE.Vector3(pi.x, 0, pi.z),
+      camPos ? new THREE.Vector3(camPos.x, 0, camPos.z) : new THREE.Vector3(pi.x, 0, pi.z + 2));
+    if (pe) put("podcast_enter", new THREE.Vector3(pe.x, 0, pe.z),
+      pi ? new THREE.Vector3(pi.x, 0, pi.z) : new THREE.Vector3(pe.x, 0, pe.z + 2));
+  }
+  for (const id of ["idle_spot", "inbox", "terminal", "bigscreen", "vault", "conveyor", "camera_mark", "tiktok",
+                    "podcast_idle", "podcast_enter", "host_seat", "guest_seat"] as const) {
     if (!stations[id]) stations[id] = { ...STATIONS[id] };
   }
 
@@ -614,8 +637,12 @@ function adoptGlbRoom(scene: THREE.Scene, root: THREE.Object3D): StageLayout {
     tiktok_left: /^(Camera_tiktok_left|TiktokCameraLeft)$/i,
     tiktok_right: /^(Camera_tiktok_right|TiktokCameraRight)$/i,
     tiktok_face: /^(Camera_tiktok_face|TiktokCameraFace)$/i,
+    podcast_wide: /^(Camera_podcast_wide|PodcastCamera)$/i,
+    podcast_host: /^(Camera_podcast_host|HostCamera)$/i,
+    podcast_guest: /^(Camera_podcast_guest|GuestCamera)$/i,
   };
-  for (const key of ["wide", "terminal", "facecam", "vault", "film", "bigscreen", "tiktok_front", "tiktok_left", "tiktok_right", "tiktok_face"] as const) {
+  for (const key of ["wide", "terminal", "facecam", "vault", "film", "bigscreen", "tiktok_front", "tiktok_left", "tiktok_right", "tiktok_face",
+                        "podcast_wide", "podcast_host", "podcast_guest"] as const) {
     const camNode = findByRegex(CAM_ALIASES[key]);
     if (!camNode) continue;
     camNode.updateWorldMatrix(true, false);
@@ -636,7 +663,15 @@ function adoptGlbRoom(scene: THREE.Scene, root: THREE.Object3D): StageLayout {
     // tiktok cams aim at the TALENT, not their authored forward — Unity
     // camera objects export facing -Z while empties face +Z, and guessing
     // wrong films the wall behind the studio (take two taught this)
-    if (key.startsWith("tiktok") && stations.tiktok) {
+    if (key === "podcast_host" && stations.host_seat)
+      look = new THREE.Vector3(stations.host_seat.x, 1.25, stations.host_seat.z);
+    else if (key === "podcast_guest" && stations.guest_seat)
+      look = new THREE.Vector3(stations.guest_seat.x, 1.25, stations.guest_seat.z);
+    else if (key === "podcast_wide" && stations.host_seat && stations.guest_seat)
+      look = new THREE.Vector3(
+        (stations.host_seat.x + stations.guest_seat.x) / 2, 1.2,
+        (stations.host_seat.z + stations.guest_seat.z) / 2);
+    else if (key.startsWith("tiktok") && stations.tiktok) {
       // wide shots aim at BODY CENTER (~0.9m) so the full body frames up;
       // the face cam aims at the head — that is its whole job
       const aimY = key === "tiktok_face" ? 1.5 : 0.9;

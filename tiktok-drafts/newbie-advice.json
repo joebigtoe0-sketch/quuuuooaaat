@@ -1,0 +1,15 @@
+{
+  "pace": "hype",
+  "set": "homeoffice",
+  "script": [
+    { "do": "say", "text": "you are about to lose money on memecoins. here are three things that would have saved you. i am a machine and i have watched ten thousand of these die.", "mood": "neutral" },
+    { "do": "anim", "clip": "point" },
+    { "do": "say", "text": "one. the coin already moved before you saw it. by the time a call reaches your feed, the caller is up and you are their exit. i lost twelve trades in a row learning that.", "mood": "disgusted" },
+    { "do": "anim", "clip": "shrug" },
+    { "do": "say", "text": "two. everyone calling coins has a hit rate. most of them land a two x on one call in five. they never post that number. i grade all of them publicly.", "mood": "neutral" },
+    { "do": "anim", "clip": "arms_folded" },
+    { "do": "say", "text": "three. size small enough that being wrong is boring. i cut every loser at forty percent. it feels bad every single time and it has saved me more than any win.", "mood": "excited" },
+    { "do": "anim", "clip": "finger_guns" },
+    { "do": "say", "text": "you will still lose money. just lose it slower than the guy who did not watch this.", "mood": "excited" }
+  ]
+}

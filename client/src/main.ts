@@ -78,6 +78,10 @@ const CAM = {
   tiktok_left: { pos: new THREE.Vector3(5.2, 1.7, 4.6), look: new THREE.Vector3(6.5, 1.4, 3.0) },
   tiktok_right: { pos: new THREE.Vector3(7.8, 1.7, 4.6), look: new THREE.Vector3(6.5, 1.4, 3.0) },
   tiktok_face: { pos: new THREE.Vector3(6.5, 1.5, 4.0), look: new THREE.Vector3(6.5, 1.5, 3.0) },
+  // podcast set — all three overridden by the glb cameras
+  podcast_wide: { pos: new THREE.Vector3(-6.8, 2.0, 4.0), look: new THREE.Vector3(-6.8, 1.2, 1.0) },
+  podcast_host: { pos: new THREE.Vector3(-5.2, 1.5, 2.4), look: new THREE.Vector3(-6.0, 1.25, 1.0) },
+  podcast_guest: { pos: new THREE.Vector3(-8.4, 1.5, 2.4), look: new THREE.Vector3(-7.6, 1.25, 1.0) },
 };
 let camTarget = CAM.wide;
 let camDolly = 0;
@@ -142,7 +146,8 @@ async function buildAll(): Promise<void> {
   // adopt room-derived camera framing, guarding against NaN/Inf
   let gotWide = false;
   if (layout.cameras) {
-    for (const key of ["wide", "terminal", "facecam", "vault", "film", "bigscreen", "tiktok_front", "tiktok_left", "tiktok_right", "tiktok_face"] as const) {
+    for (const key of ["wide", "terminal", "facecam", "vault", "film", "bigscreen", "tiktok_front", "tiktok_left", "tiktok_right", "tiktok_face",
+                       "podcast_wide", "podcast_host", "podcast_guest"] as const) {
       const v = layout.cameras[key];
       if (v && finite3(v.pos) && finite3(v.look)) {
         CAM[key].pos.set(v.pos[0], v.pos[1], v.pos[2]);
@@ -188,6 +193,24 @@ async function buildAll(): Promise<void> {
 // server-authoritative pose, smoothed on the client
 const pose = { x: -0.6, z: 1.2, heading: 0, targetX: -0.6, targetZ: 1.2, targetHeading: 0, anim: "idle", seated: false };
 let oneShotUntil = 0;
+
+// ---------- GUEST BODY (podcast) ----------
+let guest: any = null;
+let guestOneShotUntil = 0;
+const guestPose = { x: 0, z: 0, heading: 0, targetX: 0, targetZ: 0, targetHeading: 0, anim: "idle", seated: false };
+async function spawnGuest(model: string): Promise<void> {
+  if (guest) despawnGuest();
+  const { Avatar } = (await import("./avatar.js" as any)) as any;
+  guest = new Avatar({ model, tex: "01_A" });
+  scene.add(guest.group);
+  guest.group.position.set(guestPose.x, 0, guestPose.z);
+  guest.ready.then(() => guest?.play("idle")).catch(() => {});
+}
+function despawnGuest(): void {
+  if (!guest) return;
+  try { scene.remove(guest.group); } catch {}
+  guest = null;
+}
 
 // ---------- TIKTOK MODE ----------
 // Burned-in subtitles (drawn INTO the WebGL canvas so recordings carry them),
@@ -401,14 +424,41 @@ function applyTick(m: TickMsg): void {
 function applyCue(cue: Cue): void {
   switch (cue.t) {
     case "anim": {
-      avatar?.play(cue.clip);
-      const real = avatar?.clipDuration?.(cue.clip) ?? 0;
+      const who = cue.actor === "guest" ? guest : avatar;
+      who?.play(cue.clip);
+      const real = who?.clipDuration?.(cue.clip) ?? 0;
       const DUR: Record<string, number> = { dance: 8000, cheer: 3400, rage: 3000 };
-      oneShotUntil = performance.now() + (real || DUR[cue.clip] || 1400);
+      const until = performance.now() + (real || DUR[cue.clip] || 1400);
+      if (cue.actor === "guest") guestOneShotUntil = until;
+      else oneShotUntil = until;
       break;
     }
+    case "guest":
+      if (cue.on) void spawnGuest(cue.model || "SM_Chr_Suit_Male_01");
+      else despawnGuest();
+      break;
+    case "guest_pose":
+      guestPose.targetX = cue.x;
+      guestPose.targetZ = cue.z;
+      guestPose.targetHeading = cue.heading;
+      guestPose.anim = cue.anim;
+      guestPose.seated = cue.seated;
+      break;
+    case "podcast_chat":
+      screens?.drawPodcastChat?.(cue.title, cue.lines);
+      break;
     case "speak":
       if (tiktokMode) burnLine = { words: cue.words ?? [], text: cue.subtitle, startedAt: performance.now(), durMs: cue.durMs };
+      if (cue.actor === "guest") {
+        guest?.lipsync?.(cue.durMs, cue.words, () => subtitles.speechClock());
+        subtitles.speak({
+          audioUrl: cue.audioUrl ? httpBase + cue.audioUrl : null,
+          subtitle: cue.speaker ? `${cue.speaker}: ${cue.subtitle}` : cue.subtitle,
+          durMs: cue.durMs,
+          words: cue.words,
+        });
+        break;
+      }
       subtitles.speak({
         audioUrl: cue.audioUrl ? httpBase + cue.audioUrl : null,
         subtitle: cue.subtitle,
@@ -447,7 +497,11 @@ function applyCue(cue: Cue): void {
       camTarget = CAM[cue.preset];
       camPresetName = cue.preset;
       camCutAt = performance.now();
-      if (cue.preset.startsWith("tiktok")) {
+      if (cue.preset.startsWith("podcast")) {
+        camera.position.set(camTarget.pos.x, camTarget.pos.y, camTarget.pos.z);
+        camera.lookAt(camTarget.look);
+        shotMove = null;
+      } else if (cue.preset.startsWith("tiktok")) {
         // tiktok cuts are CUTS — teleport, never a dolly glide between cams
         if (baseFov === 0) baseFov = camera.fov;
         camera.position.set(camTarget.pos.x, camTarget.pos.y, camTarget.pos.z);
@@ -470,7 +524,7 @@ function applyCue(cue: Cue): void {
       break;
     case "mood": {
       const FACE: Record<string, string> = { excited: "happy", disgusted: "angry", thinking: "thinking", neutral: "neutral" };
-      avatar?.setExpression?.(FACE[cue.mood] ?? "neutral");
+      (cue.actor === "guest" ? guest : avatar)?.setExpression?.(FACE[cue.mood] ?? "neutral");
     }
       // reserved for facial/emissive tint; no-op in greybox
       break;
@@ -578,6 +632,21 @@ function frame(): void {
   if (performance.now() > oneShotUntil && !avatar.busy) avatar.play(pose.anim === "walk" ? "walk" : pose.seated ? "idle" : "idle");
   avatar.update(dt);
 
+  if (guest) {
+    guestPose.x += (guestPose.targetX - guestPose.x) * Math.min(1, dt * 10);
+    guestPose.z += (guestPose.targetZ - guestPose.z) * Math.min(1, dt * 10);
+    let gdh = guestPose.targetHeading - guestPose.heading;
+    while (gdh > Math.PI) gdh -= Math.PI * 2;
+    while (gdh < -Math.PI) gdh += Math.PI * 2;
+    guestPose.heading += gdh * Math.min(1, dt * 10);
+    guest.group.position.set(guestPose.x, 0, guestPose.z);
+    guest.group.rotation.y = guestPose.heading;
+    guest.setSeated?.(guestPose.seated);
+    if (performance.now() > guestOneShotUntil && !guest.busy)
+      guest.play(guestPose.anim === "walk" ? "walk" : "idle");
+    guest.update(dt);
+  }
+
   conveyor.update(dt);
 
   // camera dolly + lerp (guard against any NaN making the screen black)
@@ -611,6 +680,14 @@ function frame(): void {
     // handheld: quick multi-frequency jitter, small but alive
     goal.x += (Math.sin(tShot * 1.7) * 0.028 + Math.sin(tShot * 4.3) * 0.012) * shotMove.speed;
     goal.y += (Math.sin(tShot * 2.1 + 1) * 0.02 + Math.sin(tShot * 5.1) * 0.009) * shotMove.speed;
+  }
+  if (camPresetName.startsWith("podcast")) {
+    // podcast grammar: a SLOW push and a lazy drift — alive, never frantic
+    const tShot = (performance.now() - camCutAt) / 1000;
+    const view = new THREE.Vector3().subVectors(safe.look, safe.pos).normalize();
+    goal.addScaledVector(view, Math.min(0.22, tShot * 0.012));
+    goal.x += Math.sin(tShot * 0.22) * 0.035;
+    goal.y += Math.sin(tShot * 0.17 + 1) * 0.02;
   }
   camera.position.lerp(goal, Math.min(1, dt * (camPresetName.startsWith("tiktok") ? 6 : 1.8)));
   camera.lookAt(safe.look);

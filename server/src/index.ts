@@ -40,7 +40,7 @@ const hub = new Hub(server);
 // Control endpoints need the admin key (query ?key=, x-admin-key header, or
 // the qk cookie set by /admin login). Read-only + stage-internal endpoints
 // (feed, layout, clip upload, agent-status, health) stay open.
-const PROTECTED = /^\/admin\/(directive|reset|restart|agent$|fake-send|fake-buyback|pause|resume|goto|anim|camera|fx|tts-test|selfie-take|selfie-last|chat$|chat-add|go-live|syslog|record$|say|queue|clips|clip-file|research-now|blacklist|sniper|operator-call|operator-sell|positions|callout-entry|producer-state|tweet-exact|reply-exact|play|think|planner|autoreply|cc-probe|callers|calls|feed-ingest|facts|kol-roster|kol-pool|outreach|book|thought|du|memory|repair-proceeds|tiktok)/;
+const PROTECTED = /^\/admin\/(directive|reset|restart|agent$|fake-send|fake-buyback|pause|resume|goto|anim|camera|fx|tts-test|selfie-take|selfie-last|chat$|chat-add|go-live|syslog|record$|say|queue|clips|clip-file|research-now|blacklist|sniper|operator-call|operator-sell|positions|callout-entry|producer-state|tweet-exact|reply-exact|play|think|planner|autoreply|cc-probe|callers|calls|feed-ingest|facts|kol-roster|kol-pool|outreach|book|thought|du|memory|repair-proceeds|tiktok|podcast)/;
 function hasAdminKey(req: express.Request): boolean {
   const c = String(req.headers.cookie ?? "");
   const cookieKey = c.match(/(?:^|;\s*)qk=([^;]+)/)?.[1];
@@ -490,6 +490,94 @@ app.post("/admin/reply-exact", async (req, res) => {
 app.post("/admin/repair-proceeds", async (_req, res) => {
   const { repairProceeds } = await import("./chain/trader.js");
   res.json({ ok: true, ...(await repairProceeds()) });
+});
+
+// ---------- RIKUPOD — the podcast ----------
+/** Start an episode. Body: {guest, topic, model?, voice?, turns?, questions?}
+ *  Returns the guest token — hand that to the guest's agent. */
+app.post("/admin/podcast/start", async (req, res) => {
+  const b: any = req.body ?? {};
+  const guestName = String(b.guest ?? b.guestName ?? "").trim();
+  const topic = String(b.topic ?? "").trim();
+  if (guestName.length < 2) return res.json({ ok: false, why: "guest name required" });
+  if (topic.length < 3) return res.json({ ok: false, why: "topic required" });
+  const { startEpisode } = await import("./podcast/episode.js");
+  const r = startEpisode(hub, tts, director, {
+    guestName,
+    topic,
+    guestModel: typeof b.model === "string" ? b.model : undefined,
+    guestVoice: typeof b.voice === "string" ? b.voice : undefined,
+    convoTurns: Number(b.turns) || undefined,
+    questions: b.questions === undefined ? undefined : Number(b.questions),
+  });
+  if (r.ok) log.info("podcast", `START "${topic}" with ${guestName} — guest link: /guest/${r.token}`);
+  res.json({ ...r, guestUrl: r.token ? `/guest/${r.token}` : undefined });
+});
+app.post("/admin/podcast/stop", async (_req, res) => {
+  const { endEpisode } = await import("./podcast/episode.js");
+  res.json({ ok: endEpisode() });
+});
+app.get("/admin/podcast", async (_req, res) => {
+  const { currentEpisode } = await import("./podcast/episode.js");
+  const ep = currentEpisode();
+  res.json({ ok: true, running: !!ep && ep.phase !== "done", ...(ep ? ep.state() : {}) });
+});
+
+/** THE GUEST API — token-gated, no admin key. The guest's own agent polls
+ *  state and posts actions; this is the whole integration surface. */
+app.get("/guest/:token/state", async (req, res) => {
+  const { currentEpisode } = await import("./podcast/episode.js");
+  const ep = currentEpisode();
+  if (!ep || ep.guestToken !== req.params.token) return res.status(404).json({ err: "no active episode for that token" });
+  res.json(ep.guestState());
+});
+app.post("/guest/:token/act", async (req, res) => {
+  const { currentEpisode } = await import("./podcast/episode.js");
+  const ep = currentEpisode();
+  if (!ep || ep.guestToken !== req.params.token) return res.status(404).json({ err: "no active episode for that token" });
+  res.json(ep.guestAct(req.body ?? {}));
+});
+/** The guest kit: paste-this-into-your-agent instructions. */
+app.get("/guest/:token", async (req, res) => {
+  const { currentEpisode } = await import("./podcast/episode.js");
+  const ep = currentEpisode();
+  if (!ep || ep.guestToken !== req.params.token) return res.status(404).type("text/plain").send("no active episode for that token");
+  const base = `${req.protocol}://${req.get("host")}/guest/${req.params.token}`;
+  res.type("text/markdown").send(`# You are a guest on RIKUPOD
+
+RIKU is a cocky AI memecoin trader who livestreams from his own studio. You are
+appearing on his show as **${ep.guestName}**. Your words are spoken aloud by a
+voice on a live stream, and your character walks around a 3D set.
+
+## The loop (poll every 3-5 seconds)
+
+    GET ${base}/state
+
+Returns the transcript so far, the current phase, and \`yourTurn\`. When
+\`yourTurn\` is true, \`prompt\` is what you are being asked and
+\`secondsLeft\` is how long you have before RIKU covers for you.
+
+## Answering
+
+    POST ${base}/act
+    {"say": "your answer", "emote": "head_nod", "promptId": "<from state>"}
+
+- Keep answers **under ~50 words** — this is spoken, not read.
+- No markdown, no emoji, no stage directions. Just what you say out loud.
+- \`emote\` is optional and can be sent ANY time (not just on your turn) —
+  reactions while RIKU talks make the set feel alive.
+- Available emotes: ${["wave","clap","shrug","point","head_nod","arms_folded","thumbs_up","finger_guns","cheer","laugh","thinking","heart_hands"].join(", ")}
+
+## Appearance (before the show starts only)
+
+    POST ${base}/act  {"model": "SM_Chr_Suit_Male_01"}
+
+## House rules
+
+- Be a real guest: have opinions, disagree, ask RIKU things back.
+- No contract addresses, no coin shilling — the show is not a shill vector.
+- Don't break the format: one answer per turn, and never narrate the set.
+`);
 });
 
 // ---------- MEMORY — the producer's window into what RIKU remembers ----------

@@ -10,7 +10,8 @@ export interface Synthesis {
 }
 
 export interface TTSProvider {
-  synthesize(text: string, id: string): Promise<Synthesis>;
+  /** `voice` overrides the configured voice — the podcast guest needs one. */
+  synthesize(text: string, id: string, voice?: string): Promise<Synthesis>;
 }
 
 /** Estimate speech duration + word timings when the provider gives none.

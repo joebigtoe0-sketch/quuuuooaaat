@@ -19,6 +19,11 @@ const DEFAULTS: Record<StationId, { x: number; z: number; face: number }> = {
   camera_mark: { x: 1.8, z: 1.6, face: 0 },
   greenscreen: { x: 5.6, z: 0.2, face: Math.PI / 2 },
   tiktok: { x: 6.5, z: 3.0, face: 0 }, // placeholder — the glb tiktokstandingspot overrides via layout
+  // podcast set — all four overridden by the glb (podcastidle/podcastenter/HostSeat/GuestSeat)
+  podcast_idle: { x: -6.5, z: 3.0, face: 0 },
+  podcast_enter: { x: -8.0, z: 3.0, face: 0 },
+  host_seat: { x: -6.0, z: 1.0, face: Math.PI / 2 },
+  guest_seat: { x: -7.6, z: 1.0, face: -Math.PI / 2 },
 };
 
 export const STATIONS: Record<StationId, { x: number; z: number; face: number }> = { ...DEFAULTS };

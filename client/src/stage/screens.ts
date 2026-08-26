@@ -54,11 +54,13 @@ export class Screens {
   private inspection: Screen;
   private callouts: Screen;
   private treasury: Screen;
+  private podcast: Screen | null = null;
 
   constructor(meshes: Record<string, THREE.Mesh>) {
     this.inspection = new Screen(meshes.inspection);
     this.callouts = new Screen(meshes.callouts);
     this.treasury = new Screen(meshes.treasury);
+    if (meshes.podcastchat) this.podcast = new Screen(meshes.podcastchat);
     this.drawInspection({ mint: null, name: "IDLE", symbol: "—", rows: [], score: null, tier: null });
     this.drawCallouts([]);
     this.drawTreasury({ sol: 0, ownTokens: 0, buybacks: [], neverSoldDays: 0, holdings: [] });
@@ -357,6 +359,48 @@ export class Screens {
       }
     }
     this.inspection.done();
+  }
+
+  /** The podcast set's TV: live chat, newest at the bottom. */
+  drawPodcastChat(title: string, lines: { user: string; text: string }[]): void {
+    this.podcastChat = { title, lines };
+    this.paintPodcastChat();
+  }
+  private podcastChat: { title: string; lines: { user: string; text: string }[] } | null = null;
+  private paintPodcastChat(): void {
+    const t = this.podcast;
+    if (!t || !this.podcastChat) return;
+    const g = t.ctx;
+    t.bg();
+    g.textBaseline = "top";
+    const PX = 44;
+    g.fillStyle = "#2affd4";
+    g.font = "bold 34px 'Consolas', monospace";
+    g.fillText(this.podcastChat.title.toUpperCase().slice(0, 34), PX, 30);
+    g.fillStyle = "#1c2740";
+    g.fillRect(PX, 76, W - 2 * PX, 3);
+    let y = 100;
+    const rows = this.podcastChat.lines.slice(-9);
+    for (const l of rows) {
+      g.fillStyle = "#89ddff";
+      g.font = "bold 24px 'Consolas', monospace";
+      const name = l.user.slice(0, 14) + ": ";
+      g.fillText(name, PX, y);
+      const nw = g.measureText(name).width;
+      g.fillStyle = "#dfe8fa";
+      g.font = "24px 'Consolas', monospace";
+      let x = PX + nw;
+      for (const word of l.text.split(/(\s+)/)) {
+        const w = g.measureText(word).width;
+        if (x + w > W - PX) { x = PX + 24; y += 30; }
+        if (y > H - 60) break;
+        g.fillText(word, x, y);
+        x += w;
+      }
+      y += 42;
+      if (y > H - 60) break;
+    }
+    t.done();
   }
 
   drawInspection(s: InspectionState): void {

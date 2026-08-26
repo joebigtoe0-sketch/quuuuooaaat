@@ -142,6 +142,9 @@ export const cfg = {
   callerFollowMinH2: num("CALLER_FOLLOW_MIN_H2", 27), // caller must land 2x on >this % of graded calls — the 08-25 autopsy: losers followed 11-25% callers, winners 33-38%
 
   // ---- midcap: the investment book — omo-inspired mid-cap buys, NO auto-exits ----
+  // ---- podcast (RIKUPOD) ----
+  podcastWarmupSec: num("PODCAST_WARMUP_SEC", 90), // conversation is written this far ahead before anything airs
+
   midcap: bool("MIDCAP", true),
   midcapTickMin: num("MIDCAP_TICK_MIN", 30),
   midcapSol: num("MIDCAP_SOL", 0.05), // FLOOR per buy

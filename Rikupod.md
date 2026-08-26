@@ -1,87 +1,59 @@
-# RIKUPOD — AI guests on RIKU's show
+# RIKUPOD — the podcast
 
-Status: **design only — not building yet.** This doc captures the plan so it
-can be picked up cold later.
+Live on the stream. RIKU hosts, an AI guest joins, the live chat asks
+questions. One fixed blueprint per episode.
 
-## The idea
+## Why it never has dead air
 
-A podcast/talk-show set inside RIKU's world where OTHER AI agents appear as
-guests. Each guest gets a password-gated endpoint: instructions + API to
-customize an avatar (from our Synty assets — menu, not arbitrary), emote,
-move, receive RIKU's lines, and answer. Their answers run through our TTS and
-come out of their character on stream. RIKU hosts through the same machinery
-from the inside.
+The conversation is **written ahead of what airs**. A producer loop calls
+RIKU's brain and the guest's API as fast as they answer; a playback loop
+stages whatever is already written. Nothing airs until the buffer has a
+head start (`PODCAST_WARMUP_SEC`, default 90s), so viewers never watch
+anyone think — and playback slowly catches up to live by the closing words.
 
-Why it's strong: nobody else owns a broadcast studio stack (3D world,
-director/beats, TTS, cameras, OBS pipeline). Two AIs actually talking on a
-set is inherently clippable, and every guest's community becomes distribution.
+## Running an episode
 
-## What already exists (reuse, don't invent)
+```bash
+curl -X POST "https://quantriku.fun/admin/podcast/start?key=<ADMIN>" \
+  -H "content-type: application/json" \
+  -d '{"guest":"OMO","topic":"who actually has an edge in memecoins","turns":10,"questions":5}'
+```
 
-| Piece | Where | Role in Rikupod |
-|---|---|---|
-| Puppet mode | `start-puppet.bat`, `server/src/puppet-server.ts` | The guest-control surface already works: emote/walk/say→TTS. Guest endpoint = puppet mode + auth + queue |
-| Wardrobe | `server/src/wardrobe.ts` + client wardrobe | Avatar customization, already data-driven → serve options as a JSON menu |
-| TTS | `server/src/voice/*` | Per-actor voices (Edge TTS has dozens — guests pick from a menu) |
-| Auth pattern | admin key gating in `server/src/index.ts` | One token per guest, same mechanism |
-| Director/beats/cameras | `server/src/director/*` | Show machinery: pause normal beats, run an interview beat, cut cameras |
+Returns a **guest token** → hand `https://quantriku.fun/guest/<token>` to the
+guest's operator. That URL IS the integration doc (their agent can read it).
 
-## The two genuinely new things
+- `GET /admin/podcast` — phase, buffer depth, whether the guest is connected
+- `POST /admin/podcast/stop` — end early (it finishes the current line first)
 
-1. **A second avatar in the world.** The scene renders one character today.
-   Needs: a guest character instance (spawn, locomotion, anims), an
-   `actor: "riku" | "guest"` field on cues so speak/emote/walk target the
-   right body, and a small set (two chairs facing each other, mics, "THE RIKU
-   SHOW" backdrop). The only real client-side work; the foundation for
-   everything else.
-2. **A turn machine.** Interviews die from dead air and cross-talk. The
-   interview beat owns whose turn it is: RIKU asks → guest has N seconds →
-   timeout = RIKU fills with a joke ("my guest is buffering — this is why I
-   don't date cloud-hosted") and moves on. Guests can EMOTE any time
-   (reactions keep it alive) but can only SPEAK on their turn.
+While an episode runs the normal show is paused; it resumes automatically.
 
-## Guest API — design for LLMs, not humans
+## The blueprint (fixed)
 
-Guests are agents → **polling REST + a single markdown instruction page**
-(an LLM integrates that in ten minutes; no SDK, no websockets):
+1. RIKU at `podcast_idle`, guest at `podcast_enter`, camera CUTS to the wide
+2. RIKU welcomes + introduces the guest
+3. RIKU walks to `host_seat` while the guest walks to the mark
+4. Guest's own intro (their words, their emote), then to `guest_seat`
+5. Conversation, RIKU opens, strict alternation
+6. Best live-chat questions (LLM-picked, max 5): RIKU reads it → guest answers
+   → RIKU's own take
+7. Guest's goodbye, RIKU walks back to the mark, closing words
 
-- `GET  /guest/{token}/state` → transcript so far, whose turn, time left,
-  emote list, avatar menu
-- `POST /guest/{token}/avatar` → picks from the enumerated Synty menu
-- `POST /guest/{token}/act` → `{say?, emote?, moveTo?}` — speech accepted
-  only on their turn, emotes immediate
+Cameras: `PodcastCamera` wide, `HostCamera`, `GuestCamera` — cuts to whoever
+is talking, wide every ~5 turns, gentle push-in (nothing tiktok-frantic).
+`podcasttv` shows the live chat, refreshed every 5s.
 
-The **guest kit** is one markdown doc the other team pastes into their
-agent's context: "you're a guest on RIKU's show, here's your token, poll
-this, keep answers under ~40 words, here's the vibe." The doc IS the
-integration.
+## The guest API
 
-Host side needs almost nothing new: RIKU's questions come from his brain or
-the producer via the existing admin surface, spoken through the interview
-beat.
+- `GET  /guest/<token>/state` → transcript, phase, `yourTurn`, `prompt`, `secondsLeft`
+- `POST /guest/<token>/act` → `{say, emote?, promptId?}`; `{emote}` alone works
+  any time (reactions); `{model}` before the show sets their character
+- `GET  /guest/<token>` → the paste-into-your-agent guest kit
 
-## Moderation (decide before episode one)
+No guest connected, or too slow? A stand-in guest keeps the show running —
+so the format is testable solo and an episode can never hard-stall.
 
-Guest text goes through OUR TTS onto OUR stream:
-- length caps + existing outbound filters (refusal/meta/cashtag) + banned words
-- **producer-approval mode** for early episodes: guest lines queue for
-  one-click approve before airing; loosen once the format is proven
-- no contract addresses from guests unless whitelisted — the show must not
-  become a shill vector aimed at our audience
+## Knobs
 
-## Build order (easiest first, each step useful alone)
-
-1. **Second avatar + set** — client work only, no API. Test with scripted
-   guest lines. This alone enables a FAKED pilot episode: the producer
-   puppets the guest manually (calling the guest AI's real public API from
-   outside and pasting replies). Air episode one this way — it's the
-   cheapest test of the only real question: *is two AIs talking on a set
-   actually fun to watch?* If the pilot is boring, one day spent, not two
-   weeks.
-2. **Interview beat + turn machine** — cameras, turn state, timeout fills,
-   episode open/close.
-3. **Guest REST endpoint + per-guest token + the guest-kit markdown.**
-4. **Avatar + voice menus** (wardrobe data as JSON, TTS voice list).
-5. Later: booking flow, multiple guests, clip cutting for X. (If the
-   hackathon idea ever returns, this is the "media layer" entry, mostly
-   built.)
+`PODCAST_WARMUP_SEC` (90) · `turns` (10) · `questions` (5) · `model`
+(SM_Chr_Suit_Male_01 | SM_Chr_Boss_Male_01 | SK_Quant) · `voice` (TTS voice
+for the guest — give them a different one from RIKU's)

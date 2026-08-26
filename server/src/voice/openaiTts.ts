@@ -14,7 +14,7 @@ import { estimateTimings, mp3DurationMs, spreadWords, type Synthesis, type TTSPr
 export class OpenAITTS implements TTSProvider {
   private failStreak = 0;
 
-  async synthesize(text: string, id: string): Promise<Synthesis> {
+  async synthesize(text: string, id: string, voice?: string): Promise<Synthesis> {
     if (!cfg.ttsApiKey) {
       if (this.failStreak++ === 0)
         log.warn("tts", "TTS_PROVIDER=openai but TTS_API_KEY is empty — falling back to subtitles");
@@ -29,7 +29,7 @@ export class OpenAITTS implements TTSProvider {
         headers: { "content-type": "application/json", authorization: `Bearer ${cfg.ttsApiKey}` },
         body: JSON.stringify({
           model: cfg.ttsOpenaiModel,
-          voice: cfg.ttsVoice,
+          voice: voice || cfg.ttsVoice,
           input: text.slice(0, 900),
           response_format: "mp3",
           speed: cfg.ttsOpenaiSpeed,

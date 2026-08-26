@@ -13,7 +13,11 @@ export type StationId =
   | "conveyor"
   | "camera_mark"
   | "greenscreen"
-  | "tiktok";
+  | "tiktok"
+  | "podcast_idle"
+  | "podcast_enter"
+  | "host_seat"
+  | "guest_seat";
 
 export interface CheckRow {
   label: string;
@@ -107,7 +111,7 @@ export type TakeoverView =
     };
 
 export type Cue =
-  | { t: "anim"; clip: string }
+  | { t: "anim"; clip: string; actor?: "riku" | "guest" }
   | { t: "walk"; to: StationId; durMs: number } // informational; positions come via tick
   | {
       t: "speak";
@@ -115,15 +119,21 @@ export type Cue =
       subtitle: string;
       durMs: number;
       words?: { word: string; atMs: number }[];
+      actor?: "riku" | "guest";
+      speaker?: string; // display name under the subtitle (guest handle)
     }
   | { t: "screen_inspection"; patch: Partial<InspectionState>; reset?: boolean }
   | { t: "screen_treasury"; state: TreasuryState }
   | { t: "screen_callouts"; cards: CalloutCard[] }
   | { t: "conveyor_add"; item: ConveyorItem }
   | { t: "conveyor_pick"; mint: string }
-  | { t: "camera"; preset: "wide" | "terminal" | "facecam" | "vault" | "film" | "bigscreen" | "tiktok_front" | "tiktok_left" | "tiktok_right" | "tiktok_face" }
+  | { t: "camera"; preset: "wide" | "terminal" | "facecam" | "vault" | "film" | "bigscreen" | "tiktok_front" | "tiktok_left" | "tiktok_right" | "tiktok_face" | "podcast_wide" | "podcast_host" | "podcast_guest" }
   | { t: "fx"; kind: "stamp_rekt" | "stamp_called" | "confetti" | "ding" | "buzzer" }
-  | { t: "mood"; mood: "neutral" | "excited" | "disgusted" | "thinking" }
+  | { t: "mood"; mood: "neutral" | "excited" | "disgusted" | "thinking"; actor?: "riku" | "guest" }
+  // ---- podcast: the second body + the chat TV ----
+  | { t: "guest"; on: boolean; model?: string; name?: string }
+  | { t: "guest_pose"; x: number; z: number; heading: number; anim: string; seated: boolean }
+  | { t: "podcast_chat"; title: string; lines: { user: string; text: string }[] }
   | { t: "record"; on: boolean; id: string }
   | { t: "tiktok"; on: boolean; mode?: "studio" | "facecam"; bg?: string; pace?: "chill" | "hype"; autocut?: boolean; set?: "green" | "homeoffice" } // filming mode: burned subs, bg replace, client cut rhythm
   | { t: "selfie"; id: string; anim?: string; expr?: string }

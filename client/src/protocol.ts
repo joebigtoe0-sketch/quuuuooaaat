@@ -9,7 +9,11 @@ export type StationId =
   | "conveyor"
   | "camera_mark"
   | "greenscreen"
-  | "tiktok";
+  | "tiktok"
+  | "podcast_idle"
+  | "podcast_enter"
+  | "host_seat"
+  | "guest_seat";
 
 export interface CheckRow {
   label: string;
@@ -98,17 +102,21 @@ export type TakeoverView =
     };
 
 export type Cue =
-  | { t: "anim"; clip: string }
+  | { t: "anim"; clip: string; actor?: "riku" | "guest" }
   | { t: "walk"; to: StationId; durMs: number }
-  | { t: "speak"; audioUrl: string | null; subtitle: string; durMs: number; words?: { word: string; atMs: number }[] }
+  | { t: "speak"; audioUrl: string | null; subtitle: string; durMs: number; words?: { word: string; atMs: number }[]; actor?: "riku" | "guest"; speaker?: string }
   | { t: "screen_inspection"; patch: Partial<InspectionState>; reset?: boolean }
   | { t: "screen_treasury"; state: TreasuryState }
   | { t: "screen_callouts"; cards: CalloutCard[] }
   | { t: "conveyor_add"; item: ConveyorItem }
   | { t: "conveyor_pick"; mint: string }
-  | { t: "camera"; preset: "wide" | "terminal" | "facecam" | "vault" | "film" | "bigscreen" | "tiktok_front" | "tiktok_left" | "tiktok_right" | "tiktok_face" }
+  | { t: "camera"; preset: "wide" | "terminal" | "facecam" | "vault" | "film" | "bigscreen" | "tiktok_front" | "tiktok_left" | "tiktok_right" | "tiktok_face" | "podcast_wide" | "podcast_host" | "podcast_guest" }
   | { t: "fx"; kind: "stamp_rekt" | "stamp_called" | "confetti" | "ding" | "buzzer" }
-  | { t: "mood"; mood: "neutral" | "excited" | "disgusted" | "thinking" }
+  | { t: "mood"; mood: "neutral" | "excited" | "disgusted" | "thinking"; actor?: "riku" | "guest" }
+  // ---- podcast: the second body + the chat TV ----
+  | { t: "guest"; on: boolean; model?: string; name?: string }
+  | { t: "guest_pose"; x: number; z: number; heading: number; anim: string; seated: boolean }
+  | { t: "podcast_chat"; title: string; lines: { user: string; text: string }[] }
   | { t: "record"; on: boolean; id: string }
   | { t: "tiktok"; on: boolean; mode?: "studio" | "facecam"; bg?: string; pace?: "chill" | "hype"; autocut?: boolean; set?: "green" | "homeoffice" } // filming mode: burned subs, bg replace, client cut rhythm
   | { t: "selfie"; id: string; anim?: string; expr?: string }
@@ -151,4 +159,8 @@ export const STATIONS: Record<StationId, { x: number; z: number; face: number }>
   camera_mark: { x: 1.8, z: 1.6, face: 0 },
   greenscreen: { x: 5.6, z: 0.2, face: Math.PI / 2 },
   tiktok: { x: 6.5, z: 3.0, face: 0 },
+  podcast_idle: { x: -6.5, z: 3.0, face: 0 },
+  podcast_enter: { x: -8.0, z: 3.0, face: 0 },
+  host_seat: { x: -6.0, z: 1.0, face: Math.PI / 2 },
+  guest_seat: { x: -7.6, z: 1.0, face: -Math.PI / 2 },
 };

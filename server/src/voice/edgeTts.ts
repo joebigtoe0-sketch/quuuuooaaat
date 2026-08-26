@@ -14,10 +14,10 @@ import { estimateTimings, type Synthesis, type TTSProvider } from "./tts.js";
 export class EdgeTTS implements TTSProvider {
   private failStreak = 0;
 
-  async synthesize(text: string, id: string): Promise<Synthesis> {
+  async synthesize(text: string, id: string, voice?: string): Promise<Synthesis> {
     try {
       const tts = new MsEdgeTTS();
-      await tts.setMetadata(cfg.ttsVoice, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3);
+      await tts.setMetadata(voice || cfg.ttsVoice, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3);
       fs.mkdirSync(cfg.audioDir, { recursive: true });
       const file = path.join(cfg.audioDir, `${id}.mp3`);
 
