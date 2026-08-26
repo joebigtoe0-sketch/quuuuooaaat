@@ -61,6 +61,7 @@ let playing = false, playT0 = 0, lastFrameT = 0, playGen = 0, cueIdx = 0;
 let smooth = { yMax: 0, yMin: 0, pnl: 0 };
 let recorder = null, recChunks = [];
 let chartBgImg = null, cardBgImg = null;
+let xUser = '', xPfpImg = null;
 
 const ASPECTS = { '9:16': [1080, 1920], '1:1': [1080, 1080], '16:9': [1920, 1080] };
 const INTRO = 2400, CARD_IN = 900, CARD_HOLD = 6000;
@@ -167,13 +168,27 @@ async function fetchReplay(mint, wallet) {
   throw new Error('server unavailable — try again in a minute');
 }
 
+// resolve the X handle's pfp (best-effort, capped so it never stalls the load)
+async function loadXIdentity() {
+  xUser = $('xuser').value.trim().replace(/^@/, '').replace(/[^A-Za-z0-9_]/g, '').slice(0, 15);
+  xPfpImg = null;
+  if (!xUser) return;
+  await new Promise(resolve => {
+    const im = new Image();
+    const done = setTimeout(() => resolve(), 4000);
+    im.onload = () => { xPfpImg = im; clearTimeout(done); resolve(); };
+    im.onerror = () => { clearTimeout(done); resolve(); };
+    im.src = 'api/xpfp?u=' + encodeURIComponent(xUser);
+  });
+}
+
 async function load() {
   const mint = $('mint').value.trim(), wallet = $('wallet').value.trim();
   if (!mint || !wallet) return setStatus('need both addresses', true);
   setStatus('fetching trades + chart…');
   $('load').disabled = true;
   try {
-    const data = await fetchReplay(mint, wallet);
+    const [data] = await Promise.all([fetchReplay(mint, wallet), loadXIdentity()]);
     await document.fonts.load("100px Anton").catch(() => {});
     model = buildModel(data, wallet);
     setStatus(`${model.meta.symbol}: ${model.rawTrades.length} fills → ${model.events.length} events, ${data.candles.length} candles (${data.interval})`);
@@ -379,6 +394,34 @@ function labText(txt, x, y, sizePx, color, align, spacingPx) {
   ctx.restore();
 }
 
+// pfp circle + @handle, centered on (cx, cy) as one unit
+function drawIdentityRow(cx, cy, r, fontPx, color) {
+  const text = '@' + xUser;
+  ctx.save();
+  ctx.font = `700 ${Math.round(fontPx)}px ${LAB}`;
+  const tw = ctx.measureText(text).width;
+  const gap = r * 0.55;
+  const left = cx - (r * 2 + gap + tw) / 2;
+  // avatar (or monogram circle if the pfp didn't resolve)
+  ctx.beginPath(); ctx.arc(left + r, cy, r, 0, 7); ctx.closePath();
+  ctx.strokeStyle = C.signal; ctx.lineWidth = Math.max(2, r * 0.09); ctx.stroke();
+  ctx.save();
+  ctx.clip();
+  if (xPfpImg) ctx.drawImage(xPfpImg, left, cy - r, r * 2, r * 2);
+  else {
+    ctx.fillStyle = '#221f10'; ctx.fillRect(left, cy - r, r * 2, r * 2);
+    ctx.fillStyle = C.signal; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = `400 ${Math.round(r * 1.1)}px ${DISP}`;
+    ctx.fillText(xUser[0].toUpperCase(), left + r, cy + r * 0.06);
+    ctx.textBaseline = 'alphabetic';
+  }
+  ctx.restore();
+  ctx.font = `700 ${Math.round(fontPx)}px ${LAB}`;
+  ctx.textAlign = 'left'; ctx.fillStyle = color;
+  ctx.fillText(text, left + r * 2 + gap, cy + fontPx * 0.35);
+  ctx.restore();
+}
+
 function drawCover(img, x, y, w, h) {
   // works for <img> and <video> alike
   const iw = img.videoWidth || img.width, ih = img.videoHeight || img.height;
@@ -394,16 +437,19 @@ function renderFrame(t) {
   const L = layout();
   drawBackdrop(L, t);
 
+  let scene = 'replay';
   if (t < INTRO) {
+    scene = 'intro';
     drawIntro(L, t / INTRO);
   } else if (t < INTRO + cfg.durMs) {
     drawReplay(L, (t - INTRO) / cfg.durMs, t);
   } else {
+    scene = 'card';
     drawReplay(L, 1, t, true);
     const ct = t - INTRO - cfg.durMs;
     drawCard(L, clamp(ct / CARD_IN, 0, 1), ct);
   }
-  drawWatermark(L);
+  drawWatermark(L, scene);
 }
 
 function drawBackdrop(L, t) {
@@ -443,7 +489,12 @@ function drawIntro(L, k) {
 
   ctx.globalAlpha = a3;
   labText('T R A D E   R E P L A Y', cx, cy + 245 * u, 28 * u, C.acid, 'center', 8 * u);
-  labText(shortAddr(model.wallet), cx, cy + 292 * u, 22 * u, C.cream60, 'center', 3 * u);
+  if (xUser) {
+    drawIdentityRow(cx, cy + 310 * u, 26 * u, 26 * u, C.cream);
+    labText(shortAddr(model.wallet), cx, cy + 372 * u, 20 * u, C.cream60, 'center', 3 * u);
+  } else {
+    labText(shortAddr(model.wallet), cx, cy + 292 * u, 22 * u, C.cream60, 'center', 3 * u);
+  }
   ctx.globalAlpha = 1;
 }
 
@@ -785,7 +836,12 @@ function drawCard(L, kIn, cardT) {
   ctx.fillText(fmtPct(T.roi * count), cx, heroY + 84 * u);
 
   // footer
-  labText(shortAddr(model.wallet), cx, top + chh - 66 * u, 19 * u, C.cream60, 'center', 3 * u);
+  if (xUser) {
+    drawIdentityRow(cx, top + chh - 112 * u, 20 * u, 21 * u, C.cream);
+    labText(shortAddr(model.wallet), cx, top + chh - 66 * u, 17 * u, C.cream60, 'center', 3 * u);
+  } else {
+    labText(shortAddr(model.wallet), cx, top + chh - 66 * u, 19 * u, C.cream60, 'center', 3 * u);
+  }
   labText('QUANTRIKU.FUN', cx, top + chh - 32 * u, 17 * u, C.signal, 'center', 6 * u);
   ctx.restore();
 }
@@ -813,9 +869,18 @@ function drawConfetti(L, cardT) {
   ctx.globalAlpha = 1;
 }
 
-function drawWatermark(L) {
+function drawWatermark(L, scene) {
   const { W, H, u } = L;
   labText('RIKU — QUANTRIKU.FUN', W - 28 * u, H - 26 * u, 18 * u, 'rgba(244,236,202,0.5)', 'right', 3 * u);
+  if (xUser && model && scene === 'replay') {
+    // trader identity bottom-left, mirroring the watermark
+    const r = 16 * u;
+    ctx.save();
+    ctx.font = `700 ${Math.round(18 * u)}px ${LAB}`;
+    const tw = ctx.measureText('@' + xUser).width;
+    drawIdentityRow(28 * u + (r * 2 + r * 0.55 + tw) / 2, H - 32 * u, r, 18 * u, 'rgba(244,236,202,0.75)');
+    ctx.restore();
+  }
 }
 
 // ---------------------------------------------------------------- playback
@@ -1015,7 +1080,7 @@ $('play').onclick = () => play();
 $('rec').onclick = record;
 $('dur').oninput = e => { cfg.durMs = +e.target.value * 1000; $('durLabel').textContent = e.target.value + 's'; };
 $('aspect').onchange = e => { cfg.aspect = e.target.value; if (model && !playing) { applyAspect(); renderFrame(lastFrameT); } };
-['mint', 'wallet'].forEach(id => $(id).addEventListener('keydown', e => { if (e.key === 'Enter') load(); }));
+['mint', 'wallet', 'xuser'].forEach(id => $(id).addEventListener('keydown', e => { if (e.key === 'Enter') load(); }));
 
 // idle backdrop
 applyAspect();

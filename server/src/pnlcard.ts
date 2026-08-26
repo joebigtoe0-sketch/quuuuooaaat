@@ -211,4 +211,22 @@ export function registerPnlCard(app: Express) {
   };
   app.get("/pnl-card/api/img", imgProxy);
   app.get("/img-proxy", imgProxy); // desk surfaces (wallet panel, conveyor) use this alias
+
+  // X profile picture by handle (unavatar, no keys), same-origin for the canvas
+  app.get("/pnl-card/api/xpfp", async (req, res) => {
+    try {
+      const u = String(req.query.u || "").replace(/^@/, "");
+      if (!/^[A-Za-z0-9_]{1,15}$/.test(u)) return res.status(400).end("bad handle");
+      const r = await fetch(`https://unavatar.io/twitter/${u}?fallback=false`, {
+        headers: { "user-agent": UA["user-agent"] },
+        signal: AbortSignal.timeout(8000),
+      });
+      const ct = r.headers.get("content-type") || "";
+      if (!r.ok || !ct.startsWith("image/")) return res.status(404).end("no pfp");
+      res.set("content-type", ct).set("cache-control", "max-age=3600");
+      res.end(Buffer.from(await r.arrayBuffer()));
+    } catch {
+      res.status(502).end();
+    }
+  });
 }
