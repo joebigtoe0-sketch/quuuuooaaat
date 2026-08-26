@@ -405,12 +405,16 @@ function hideLensBlockers(pos: THREE.Vector3): void {
     try { box = new THREE.Box3().setFromObject(m); } catch { return; }
     if (box.isEmpty()) return;
     // distance from the camera to the closest point of the mesh
-    // walls and stage decks ARE the set — hiding them exposed the room
-    // behind. Only small props (a tripod leg, a plant frond) get pulled.
+    // walls and stage decks ARE the set and never hide; PROPS of any size do
+    // (the white streak was SM_Prop_Bear_Statue_01 — a man-sized white statue
+    // parked against the camera cluster, too big for the old small-prop cap)
+    const name = (o.name || "") + " " + (o.parent?.name || "");
+    if (/SM_Buildings_|SM_Bld_/i.test(name)) return;
+    const isProp = /SM_Prop_|SM_Env_|tripod/i.test(name);
     const size = box.getSize(new THREE.Vector3());
-    if (Math.max(size.x, size.y, size.z) > 1.6) return;
+    if (!isProp && Math.max(size.x, size.y, size.z) > 1.6) return;
     const near = box.clampPoint(p, new THREE.Vector3()).distanceTo(p);
-    if (near < 0.75) {
+    if (near < (isProp ? 1.5 : 0.75)) {
       m.visible = false;
       lensHidden.push(m);
     }

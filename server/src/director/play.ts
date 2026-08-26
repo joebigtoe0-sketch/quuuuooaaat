@@ -8,6 +8,7 @@ import crypto from "node:crypto";
 
 const STATIONS: StationId[] = [
   "idle_spot", "inbox", "terminal", "bigscreen", "vault", "conveyor", "camera_mark", "greenscreen", "tiktok",
+  "podcast_idle", "podcast_enter", "host_seat", "guest_seat",
 ];
 
 const SELFIE_ANIMS = [
