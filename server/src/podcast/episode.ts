@@ -387,8 +387,16 @@ export class Episode {
     const warmUntil = Date.now() + cfg.podcastWarmupSec * 1000;
     while (Date.now() < warmUntil && this.buffer.length < 4 && !this.stop) await sleep(1000);
 
-    // the stage belongs to the show now
+    // the stage belongs to the show now — but a beat mid-flight (research,
+    // a reveal) owns the camera and resets it to the room wide on its way
+    // out. Stop new jobs, then WAIT for the current one to finish.
     this.dir.paused = true;
+    const clearBy = Date.now() + cfg.podcastPrestartSec * 1000;
+    while (this.dir.busyBeat && Date.now() < clearBy && !this.stop) {
+      log.info("podcast", `waiting for "${this.dir.busyBeat}" to finish before taking the stage…`);
+      await sleep(3000);
+    }
+    await sleep(1200); // let its cleanup cues land before we set ours
     this.body.start();
     this.hub.cue({ t: "guest", on: true, model: this.guest!.model, name: this.guest!.name });
     const chatTimer = setInterval(() => this.pushChatScreen(), 5_000);
@@ -414,8 +422,9 @@ export class Episode {
       await this.body.walkTo("podcast_idle");
       await rikuSeated;
 
-      // ---- 3. the guest's intro, then to their chair ----
-      this.cam("podcast_guest");
+      // ---- 3. the guest's intro from the MARK — wide, so the audience sees
+      // them arrive on the set rather than a closeup of a stranger ----
+      this.cam("podcast_wide");
       const gIntro = await this.take();
       if (gIntro) await this.speak(gIntro);
       await this.body.walkTo("guest_seat");

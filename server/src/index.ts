@@ -1515,12 +1515,13 @@ server.listen(cfg.port, cfg.host, () => {
     `brain: ${hasApiKey() ? "LIVE" : "MOCK (no LLM_API_KEY)"} | tts: ${cfg.ttsProvider} | callouts: ${cfg.calloutDryRun ? "DRY RUN" : "LIVE"}`,
   );
   director.start();
+  if (cfg.studioMode) log.warn("quant", "STUDIO MODE — autonomous show is OFF (no research, discovery, replies, kol, commentary, coding, planner, trades). Filming + podcasts only.");
   // caller-intel harvester: one CC lookup / CALLER_HARVEST_S, always yields to
   // callout posting (revenue first)
   void import("./callout/callers.js").then((m) => m.startCallerHarvester());
   // callout discovery: proven callers on the public firehose nominate coins
   // into the research queue — the feed brings him coins, research still judges
-  void import("./callout/discovery.js").then((m) =>
+  if (!cfg.studioMode) void import("./callout/discovery.js").then((m) =>
     m.startCalloutDiscovery((mint, why) =>
       director.onAgentAction({ action: { do: "research", mint, why }, plannedAt: Date.now() }),
     ),
@@ -1528,7 +1529,7 @@ server.listen(cfg.port, cfg.host, () => {
   // caller-follow: the executing strategy on top of caller intel — instant
   // buys on graded callers' fresh calls, exit when their wallet sells; the
   // stage replays both (position reveal + exit note)
-  void import("./callout/follower.js").then((m) =>
+  if (!cfg.studioMode) void import("./callout/follower.js").then((m) =>
     m.startCallerFollow({
       reveal: (mint, sol) => director.queueReveal(mint, sol, "call"),
       narrateExit: (_mint, symbol, reason, solReceived, costSol) =>
@@ -1537,13 +1538,13 @@ server.listen(cfg.port, cfg.host, () => {
   );
   // outreach: small-account reply candidates — drafts only, producer approves
   // every send at /admin/outreach.html
-  void import("./social/outreach.js").then((m) => m.startOutreach());
+  if (!cfg.studioMode) void import("./social/outreach.js").then((m) => m.startOutreach());
   // hourly disk janitor: spoken audio >24h and clips/selfies >7d are dead weight
   void import("./janitor.js").then((m) => m.startJanitor());
   // midcap investment book: omo-inspired mid-cap buys with NO automatic exits —
   // operator sells from /admin/book.html; every verdict (pass or buy) stages
   // as an INVESTMENT DESK segment, visually distinct from the research loop
-  void import("./invest/midcap.js").then((m) =>
+  if (!cfg.studioMode) void import("./invest/midcap.js").then((m) =>
     m.startMidcap({ investNote: (p) => director.queueInvestNote(p) }),
   );
 });

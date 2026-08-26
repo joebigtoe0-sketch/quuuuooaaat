@@ -275,6 +275,15 @@ export class Director {
   }
 
   private nextJob(): Job | null {
+    // a film set only performs when directed — no self-started segments
+    if (cfg.studioMode) {
+      const rv0 = this.revealQ.shift();
+      if (rv0) return { kind: "reveal", mint: rv0.mint, sol: rv0.sol, revealKind: rv0.revealKind, at: Date.now() };
+      const pl0 = this.playQ.shift();
+      if (pl0) return { kind: "play", script: pl0, at: Date.now() };
+      if (this.agentQ.length) return this.agentQ.shift()!;
+      return null;
+    }
     const rv = this.revealQ.shift();
     if (rv) return { kind: "reveal", mint: rv.mint, sol: rv.sol, revealKind: rv.revealKind, at: Date.now() };
     const pl = this.playQ.shift();
@@ -371,6 +380,11 @@ export class Director {
   // ---------- producer post visibility ----------
   // beats own the terminal + camera; decoration must never steal them
   private runningBeat: string | null = null;
+  /** What beat owns the stage right now (null = free). The podcast waits on
+   *  this before taking over — a research beat's cleanup resets the camera. */
+  get busyBeat(): string | null {
+    return this.runningBeat;
+  }
   private postAnimBusy = false;
   private postAnimQueued = 0;
 

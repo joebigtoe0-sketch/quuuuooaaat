@@ -144,6 +144,12 @@ export const cfg = {
   // ---- midcap: the investment book — omo-inspired mid-cap buys, NO auto-exits ----
   // ---- podcast (RIKUPOD) ----
   podcastWarmupSec: num("PODCAST_WARMUP_SEC", 90), // conversation is written this far ahead before anything airs
+  podcastPrestartSec: num("PODCAST_PRESTART_SEC", 120), // let RIKU finish whatever he is doing before the show takes the stage
+
+  // STUDIO MODE: a film set, not a show. Silences every autonomous behaviour
+  // (research, discovery, replies, kol, commentary, coding, planner, trading)
+  // so filming and podcasts own the stage. Local default for shoot sessions.
+  studioMode: bool("STUDIO_MODE", false),
 
   midcap: bool("MIDCAP", true),
   midcapTickMin: num("MIDCAP_TICK_MIN", 30),

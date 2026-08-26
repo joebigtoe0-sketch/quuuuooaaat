@@ -110,6 +110,10 @@ export class Planner {
 
   start(): void {
     if (this.timer) return;
+    if (cfg.studioMode) {
+      log.info("planner", "studio mode — planner idle");
+      return;
+    }
     const tick = () => void this.plan().catch((e) => log.warn("planner", String(e).slice(0, 120)));
     this.timer = setInterval(tick, simT(cfg.planMin * 60_000));
     setTimeout(tick, simT(45_000)); // first plan shortly after boot
