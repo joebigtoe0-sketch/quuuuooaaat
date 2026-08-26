@@ -352,7 +352,7 @@ export class Episode {
       actor,
       ...(actor === "guest" ? { speaker: this.guest!.name } : {}),
     });
-    await sleep(s.durMs + 700);
+    await sleep(s.durMs + 1100); // covers client fetch/decode latency — the tail guard catches the rest
   }
 
   private cam(p: "podcast_wide" | "podcast_host" | "podcast_guest"): void {

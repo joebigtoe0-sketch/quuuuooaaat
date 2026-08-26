@@ -45,6 +45,24 @@ export class Subtitles {
   }
 
   speak(opts: { audioUrl: string | null; subtitle: string; durMs: number; words?: { word: string; atMs: number }[] }): void {
+    // THE TAIL GUARD — assigning .src cuts whatever is still playing, and the
+    // server's wait (its duration estimate + pad) expires slightly before the
+    // audio actually finishes, because the client starts playing a few hundred
+    // ms late (fetch + decode). That difference ate the last word of nearly
+    // every line. If the current line is nearly done, let it finish first.
+    const a = this.audio;
+    const left = a && a.duration > 0 && !a.paused && !a.ended ? a.duration - a.currentTime : 0;
+    if (left > 0.05 && left < 2.5) {
+      const wait = Math.min(2600, left * 1000 + 90);
+      this.pending = window.setTimeout(() => this.speakNow(opts), wait);
+      return;
+    }
+    this.speakNow(opts);
+  }
+
+  private pending: number | null = null;
+
+  private speakNow(opts: { audioUrl: string | null; subtitle: string; durMs: number; words?: { word: string; atMs: number }[] }): void {
     this.clear();
     this.speakStart = performance.now();
     this.speakDurMs = opts.durMs;
@@ -102,6 +120,8 @@ export class Subtitles {
   private clear(): void {
     if (this.timer) cancelAnimationFrame(this.timer);
     this.timer = null;
+    if (this.pending) window.clearTimeout(this.pending);
+    this.pending = null;
   }
 }
 
