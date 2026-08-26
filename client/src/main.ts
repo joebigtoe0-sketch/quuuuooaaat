@@ -386,20 +386,48 @@ function setStageAspect(vertical: boolean): void {
 // white streak across every shot. Hide whatever is basically inside the lens
 // and restore it when the camera moves on.
 let lensHidden: THREE.Object3D[] = [];
-function hideLensBlockers(pos: THREE.Vector3): void {
+function restoreLens(): void {
   for (const o of lensHidden) o.visible = true;
   lensHidden = [];
+}
+/** Anything sitting basically INSIDE the lens gets hidden for this shot:
+ *  the camera's own tripod, a wall edge, a plant leaf. Judged by the mesh's
+ *  nearest surface (not its centre — a long wall's centre is far away while
+ *  its edge is against the glass). */
+function hideLensBlockers(pos: THREE.Vector3): void {
+  restoreLens();
   const p = new THREE.Vector3(pos.x, pos.y, pos.z);
   scene.traverse((o) => {
     const m = o as THREE.Mesh;
     if (!m.isMesh || !m.visible) return;
-    if (!/tripod|camera_tripod/i.test(o.name ?? "") && !/tripod/i.test(o.parent?.name ?? "")) return;
-    const c = new THREE.Box3().setFromObject(m).getCenter(new THREE.Vector3());
-    if (c.distanceTo(p) < 2.2) {
+    if (m === (avatar as any)?.group || m === guest?.group) return;
+    let box: THREE.Box3;
+    try { box = new THREE.Box3().setFromObject(m); } catch { return; }
+    if (box.isEmpty()) return;
+    // distance from the camera to the closest point of the mesh
+    const near = box.clampPoint(p, new THREE.Vector3()).distanceTo(p);
+    if (near < 0.75) {
       m.visible = false;
       lensHidden.push(m);
     }
   });
+  // name whatever is still hogging the frame — raycast a fan across the shot
+  try {
+    const rc = new THREE.Raycaster();
+    rc.far = 6;
+    const seen = new Map<string, number>();
+    for (const sx of [-0.7, -0.45, -0.2, 0, 0.25, 0.5]) {
+      for (const sy of [0.6, 0.2, -0.3]) {
+        rc.setFromCamera(new THREE.Vector2(sx, sy), camera);
+        const hit = rc.intersectObjects(scene.children, true)[0];
+        if (hit && hit.distance < 4) {
+          const n = (hit.object.name || hit.object.parent?.name || "?") + ` @${hit.distance.toFixed(1)}m`;
+          seen.set(n, (seen.get(n) ?? 0) + 1);
+        }
+      }
+    }
+    if (seen.size) console.info("[podcast] near-frame objects:", [...seen.keys()].join(" | "));
+  } catch { /* diagnostic only */ }
 }
 
 function setTiktokMode(on: boolean, mode: "studio" | "facecam" = "studio"): void {
@@ -523,6 +551,9 @@ function applyCue(cue: Cue): void {
         camera.position.set(camTarget.pos.x, camTarget.pos.y, camTarget.pos.z);
         camera.lookAt(camTarget.look);
         shotMove = null;
+        // clip anything grazing the glass (a tripod leg, a wall corner)
+        camera.near = 0.9;
+        camera.updateProjectionMatrix();
         hideLensBlockers(camTarget.pos);
       } else if (cue.preset.startsWith("tiktok")) {
         // tiktok cuts are CUTS — teleport, never a dolly glide between cams
@@ -530,9 +561,12 @@ function applyCue(cue: Cue): void {
         camera.position.set(camTarget.pos.x, camTarget.pos.y, camTarget.pos.z);
         camera.lookAt(camTarget.look);
         rollShotMove();
-      } else if (!cue.preset.startsWith("podcast") && lensHidden.length) {
-        for (const o of lensHidden) o.visible = true;
-        lensHidden = [];
+      } else if (!cue.preset.startsWith("podcast")) {
+        if (lensHidden.length) restoreLens();
+        if (camera.near !== 0.1) {
+          camera.near = 0.1;
+          camera.updateProjectionMatrix();
+        }
       }
       if (wasTiktok && baseFov > 0 && !cue.preset.startsWith("tiktok")) {
         camera.fov = baseFov;

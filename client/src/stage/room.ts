@@ -576,9 +576,9 @@ function adoptGlbRoom(scene: THREE.Scene, root: THREE.Object3D): StageLayout {
       // The seat marker is the chair's CENTRE, which plants you against the
       // backrest; slide forward along the chair's own facing to the cushion.
       const SEAT_FWD = 0.32;
-      // the seat markers sit on the STAGE FLOOR, so a seated pose planted
-      // them inside the chair — lift to the cushion surface
-      const SEAT_LIFT = 0.42;
+      // the seat markers sit on the STAGE FLOOR — the seated pose needs only
+      // a few cm of lift to land on the cushion (0.42 launched them into orbit)
+      const SEAT_LIFT = 0.07;
       const nudge = (p: THREE.Vector3, yaw: number | undefined, fallback: THREE.Vector3) => {
         const y = yaw ?? Math.atan2(fallback.x - p.x, fallback.z - p.z);
         return new THREE.Vector3(p.x + Math.sin(y) * SEAT_FWD, p.y + SEAT_LIFT, p.z + Math.cos(y) * SEAT_FWD);
