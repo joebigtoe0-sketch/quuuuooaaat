@@ -566,9 +566,17 @@ function adoptGlbRoom(scene: THREE.Scene, root: THREE.Object3D): StageLayout {
     const pi = at("podcastidle"), pe = at("podcastenter");
     if (hs && gs) {
       // sit the way the CHAIR faces (authored), not facing each other —
-      // two people sitting sideways-on looked exactly as wrong as it sounds
-      put("host_seat", hs, new THREE.Vector3(gs.x, 0, gs.z), yawOf("HostSeat"));
-      put("guest_seat", gs, new THREE.Vector3(hs.x, 0, hs.z), yawOf("GuestSeat"));
+      // two people sitting sideways-on looked exactly as wrong as it sounds.
+      // The seat marker is the chair's CENTRE, which plants you against the
+      // backrest; slide forward along the chair's own facing to the cushion.
+      const SEAT_FWD = 0.32;
+      const nudge = (p: THREE.Vector3, yaw: number | undefined, fallback: THREE.Vector3) => {
+        const y = yaw ?? Math.atan2(fallback.x - p.x, fallback.z - p.z);
+        return new THREE.Vector3(p.x + Math.sin(y) * SEAT_FWD, p.y, p.z + Math.cos(y) * SEAT_FWD);
+      };
+      const hy = yawOf("HostSeat"), gy = yawOf("GuestSeat");
+      put("host_seat", nudge(hs, hy, new THREE.Vector3(gs.x, 0, gs.z)), new THREE.Vector3(gs.x, 0, gs.z), hy);
+      put("guest_seat", nudge(gs, gy, new THREE.Vector3(hs.x, 0, hs.z)), new THREE.Vector3(hs.x, 0, hs.z), gy);
     }
     const wideCam = findAll(root, "PodcastCamera")[0] ?? null;
     const camPos = wideCam ? wideCam.getWorldPosition(new THREE.Vector3()) : null;
