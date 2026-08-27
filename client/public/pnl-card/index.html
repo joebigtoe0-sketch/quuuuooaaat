@@ -24,7 +24,7 @@
     <input id="xuser" spellcheck="false" placeholder="@QuantRiku">
 
     <label>Replay length <b id="durLabel">20s</b></label>
-    <input id="dur" type="range" min="8" max="45" step="1" value="20">
+    <input id="dur" type="range" min="4" max="45" step="1" value="20">
 
     <label>Format</label>
     <select id="aspect">
@@ -33,15 +33,30 @@
       <option value="16:9">Wide 16:9</option>
     </select>
 
+    <label>Chart style</label>
+    <select id="style">
+      <option value="line" selected>RIKU line (signal yellow)</option>
+      <option value="candles">Classic green/red candles</option>
+    </select>
+
     <label>Chart background <span class="opt">(optional image or mp4)</span></label>
-    <input id="bgChart" type="file" accept="image/*,video/mp4,video/webm">
+    <div class="filerow">
+      <input id="bgChart" type="file" accept="image/*,video/mp4,video/webm">
+      <button class="x" id="clrChart" title="clear">✕</button>
+    </div>
     <label class="vaud" id="vaudWrap" hidden><input id="vaud" type="checkbox"> use the video's audio</label>
 
     <label>PNL card background <span class="opt">(optional image)</span></label>
-    <input id="bgCard" type="file" accept="image/*">
+    <div class="filerow">
+      <input id="bgCard" type="file" accept="image/*">
+      <button class="x" id="clrCard" title="clear">✕</button>
+    </div>
 
     <label>Music <span class="opt">(optional mp3, mixed into the video)</span></label>
-    <input id="music" type="file" accept="audio/*">
+    <div class="filerow">
+      <input id="music" type="file" accept="audio/*">
+      <button class="x" id="clrMusic" title="clear">✕</button>
+    </div>
 
     <div class="btns">
       <button id="load" class="primary">Load trade</button>

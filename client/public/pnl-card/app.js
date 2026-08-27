@@ -55,7 +55,8 @@ function mulberry32(seed) {
 const IV_MS = { '1s': 1e3, '15s': 15e3, '30s': 30e3, '1m': 60e3, '5m': 300e3, '15m': 900e3, '30m': 1800e3, '1h': 36e5, '4h': 144e5, '6h': 216e5, '12h': 432e5 };
 
 // ---------------------------------------------------------------- state
-const cfg = { durMs: 20000, aspect: '9:16', videoAudio: false };
+const cfg = { durMs: 20000, aspect: '9:16', videoAudio: false, style: 'line' };
+const CANDLE_UP = '#26a69a', CANDLE_DN = '#ef5350'; // classic tradingview pair
 let model = null;
 let playing = false, playT0 = 0, lastFrameT = 0, playGen = 0, cueIdx = 0;
 let smooth = { yMax: 0, yMin: 0, pnl: 0 };
@@ -264,6 +265,15 @@ function buildModel(data, wallet) {
     img: null,
   };
 
+  // raw candles + running extremes for the candlestick style's camera
+  m.candles = data.candles;
+  m.candleRunHi = []; m.candleRunLo = [];
+  let chi = 0, clo = Infinity;
+  for (const c of m.candles) {
+    chi = Math.max(chi, c.h); clo = Math.min(clo, c.l);
+    m.candleRunHi.push(chi); m.candleRunLo.push(clo);
+  }
+
   buildWarp(m);
   buildCues(m);
 
@@ -297,15 +307,31 @@ function buildWarp(m) {
   }
   if (cur < tEnd) segs.push({ tk0: cur, tk1: tEnd, active: false, n: 0 });
 
-  const idleLen = segs.filter(s => !s.active).reduce((s, x) => s + (x.tk1 - x.tk0), 0);
+  // fixed SMALL shares for the lead-in (creation → first trade) and the tail
+  // (last trade → now): they fast-forward, so the replay's focus sits on the
+  // window where the wallet actually traded.
+  const firstSeg = segs[0], lastSeg = segs[segs.length - 1];
+  const leadSeg = !firstSeg.active ? firstSeg : null;
+  const tailSeg = segs.length > 1 && !lastSeg.active ? lastSeg : null;
+  const leadShare = leadSeg ? 0.07 : 0;
+  const tailShare = tailSeg ? 0.10 : 0;
+
   const nEvents = Math.max(1, events.length);
-  // more trades → more of the video (and screen width) spent in slow-mo
-  const activeShare = idleLen > 0 ? clamp(0.25 + 0.06 * nEvents, 0.3, 0.6) : 1;
+  const inner = segs.filter(s => !s.active && s !== leadSeg && s !== tailSeg);
+  const innerLen = inner.reduce((s, x) => s + (x.tk1 - x.tk0), 0);
+  const rem = 1 - leadShare - tailShare;
+  // more trades → more of the remaining time (and width) spent in slow-mo
+  const aFrac = innerLen > 0 ? clamp(0.4 + 0.06 * nEvents, 0.5, 0.8) : 1;
+  const activeShare = rem * aFrac;
+  const innerShare = rem - activeShare;
+
   let v = 0;
   for (const s of segs) {
-    const share = s.active
-      ? activeShare * (s.n / nEvents)
-      : (1 - activeShare) * ((s.tk1 - s.tk0) / (idleLen || 1));
+    let share;
+    if (s.active) share = activeShare * (s.n / nEvents);
+    else if (s === leadSeg) share = leadShare;
+    else if (s === tailSeg) share = tailShare;
+    else share = innerShare * ((s.tk1 - s.tk0) / (innerLen || 1));
     s.v0 = v; v += share; s.v1 = v;
   }
   for (const s of segs) { s.v0 /= v; s.v1 /= v; } // normalize to [0,1]
@@ -362,6 +388,15 @@ function idxAt(t) {
   while (hi - lo > 1) { const mid = (lo + hi) >> 1; (p[mid].t <= t ? lo = mid : hi = mid); }
   return lo;
 }
+function idxCandle(t) { // largest i with candles[i].t <= t, or -1
+  const cs = model.candles;
+  if (!cs.length || t < cs[0].t) return -1;
+  let lo = 0, hi = cs.length - 1;
+  if (t >= cs[hi].t) return hi;
+  while (hi - lo > 1) { const mid = (lo + hi) >> 1; (cs[mid].t <= t ? lo = mid : hi = mid); }
+  return lo;
+}
+
 function positionAt(t) {
   const c = model.cum;
   let lo = -1, hi = c.length - 1;
@@ -548,7 +583,14 @@ function drawReplay(L, prog, masterT, frozen) {
   }
 
   const i = idxAt(tCur);
-  const tgtMax = model.runMax[i] * 1.15, tgtMin = model.runMin[i] * 0.82;
+  let tgtMax = model.runMax[i] * 1.15, tgtMin = model.runMin[i] * 0.82;
+  if (cfg.style === 'candles') {
+    const ci = idxCandle(tCur);
+    if (ci >= 0) { // wicks reach beyond closes — camera follows highs/lows
+      tgtMax = Math.max(tgtMax, model.candleRunHi[ci] * 1.15);
+      tgtMin = Math.min(tgtMin, model.candleRunLo[ci] * 0.9);
+    }
+  }
   if (!smooth.yMax) { smooth.yMax = tgtMax; smooth.yMin = tgtMin; }
   const k = frozen ? 1 : 0.12;
   smooth.yMax = lerp(smooth.yMax, tgtMax, k);
@@ -563,25 +605,29 @@ function drawReplay(L, prog, masterT, frozen) {
 
   // price path
   let tipX = X(tCur), tipY = Y(priceAt(tCur));
-  const tracePath = () => {
-    ctx.beginPath();
-    let started = false;
-    for (let j = 0; j <= i; j++) {
-      const px = X(pts[j].t), py = Y(pts[j].p);
-      started ? ctx.lineTo(px, py) : ctx.moveTo(px, py); started = true;
-    }
-    ctx.lineTo(tipX, tipY);
-  };
-  tracePath();
-  ctx.lineTo(tipX, chart.y + chart.h); ctx.lineTo(chart.x, chart.y + chart.h); ctx.closePath();
-  const fill = ctx.createLinearGradient(0, chart.y, 0, chart.y + chart.h);
-  fill.addColorStop(0, 'rgba(255,194,26,0.26)'); fill.addColorStop(1, 'rgba(255,194,26,0)');
-  ctx.fillStyle = fill; ctx.fill();
-  tracePath();
-  ctx.strokeStyle = C.signal; ctx.lineWidth = 3.5 * u; ctx.lineJoin = 'round';
-  ctx.shadowColor = 'rgba(255,194,26,0.5)'; ctx.shadowBlur = 14 * u;
-  ctx.stroke();
-  ctx.shadowBlur = 0;
+  if (cfg.style === 'candles') {
+    drawCandlesticks(L, X, Y, tCur, u);
+  } else {
+    const tracePath = () => {
+      ctx.beginPath();
+      let started = false;
+      for (let j = 0; j <= i; j++) {
+        const px = X(pts[j].t), py = Y(pts[j].p);
+        started ? ctx.lineTo(px, py) : ctx.moveTo(px, py); started = true;
+      }
+      ctx.lineTo(tipX, tipY);
+    };
+    tracePath();
+    ctx.lineTo(tipX, chart.y + chart.h); ctx.lineTo(chart.x, chart.y + chart.h); ctx.closePath();
+    const fill = ctx.createLinearGradient(0, chart.y, 0, chart.y + chart.h);
+    fill.addColorStop(0, 'rgba(255,194,26,0.26)'); fill.addColorStop(1, 'rgba(255,194,26,0)');
+    ctx.fillStyle = fill; ctx.fill();
+    tracePath();
+    ctx.strokeStyle = C.signal; ctx.lineWidth = 3.5 * u; ctx.lineJoin = 'round';
+    ctx.shadowColor = 'rgba(255,194,26,0.5)'; ctx.shadowBlur = 14 * u;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+  }
 
   // pulsing tip
   if (!frozen) {
@@ -612,6 +658,24 @@ function drawReplay(L, prog, masterT, frozen) {
   if (imp.flash > 0.01) {
     ctx.fillStyle = `rgba(244,236,202,${imp.flash})`;
     ctx.fillRect(0, 0, W, H);
+  }
+}
+
+function drawCandlesticks(L, X, Y, tCur, u) {
+  const cs = model.candles, ivMs = model.ivMs;
+  for (let j = 0; j < cs.length; j++) {
+    const c = cs[j];
+    if (c.t > tCur) break;
+    const x0 = X(c.t), x1 = X(Math.min(c.t + ivMs, model.tEnd));
+    const xm = (x0 + x1) / 2;
+    const col = c.c >= c.o ? CANDLE_UP : CANDLE_DN;
+    ctx.strokeStyle = col;
+    ctx.lineWidth = Math.max(1, 1.2 * u);
+    ctx.beginPath(); ctx.moveTo(xm, Y(c.h)); ctx.lineTo(xm, Y(c.l)); ctx.stroke();
+    const w = Math.max(1.6 * u, (x1 - x0) * 0.72);
+    const yO = Y(c.o), yC = Y(c.c);
+    ctx.fillStyle = col;
+    ctx.fillRect(xm - w / 2, Math.min(yO, yC), w, Math.max(1.6 * u, Math.abs(yC - yO)));
   }
 }
 
@@ -960,7 +1024,10 @@ function record() {
     $('rec').classList.remove('recording');
     $('rec').textContent = '⏺ Record .mp4';
     const webm = new Blob(recChunks, { type: 'video/webm' });
-    setStatus('converting to mp4…');
+    $('rec').classList.add('converting');
+    $('rec').textContent = '⏳ converting to mp4…';
+    $('rec').disabled = true;
+    setStatus('converting to mp4 — takes ~30s, hang tight…');
     try {
       const r = await fetch('api/mp4', { method: 'POST', headers: { 'content-type': 'video/webm' }, body: webm });
       if (!r.ok) throw new Error(String(r.status));
@@ -969,6 +1036,10 @@ function record() {
     } catch {
       saveBlob(webm, `${name}.webm`);
       setStatus('mp4 conversion unavailable right now — saved .webm instead');
+    } finally {
+      $('rec').classList.remove('converting');
+      $('rec').textContent = '⏺ Record .mp4';
+      $('rec').disabled = false;
     }
   };
   recorder.start();
@@ -1029,6 +1100,27 @@ $('vaud').onchange = e => {
   if (chartBgImg && chartBgImg.tagName === 'VIDEO' && playing) chartBgImg.muted = !cfg.videoAudio;
 };
 
+// clear buttons for the three uploads
+$('clrChart').onclick = () => {
+  $('bgChart').value = '';
+  if (chartBgImg && chartBgImg.tagName === 'VIDEO') { try { chartBgImg.pause(); } catch {} }
+  chartBgImg = null;
+  $('vaudWrap').hidden = true;
+  $('vaud').checked = false; cfg.videoAudio = false;
+  if (model && !playing) renderFrame(lastFrameT);
+};
+$('clrCard').onclick = () => {
+  $('bgCard').value = '';
+  cardBgImg = null;
+  if (model && !playing) renderFrame(lastFrameT);
+};
+$('clrMusic').onclick = () => {
+  $('music').value = '';
+  musicBuf = null;
+  stopMusic();
+  setStatus('music cleared');
+};
+
 $('music').addEventListener('change', async e => {
   const f = e.target.files && e.target.files[0];
   if (!f) { musicBuf = null; stopMusic(); return; }
@@ -1080,6 +1172,7 @@ $('play').onclick = () => play();
 $('rec').onclick = record;
 $('dur').oninput = e => { cfg.durMs = +e.target.value * 1000; $('durLabel').textContent = e.target.value + 's'; };
 $('aspect').onchange = e => { cfg.aspect = e.target.value; if (model && !playing) { applyAspect(); renderFrame(lastFrameT); } };
+$('style').onchange = e => { cfg.style = e.target.value; if (model && !playing) renderFrame(lastFrameT); };
 ['mint', 'wallet', 'xuser'].forEach(id => $(id).addEventListener('keydown', e => { if (e.key === 'Enter') load(); }));
 
 // idle backdrop

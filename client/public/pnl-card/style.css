@@ -70,6 +70,21 @@ button.primary:hover:not(:disabled) { filter: brightness(1.08); color: var(--ink
 .summary .pos { color: var(--green); }
 .summary .neg { color: var(--red); }
 
+.filerow { display: flex; gap: 6px; align-items: center; }
+.filerow input[type=file] { flex: 1; min-width: 0; }
+button.x {
+  flex: none; width: 30px; height: 30px; padding: 0;
+  font: 700 12px var(--lab); letter-spacing: 0;
+  color: var(--muted); background: var(--ink); border: 1px solid var(--line);
+}
+button.x:hover { color: var(--red); border-color: var(--red); }
+
+#rec.converting {
+  background: var(--acid); color: var(--ink); border: none;
+  animation: convpulse 1.1s ease-in-out infinite;
+}
+@keyframes convpulse { 50% { opacity: .5; } }
+
 .vaud {
   display: flex; align-items: center; gap: 8px; margin-top: 8px;
   color: var(--cream); font: 12px var(--lab); text-transform: none; letter-spacing: .04em;
