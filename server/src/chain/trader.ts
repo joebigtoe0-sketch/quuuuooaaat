@@ -26,7 +26,16 @@ export interface Position {
   openedAt: number;
   dry: boolean;
   entryMcSol: number | null;
-  closed?: { at: number; solReceived: number; reason: string };
+  closed?: {
+    at: number;
+    solReceived: number;
+    reason: string;
+    /** closed by BOOKKEEPING, not by a sell — the tokens were already gone from
+     *  the wallet (rug, dust, or a sale outside our rails). `at` is when we
+     *  NOTICED, not when the money moved, so day-scoped PnL must skip these or
+     *  a corpse from last week lands on today's scoreboard. */
+    reconciled?: boolean;
+  };
 }
 
 const FILE = path.join(cfg.dataDir, "positions.json");
@@ -104,6 +113,7 @@ export async function reconcilePositions(): Promise<number> {
         at: Date.now(),
         solReceived: p.soldSol ?? 0,
         reason: "no longer in the wallet — ledger reconciled to chain",
+        reconciled: true,
       };
       closed++;
       log.info("trade", `reconciled: $${p.symbol} closed — wallet holds none`);
@@ -112,6 +122,14 @@ export async function reconcilePositions(): Promise<number> {
   if (closed) save();
   return closed;
 }
+/** True when a position was closed by bookkeeping rather than by a sell.
+ *  Legacy rows predate the flag — fall back to the reasons those paths wrote. */
+export function isReconciledClose(p: Position): boolean {
+  const c = p.closed;
+  if (!c) return false;
+  return c.reconciled === true || /reconciled to chain|wallet both empty/.test(c.reason ?? "");
+}
+
 /** Gross SOL bought today vs the daily cap — for /health diagnostics. */
 export function tradeSpentToday(): { spent: number; cap: number } {
   return { spent: spentToday(), cap: cfg.maxDailyTradeSol };
@@ -282,7 +300,7 @@ export async function tradeSell(
         const bal = await getTokenBalanceRaw(new PublicKey(mint), w.publicKey);
         if (bal < 1_000_000n) {
           pos.tokensRaw = "0";
-          pos.closed = { at: Date.now(), solReceived: pos.soldSol ?? 0, reason: "no longer in the wallet — ledger reconciled to chain" };
+          pos.closed = { at: Date.now(), solReceived: pos.soldSol ?? 0, reason: "no longer in the wallet — ledger reconciled to chain", reconciled: true };
           save();
           log.info("trade", `reconciled on sell: $${pos.symbol} — wallet holds none`);
           return { ok: false, dry: false, why: "position already gone from the wallet — ledger closed" };
@@ -307,7 +325,7 @@ export async function tradeSell(
           sellRaw = (bal * BigInt(Math.round(fraction * 100))) / 100n;
           log.info("trade", `healed ghost ledger for $${pos.symbol} — wallet holds ${bal}, selling`);
         } else {
-          pos.closed = { at: Date.now(), solReceived: pos.soldSol ?? 0, reason: "ledger and wallet both empty — closed" };
+          pos.closed = { at: Date.now(), solReceived: pos.soldSol ?? 0, reason: "ledger and wallet both empty — closed", reconciled: true };
           save();
           return { ok: false, dry: false, why: "nothing to sell anywhere — ledger closed" };
         }

@@ -116,16 +116,20 @@ async function buildWallet(): Promise<any> {
 }
 
 async function buildStats(): Promise<any> {
-  const { positionsSummary, bankSol, allPositions } = await import("./chain/trader.js");
+  const { positionsSummary, bankSol, allPositions, isReconciledClose } = await import("./chain/trader.js");
   const { xFollowers, xPostsToday, xHandle } = await import("./social/x.js");
   const kpis = await snapshotKPIs().catch(() => null);
   const pos = await positionsSummary();
-  // TODAY's realized: positions CLOSED since local midnight (UTC), full
+  // TODAY's realized: positions SOLD since local midnight (UTC), full
   // round-trip result (soldSol - costSol) — partial exits on still-open
-  // positions land here on the day they finally close
+  // positions land here on the day they finally close.
+  // RECONCILED closes are excluded: those are corpses we merely NOTICED today
+  // (rugged days ago, no sell, no SOL moved), and booking their whole cost as a
+  // fresh loss buried three winning trades under a fake -1 SOL on the big screen.
+  // They stay in all-time realized, where the money genuinely is gone.
   const dayStart = new Date().setUTCHours(0, 0, 0, 0);
   const realizedTodaySol = allPositions()
-    .filter((p: any) => p.closed && p.closed.at >= dayStart)
+    .filter((p: any) => p.closed && p.closed.at >= dayStart && !isReconciledClose(p))
     .reduce((s: number, p: any) => s + ((p.soldSol ?? 0) - p.costSol), 0);
   return {
     calls: store.callouts().length,
