@@ -84,6 +84,16 @@ export const cfg = {
   ttsRate: str("TTS_RATE", "+8%"), // edge only
   ttsPitch: str("TTS_PITCH", "-2Hz"), // edge only
   ttsOpenaiModel: str("TTS_OPENAI_MODEL", "gpt-4o-mini-tts"),
+  // ---------- PIPER: neural TTS in-process, $0/day ----------
+  // Baked into the image by the Dockerfile. TTS_PROVIDER=piper puts it first in
+  // the chain; it stays as the free floor under every other provider regardless.
+  piperBin: str("PIPER_BIN", "/opt/piper/piper"),
+  piperVoiceDir: str("PIPER_VOICE_DIR", "/opt/piper/voices"),
+  piperVoice: str("PIPER_VOICE", "en_US-ryan-medium"), // riku
+  piperVoiceAlt: str("PIPER_VOICE_ALT", "en_US-amy-medium"), // podcast guests
+  piperLengthScale: num("PIPER_LENGTH_SCALE", 0.95), // <1 = faster delivery
+  piperSentenceSilence: num("PIPER_SENTENCE_SILENCE", 0.25),
+  piperTimeoutMs: num("PIPER_TIMEOUT_MS", 20_000),
   ttsOpenaiSpeed: num("TTS_OPENAI_SPEED", 1.05),
   // TTS creds are SEPARATE from the LLM's (the brain may run on Anthropic,
   // which has no /audio/speech) — fall back to LLM_* for back-compat.

@@ -14,7 +14,8 @@ import { ensureWallet } from "./chain/wallet.js";
 import { EdgeTTS } from "./voice/edgeTts.js";
 import { OpenAITTS } from "./voice/openaiTts.js";
 import { GoogleTTS } from "./voice/gtts.js";
-import { SilentTTS, type TTSProvider } from "./voice/tts.js";
+import { ChainTTS, type TTSProvider } from "./voice/tts.js";
+import { PiperTTS } from "./voice/piperTts.js";
 import { hasApiKey, spendToday, lastBrainError, budgetExhausted, dailyBudgetUsd } from "./brain/adapter.js";
 import { lastXError } from "./social/x.js";
 import { store } from "./store.js";
@@ -937,14 +938,31 @@ async function relaunch(): Promise<void> {
 // ---------- boot ----------
 loadIntel();
 const wallet = ensureWallet();
-const tts: TTSProvider =
-  cfg.ttsProvider === "openai"
-    ? new OpenAITTS()
-    : cfg.ttsProvider === "gtts"
-      ? new GoogleTTS()
-      : cfg.ttsProvider === "edge"
-        ? new EdgeTTS()
-        : new SilentTTS();
+// TTS is a CHAIN, not a pick. TTS_PROVIDER only says who goes FIRST; every
+// other usable provider stays queued behind it, and piper (free, in-container)
+// is always the floor. One drained balance must never mute the show again.
+const ttsChain = (() => {
+  const piper = new PiperTTS();
+  log.info("tts", piper.available ? `piper ready — ${piper.why}` : `piper unavailable — ${piper.why}`);
+  const built: Record<string, TTSProvider | null> = {
+    piper: piper.available ? piper : null,
+    openai: cfg.ttsApiKey ? new OpenAITTS() : null,
+    gtts: new GoogleTTS(),
+    // edge stays reachable by name but is NOT auto-chained: msedge-tts cannot
+    // connect at all any more (verified 2026-08-27, every voice id errors).
+    edge: cfg.ttsProvider === "edge" ? new EdgeTTS() : null,
+  };
+  if (cfg.ttsProvider === "none") return new ChainTTS([]);
+  const order = [cfg.ttsProvider, "piper", "openai", "gtts"];
+  const links: { name: string; provider: TTSProvider }[] = [];
+  for (const name of order) {
+    const p = built[name];
+    if (p && !links.some((l) => l.name === name)) links.push({ name, provider: p });
+  }
+  log.info("tts", `chain: ${links.map((l) => l.name).join(" -> ") || "(none)"} -> silent`);
+  return new ChainTTS(links);
+})();
+const tts: TTSProvider = ttsChain;
 const director = new Director(hub, tts);
 
 // live inputs
@@ -1089,7 +1107,12 @@ app.get("/health", async (_req, res) => {
     watchers: hub.watchers,
     state: director.loco.stateName,
     brain: { hasKey: hasApiKey(), spendTodayUsd: Number(spendToday().toFixed(3)), dailyBudgetUsd: dailyBudgetUsd(), exhausted: budgetExhausted(), lastError: lastBrainError() },
-    tts: { provider: cfg.ttsProvider, audioFilesGenerated: audioFiles },
+    tts: {
+      provider: cfg.ttsProvider,
+      speaking: ttsChain.lastUsed ?? "silent",
+      chain: ttsChain.chainNames(),
+      audioFilesGenerated: audioFiles,
+    },
     x: {
       postsToday: (await import("./social/x.js")).xPostsToday(),
       // the two counters that can silently mute him for a whole day

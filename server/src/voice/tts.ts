@@ -1,3 +1,5 @@
+import { log } from "../log.js";
+
 export interface WordTiming {
   word: string;
   atMs: number;
@@ -64,6 +66,48 @@ export function mp3DurationMs(buf: Buffer): number | null {
     frames++;
   }
   return frames > 10 ? Math.round(ms) : null;
+}
+
+/**
+ * A CHAIN of providers, tried in order until one returns real audio.
+ *
+ * The old selector picked exactly ONE provider at boot, and a provider that
+ * fails returns {audioUrl:null} rather than throwing — so when OpenAI's balance
+ * hit zero, riku went silently mute for as long as it took a human to notice.
+ * A live character needs a floor: local piper first (free, no key), a metered
+ * API behind it, silence-with-subtitles only when everything is gone.
+ */
+export class ChainTTS implements TTSProvider {
+  constructor(private readonly links: { name: string; provider: TTSProvider }[]) {}
+
+  /** Whichever link last produced audio — surfaced on /health. */
+  lastUsed: string | null = null;
+
+  chainNames(): string[] {
+    return this.links.map((l) => l.name);
+  }
+
+  async synthesize(text: string, id: string, voice?: string): Promise<Synthesis> {
+    let fallback: Synthesis | null = null;
+    for (const { name, provider } of this.links) {
+      const out = await provider.synthesize(text, id, voice).catch(() => null);
+      if (!out) continue;
+      if (out.audioUrl) {
+        if (this.lastUsed !== name) {
+          log.info("tts", `voice is now coming from ${name}`);
+          this.lastUsed = name;
+        }
+        return out;
+      }
+      // keep the first link's pacing estimate — they only differ cosmetically
+      fallback ??= out;
+    }
+    if (this.lastUsed !== null) {
+      log.warn("tts", "every TTS provider failed — running silent with subtitles");
+      this.lastUsed = null;
+    }
+    return fallback ?? { audioUrl: null, ...estimateTimings(text) };
+  }
 }
 
 /** Silent fallback: no audio, estimated pacing, subtitles do the work. */
