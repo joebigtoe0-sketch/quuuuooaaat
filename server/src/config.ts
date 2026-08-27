@@ -131,9 +131,18 @@ export const cfg = {
   callerFollowPct: num("CALLER_FOLLOW_PCT", 8), // % of spendable SOL at baseline quality
   callerFollowRoom: num("CALLER_FOLLOW_ROOM", 2), // need med/premium ≥ this much upside left
   callerFollowMaxPerDay: num("CALLER_FOLLOW_MAX_PER_DAY", 6),
-  callerFollowStopPct: num("CALLER_FOLLOW_STOP_PCT", 40), // full-position stop-loss %
-  callerFollowTpFraction: num("CALLER_FOLLOW_TP_FRACTION", 0.75), // sold at the median target
-  callerFollowRunnerStopPct: num("CALLER_FOLLOW_RUNNER_STOP_PCT", 15), // runner stop below the TP price
+  callerFollowStopPct: num("CALLER_FOLLOW_STOP_PCT", 40), // full-position stop-loss %, pre-TP1 only
+  // THE SCALE-OUT LADDER — every level is priced off OUR ENTRY mc, never the
+  // caller's median. The median target sat 2-3x above entry by construction,
+  // so anything that peaked below it paid nothing at all.
+  callerFollowTp1Pct: num("CALLER_FOLLOW_TP1_PCT", 120), // +% on entry mc that fires TP1 (120 => 2.2x)
+  callerFollowTp1Fraction: num("CALLER_FOLLOW_TP1_FRACTION", 0.6), // share of the FULL bag sold at TP1
+  callerFollowTp2Pct: num("CALLER_FOLLOW_TP2_PCT", 400), // +% on entry mc that fires TP2 (400 => 5x)
+  callerFollowTp2Fraction: num("CALLER_FOLLOW_TP2_FRACTION", 0.9), // share of WHAT REMAINS sold at TP2
+  callerFollowRunnerStopPct: num("CALLER_FOLLOW_RUNNER_STOP_PCT", 20), // stop % below the anchor mc
+  // false: the stop anchors at TP1's mc and stays there, so the moonbag can
+  // actually moon. true: TP2 drags it up to its own mc (locks 5x, kills the ride).
+  callerFollowStopReanchor: bool("CALLER_FOLLOW_STOP_REANCHOR", false),
   callerFollowMaxSwarm: num("CALLER_FOLLOW_MAX_SWARM", 3), // >this many distinct callers in the window = coordinated pump, skip
   callerFollowSwarmWindowMin: num("CALLER_FOLLOW_SWARM_WINDOW_MIN", 10),
   callerFollowMaxFromFirstCall: num("CALLER_FOLLOW_MAX_FROM_FIRST_CALL", 1.4), // mcNow vs EARLIEST call's mc — later = the move already happened

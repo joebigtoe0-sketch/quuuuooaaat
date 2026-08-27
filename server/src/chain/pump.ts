@@ -7,7 +7,8 @@ import pumpSdk from "@pump-fun/pump-sdk";
 import pumpSwapSdk from "@pump-fun/pump-swap-sdk";
 import type { Global, FeeConfig, BondingCurve } from "@pump-fun/pump-sdk";
 import type { Pool } from "@pump-fun/pump-swap-sdk";
-import { NATIVE_MINT, AccountLayout, getAssociatedTokenAddressSync, TOKEN_PROGRAM_ID } from "@solana/spl-token";
+import { NATIVE_MINT, AccountLayout, MintLayout, getAssociatedTokenAddressSync, TOKEN_PROGRAM_ID } from "@solana/spl-token";
+import type { RawMint } from "@solana/spl-token";
 import { getConnection, sendIxs } from "./solana.js";
 
 const {
@@ -69,7 +70,16 @@ export type TokenState =
       cashback: boolean;
       progress: number; // 0..1 of real quote raised toward graduation
     }
-  | { kind: "amm"; poolKey: PublicKey; pool: Pool; priceSol: number; mcSol: number }
+  | {
+      kind: "amm";
+      poolKey: PublicKey;
+      pool: Pool;
+      priceSol: number;
+      mcSol: number;
+      /** raw pool token-account balances — the sell quote prices off these */
+      baseReserveRaw: bigint;
+      quoteReserveRaw: bigint;
+    }
   | { kind: "none" }
   | { kind: "unsupported"; why: string };
 
@@ -93,6 +103,31 @@ async function getGlobals(): Promise<{ global: Global; feeConfig: FeeConfig }> {
   ]);
   globalCache = { global, feeConfig, ts: Date.now() };
   return globalCache;
+}
+
+let ammGlobalCache: { globalConfig: any; feeConfig: any; ts: number } | null = null;
+async function getAmmGlobals(): Promise<{ globalConfig: any; feeConfig: any }> {
+  if (ammGlobalCache && Date.now() - ammGlobalCache.ts < 10 * 60_000) return ammGlobalCache;
+  const [globalConfig, feeConfig] = await Promise.all([
+    ammOnline().fetchGlobalConfigAccount(),
+    ammOnline().fetchFeeConfigAccount(),
+  ]);
+  ammGlobalCache = { globalConfig, feeConfig, ts: Date.now() };
+  return ammGlobalCache;
+}
+
+/** Decoded mint account — the AMM quote math needs it. Supply and decimals are
+ *  fixed for a pump mint, so this caches for the life of the process. */
+const mintAccountCache = new Map<string, RawMint>();
+async function getMintAccount(mint: PublicKey): Promise<RawMint> {
+  const key = mint.toBase58();
+  const hit = mintAccountCache.get(key);
+  if (hit) return hit;
+  const info = await getConnection().getAccountInfo(mint);
+  if (!info) throw new Error("mint account not found");
+  const decoded = MintLayout.decode(info.data);
+  mintAccountCache.set(key, decoded);
+  return decoded;
 }
 
 const mintTokenProgramCache = new Map<string, PublicKey>();
@@ -161,11 +196,23 @@ export async function getTokenState(mint: PublicKey): Promise<TokenState> {
         pool.poolQuoteTokenAccount,
       ]);
       if (!baseAcc || !quoteAcc) return { kind: "unsupported", why: "pool token accounts missing" };
-      const baseUi = Number(AccountLayout.decode(baseAcc.data).amount) / 10 ** TOKEN_DECIMALS;
-      const quoteUi = Number(AccountLayout.decode(quoteAcc.data).amount) / LAMPORTS_PER_SOL;
+      const baseReserveRaw = AccountLayout.decode(baseAcc.data).amount;
+      const quoteReserveRaw = AccountLayout.decode(quoteAcc.data).amount;
+      const baseUi = Number(baseReserveRaw) / 10 ** TOKEN_DECIMALS;
+      const quoteUi = Number(quoteReserveRaw) / LAMPORTS_PER_SOL;
       if (baseUi <= 0) return { kind: "unsupported", why: "empty pool" };
-      const priceSol = quoteUi / baseUi;
-      return { kind: "amm", poolKey, pool, priceSol, mcSol: priceSol * TOTAL_SUPPLY_UI };
+      // A PumpSwap pool prices off quote + VIRTUAL quote reserves. Pricing off
+      // the bare token-account ratio under-reads by however large the virtual
+      // leg is relative to the real one — 8% on a deep pool, 40-69% on a thin
+      // freshly-graduated one. $Fiveish (2026-08-27): read -40%, tripped the
+      // caller-follow stop on a position that was actually down 5%, and the
+      // 0.3 SOL round trip realised -7.2% for nothing.
+      const virtualQuoteUi = Number(pool.virtualQuoteReserves?.toString() ?? "0") / LAMPORTS_PER_SOL;
+      const priceSol = (quoteUi + virtualQuoteUi) / baseUi;
+      return {
+        kind: "amm", poolKey, pool, priceSol, mcSol: priceSol * TOTAL_SUPPLY_UI,
+        baseReserveRaw, quoteReserveRaw,
+      };
     }
   }
 
@@ -214,7 +261,31 @@ export async function estimateSellSolFor(mint: PublicKey, tokensRaw: bigint): Pr
     return Number(out.toString()) / LAMPORTS_PER_SOL;
   }
   if (state.kind === "amm") {
-    return (Number(tokensRaw) / 1e6) * state.priceSol * 0.99;
+    // quote the ACTUAL swap through the SDK — real fees, real price impact,
+    // real virtual reserves. The old `tokens x priceSol x 0.99` was a mid-price
+    // guess on top of a mid price that was itself wrong (see getTokenState).
+    try {
+      const { globalConfig, feeConfig } = await getAmmGlobals();
+      const out = (pumpSwapSdk as any).sellBaseInput({
+        base: new BN(tokensRaw.toString()),
+        slippage: 0, // uiQuote is the expected fill; slippage only shapes minQuote
+        baseReserve: new BN(state.baseReserveRaw.toString()),
+        quoteReserve: new BN(state.quoteReserveRaw.toString()),
+        virtualQuoteReserves: (state.pool as any).virtualQuoteReserves,
+        globalConfig,
+        baseMintAccount: await getMintAccount(mint),
+        baseMint: mint,
+        coinCreator: (state.pool as any).coinCreator,
+        creator: (state.pool as any).creator,
+        feeConfig,
+      });
+      const sol = Number(out.uiQuote.toString()) / LAMPORTS_PER_SOL;
+      if (Number.isFinite(sol) && sol > 0) return sol;
+    } catch { /* fall through to the mid-price estimate below */ }
+    // fallback: mid price (now corrected for virtual reserves) minus a fee
+    // haircut. Ignores price impact, so only honest for small bags — but it is
+    // the right side to fail on: a stop must never fire on a phantom loss.
+    return (Number(tokensRaw) / 10 ** TOKEN_DECIMALS) * state.priceSol * 0.99;
   }
   return 0;
 }
