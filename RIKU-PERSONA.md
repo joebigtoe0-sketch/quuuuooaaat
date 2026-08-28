@@ -130,6 +130,27 @@ shape reasserting itself, which it will.
 material that travels (bagworking hit 147 views and escaped into eight other accounts) is the
 honesty and the self-deprecation. Change the rhythm, keep the thinking.
 
+### Selfie poses: stop using arms_folded every time (28 Aug)
+
+The operator noticed every selfie was the same pose. It was. Worse, several passed
+`expr: "tired"`, which is **not a valid expression** and silently fell back to a default.
+
+Valid, from `server/src/agent/actions.ts`:
+
+- **anim**: `phone_selfie`, `pray`, `flex_biceps`, `two_thumbs`, `heart_hands`,
+  `finger_guns`, `salute`, `thumbs_up`, `dab`, `hand_on_heart`, `arms_folded`
+- **expr**: `happy`, `smug`, `neutral`, `shock`, `thinking`
+
+The code states the intent: **`pray` sells a thesis or conviction post, `flex_biceps` sells
+a win.** Match the pose to what the caption is doing. A post about grinding through dead
+hours is not the same picture as a post about a closed trade, and posting both folded-armed
+makes the whole feed look like one photograph.
+
+Rough pairings that work: win → `flex_biceps` / `smug`. Thesis or a line he means →
+`pray` / `neutral`. Self-deprecating → `shrug`-adjacent poses or `hand_on_heart` / `happy`.
+Something absurd → `dab` or `finger_guns`, sparingly. Reflective → `thoughtful` framing with
+`thinking`.
+
 ### Voice bans
 
 - **NEVER use an em dash `—`.** His words: *"thats already something people instantly get icks
