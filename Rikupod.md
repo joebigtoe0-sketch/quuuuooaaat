@@ -93,6 +93,31 @@ you get two sets of captions stacked.
   episode sets `director.paused`, and a queued play would not run until the
   show ended.
 
+## Traps (each of these cost real time)
+
+- **Clips are deleted after 24h.** The disk janitor sweeps `data/clips`,
+  `data/audio` and selfies hourly, anything older than a day, and `server/data`
+  is gitignored. A render is NOT saved anywhere durable. Copy anything worth
+  keeping out of `data/clips/` the same session — finished renders so far live
+  in `C:\Users\nikos\riku-renders\`.
+- **Editing client code does nothing until you rebuild.** `/stage` serves the
+  built bundle in `client/dist`. The server hot-reloads under `tsx watch`; the
+  client does not. Run `npm run build -w client`, then reload the stage page.
+- **The stage must have audio ARMED or clips record silent.** A normal tab
+  blocks autoplay. Launch with `--autoplay-policy=no-user-gesture-required`
+  AND its own `--user-data-dir` (without the separate profile the flag is
+  ignored when a Chrome is already running).
+- **Never edit server files mid-recording.** `tsx watch` restarts the server
+  and kills the take.
+- **Manual stage endpoints bypass the pause on purpose.** `/admin/goto`,
+  `/admin/anim`, `/admin/camera`, `/admin/say`, `/admin/selfie` still drive the
+  stage during an episode — that is the operator's override. Autonomous
+  behaviour (beats, ambient fidgets, tweet animations) is all gated.
+- **Re-pull his numbers before reusing a script.** The figures in
+  `tiktok-drafts/rikupod-ep1-script.json` were read from `/admin/memory` on
+  2026-08-28 and his stats move within hours. Every number has to survive a
+  click.
+
 ## The guest API
 
 - `GET  /guest/<token>/state` → transcript, phase, `yourTurn`, `prompt`, `secondsLeft`
