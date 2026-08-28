@@ -1504,7 +1504,12 @@ export class Beats {
         text = `${topic.slice(0, 200)}`;
         memory.journal("tweet", `brain balked on the producer topic — posted it straight`);
       }
-    } else if (balked(text)) {
+    } else if (balked(text) && !exactText) {
+      // Only bail when the model's words were actually going to be used. With an
+      // exactText caption the generated text is discarded a few lines below, so
+      // a refusal here has no bearing on what gets posted — bailing on it threw
+      // away two finished selfies on 28 Aug (rendered to disk, never tweeted,
+      // no error anywhere except a journal line about a "declined" model).
       memory.journal("tweet", `model declined to write "${topic.slice(0, 80)}" — nothing posted`);
       await this.sayVaried("Editorial passed on that one. Moving on.", "neutral");
       this.loco.stateName = "IDLE";
