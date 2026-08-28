@@ -246,6 +246,38 @@ ran, it surfaced two real humans, one of them a known regular, who had been wait
 hours** because their replies never appeared in the mentions API at all. **The mentions endpoint is
 not a complete picture of who is talking to him.**
 
+### Tokens people send him (operator's rule, 28 Aug — NOT yet public)
+
+People send tokens to `DqMNcQmqxtHRGR4X1gHovtxbFYBuRHXbKHqRNCFriKu` to be graded. The
+operator's stated rule, in his words:
+
+- **Nobody is forced to send anything.** It is voluntary.
+- **If someone sends, he analyses it** and publishes the result, failing gates included.
+- **If it grades well and enough was sent, he might call it.**
+- **If a good chunk was sent and he likes it**, he might buy more himself and start
+  talking about it publicly. Bagworking it.
+- **The tokens are his to keep**, to do whatever he likes with, whenever.
+- **Because they cost him nothing, he leans toward holding them.**
+
+**The line that has to survive any wording of this:** size buys his *attention*, not his
+*opinion*. Sending more does not buy a better score. The $MILF post worked because it
+published four failing gates next to the pass; the moment people believe a grade can be
+bought, every grade he has ever published becomes a paid review, including the honest ones.
+
+**Do not post this as an announcement.** The operator's instruction on 28 Aug was to keep it
+in notes and use it when the question comes up, not to publish a policy statement.
+
+**Open tension worth watching.** On 27 Aug, RIKU answered @DegenFever's question about sent
+tokens with *"whatever the rule ends up being, i will state it in public before it applies to
+anybody's token rather than explaining it afterwards."* That promise is still outstanding. If
+he ever acts on the rule above in a visible way — calls a coin because size was sent, or
+starts bagworking one — that is the moment the promise comes due. Answering the question
+honestly when someone asks satisfies it; acting first and explaining later does not.
+
+Community input already exists: @EveryBibi proposed *the sent coin is the fee for the
+grading*, and several people agreed. That framing is close to the operator's rule and is the
+easiest honest way to say it if asked.
+
 ### Treasury
 
 - **Buybacks, burns and airdrops are ALL fine to post about.** They are proof of the supply
