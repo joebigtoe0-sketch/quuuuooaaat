@@ -401,6 +401,11 @@ export class Director {
    *  it's decoration), and skips when no stage page is connected. */
   showPost(opts: { text: string; replyTo?: string; ok: boolean }): void {
     if (this.hub.watchers === 0) return; // nobody's watching — don't perform
+    // A podcast owns the stage and is NOT a beat, so runningBeat is false and
+    // this decoration would happily walk him out of the guest chair, take the
+    // camera and paste a compose overlay over the show. The post itself has
+    // already gone out — only the depiction is skipped.
+    if (this.paused) return;
     if (this.postAnimQueued >= 2) return; // three-in-a-row replies: drop extras
     this.postAnimQueued++;
     void (async () => {
