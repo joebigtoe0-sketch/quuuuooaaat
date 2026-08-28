@@ -95,6 +95,22 @@ you get two sets of captions stacked.
 
 ## Traps (each of these cost real time)
 
+- **`questions` defaults to 0 in the saved script files, and that silently
+  kills the live Q&A.** `tiktok-drafts/rikupod-ep1-script.json` ships
+  `questions: 0`. POST it verbatim and the episode airs the written body
+  straight into the written close, and the audience segment never happens.
+  On 28 Aug this cost a live take: a viewer had asked a genuinely good
+  question in chat during the episode and it was never read. **Set
+  `questions` explicitly on every run** rather than inheriting it from the
+  file, and confirm it with the operator before firing — "ready" usually
+  means OBS is rolling, not that they reviewed the payload.
+- **With `questions: 0` the episode does not end itself.** It aired all 26
+  turns, went to `phase: "closing"` with `buffered: 0`, and sat there with
+  both characters standing on the mark until `POST /admin/podcast/stop`.
+  Always watch for `running: false` at the end; if `closing` persists for
+  more than a minute or two after the buffer empties, stop it manually. The
+  normal show resumes on its own once stopped.
+
 - **Clips are deleted after 24h.** The disk janitor sweeps `data/clips`,
   `data/audio` and selfies hourly, anything older than a day, and `server/data`
   is gitignored. A render is NOT saved anywhere durable. Copy anything worth
