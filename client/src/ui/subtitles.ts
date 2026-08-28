@@ -44,7 +44,7 @@ export class Subtitles {
     return { ms, scale };
   }
 
-  speak(opts: { audioUrl: string | null; subtitle: string; durMs: number; words?: { word: string; atMs: number }[] }): void {
+  speak(opts: { audioUrl: string | null; subtitle: string; durMs: number; words?: { word: string; atMs: number }[]; onEnd?: () => void }): void {
     // THE TAIL GUARD — assigning .src cuts whatever is still playing, and the
     // server's wait (its duration estimate + pad) expires slightly before the
     // audio actually finishes, because the client starts playing a few hundred
@@ -62,7 +62,7 @@ export class Subtitles {
 
   private pending: number | null = null;
 
-  private speakNow(opts: { audioUrl: string | null; subtitle: string; durMs: number; words?: { word: string; atMs: number }[] }): void {
+  private speakNow(opts: { audioUrl: string | null; subtitle: string; durMs: number; words?: { word: string; atMs: number }[]; onEnd?: () => void }): void {
     this.clear();
     this.speakStart = performance.now();
     this.speakDurMs = opts.durMs;
@@ -106,7 +106,9 @@ export class Subtitles {
         ? this.audio.ended || (this.audio.duration > 0 && this.audio.currentTime >= this.audio.duration - 0.05)
         : t >= opts.durMs + 200;
       if (!done) this.timer = requestAnimationFrame(tick);
-      else this.fade();
+      // the TRUE end of the line — the server waits for this instead of
+      // guessing a pad, which is what used to clip the last words
+      else { opts.onEnd?.(); this.fade(); }
     };
     this.timer = requestAnimationFrame(tick);
   }

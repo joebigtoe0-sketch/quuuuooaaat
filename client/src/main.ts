@@ -94,6 +94,13 @@ const subtitles = new Subtitles(stageEl);
 const music = new Music(stageEl, !new URLSearchParams(location.search).has("auto"));
 const fx = new Fx(stageEl);
 const recorder = new StageRecorder(renderer.domElement, subtitles.audioElement, httpBase, stageEl);
+
+/** Tell the server a spoken line actually finished. It waits for this instead
+ *  of a fixed pad, so a slow fetch/decode can no longer clip the last words. */
+function ackSpoken(id?: string): void {
+  if (!id) return;
+  void fetch(`${httpBase}/admin/spoken?id=${encodeURIComponent(id)}`).catch(() => {});
+}
 const terminal = new AgentTerminal(stageEl, httpBase);
 fetch(httpBase + "/health")
   .then((r) => r.json())
@@ -256,7 +263,7 @@ function rollShotMove(): void {
     speed: 0.7 + Math.random() * 0.9,
   };
 }
-let burnLine: { words: { word: string; atMs: number }[]; text: string; startedAt: number; durMs: number } | null = null;
+let burnLine: { words: { word: string; atMs: number }[]; text: string; startedAt: number; durMs: number; speaker?: string } | null = null;
 
 const burnCanvas = document.createElement("canvas");
 burnCanvas.width = 1024; burnCanvas.height = 320;
@@ -271,8 +278,88 @@ burnPlane.visible = false;
 camera.add(burnPlane);
 scene.add(camera); // camera must live in the scene for its children to render
 
+// 16:9 caption plane. The tiktok karaoke window (5 words, ALL CAPS) is built
+// for a vertical crop and is genuinely hard to read in a seated conversation,
+// so films and podcasts get the STAGE's own look instead: speaker nameplate,
+// the full line wrapped, spoken words bright and upcoming words dimmed. Drawn
+// INTO the canvas because captureStream() only sees the WebGL canvas — the DOM
+// subtitle overlay is invisible to the recorder.
+const podCanvas = document.createElement("canvas");
+podCanvas.width = 1536; podCanvas.height = 480;
+const podCtx = podCanvas.getContext("2d")!;
+const podTex = new THREE.CanvasTexture(podCanvas);
+const podMat = new THREE.MeshBasicMaterial({ map: podTex, transparent: true, depthTest: false, depthWrite: false });
+const podPlane = new THREE.Mesh(new THREE.PlaneGeometry(1.06, 0.331), podMat); // matches the canvas 3.2:1
+podPlane.position.set(0, -0.4, -1.35);
+podPlane.renderOrder = 999;
+podPlane.visible = false;
+camera.add(podPlane);
+
+function drawPodSubs(): void {
+  if (tiktokMode || !burnSubsOn || !burnLine) { podPlane.visible = false; return; }
+  const t = performance.now() - burnLine.startedAt;
+  if (t > burnLine.durMs + 600) { podPlane.visible = false; burnLine = null; return; }
+  const words = burnLine.words.length
+    ? burnLine.words
+    : burnLine.text.split(/\s+/).map((w, i, arr) => ({ word: w, atMs: (i * burnLine!.durMs) / arr.length }));
+  let upto = -1;
+  for (let i = 0; i < words.length; i++) if (t >= words[i].atMs) upto = i;
+
+  const g = podCtx;
+  g.clearRect(0, 0, podCanvas.width, podCanvas.height);
+  g.textAlign = "center"; g.textBaseline = "middle";
+  g.shadowColor = "rgba(0,0,0,0.95)"; g.shadowBlur = 14; g.shadowOffsetY = 3;
+
+  // wrap the whole line at the body font
+  const BODY = "600 52px 'Segoe UI', system-ui, sans-serif";
+  g.font = BODY;
+  const maxW = podCanvas.width - 140;
+  const lines: { word: string; idx: number }[][] = [[]];
+  let w = 0;
+  words.forEach((wd, i) => {
+    const wpx = g.measureText(wd.word + " ").width;
+    if (w + wpx > maxW && lines[lines.length - 1].length) { lines.push([]); w = 0; }
+    lines[lines.length - 1].push({ word: wd.word, idx: i });
+    w += wpx;
+  });
+  // a long turn scrolls: keep a 3-line window around the word being spoken
+  const MAXL = 3;
+  let act = lines.findIndex((ln) => ln.some((x) => x.idx === Math.max(0, upto)));
+  if (act < 0) act = 0;
+  const startL = Math.max(0, Math.min(act - MAXL + 1, lines.length - MAXL));
+  const show = lines.slice(startL, startL + MAXL);
+
+  // speaker nameplate, same teal as the stage overlay
+  const nameY = 96;
+  if (burnLine.speaker) {
+    g.font = "bold 30px Consolas, monospace";
+    g.fillStyle = "#2affd4";
+    g.fillText(burnLine.speaker.toUpperCase(), podCanvas.width / 2, nameY);
+  }
+
+  g.font = BODY;
+  const lineH = 70;
+  const top = nameY + 64;
+  show.forEach((ln, li) => {
+    const y = top + li * lineH;
+    const widths = ln.map((x) => g.measureText(x.word + " ").width);
+    const total = widths.reduce((a, b) => a + b, 0);
+    let x = podCanvas.width / 2 - total / 2;
+    ln.forEach((x2, i) => {
+      g.fillStyle = x2.idx <= upto ? "#ffffff" : "#8792a8";
+      g.textAlign = "left";
+      g.fillText(x2.word, x, y);
+      x += widths[i];
+    });
+  });
+  g.textAlign = "center";
+  g.shadowBlur = 0; g.shadowOffsetY = 0;
+  podTex.needsUpdate = true;
+  podPlane.visible = true;
+}
+
 function drawBurnSubs(): void {
-  if ((!tiktokMode && !burnSubsOn) || !burnLine) { burnPlane.visible = false; return; }
+  if (!tiktokMode || !burnLine) { burnPlane.visible = false; return; }
   // placement differs by frame: 9:16 tiktok sits low; 16:9 film a bit higher
   // and wider so the words carry at landscape sizes
   burnPlane.position.y = tiktokMode ? -0.5 : -0.4;
@@ -518,7 +605,7 @@ function applyCue(cue: Cue): void {
       screens?.drawPodcastChat?.(cue.title, cue.lines);
       break;
     case "speak":
-      if (tiktokMode || burnSubsOn) burnLine = { words: cue.words ?? [], text: cue.subtitle, startedAt: performance.now(), durMs: cue.durMs };
+      if (tiktokMode || burnSubsOn) burnLine = { words: cue.words ?? [], text: cue.subtitle, startedAt: performance.now(), durMs: cue.durMs, speaker: cue.speaker ?? (cue.actor === "guest" ? "GUEST" : "RIKU") };
       if (cue.actor === "guest") {
         guest?.lipsync?.(cue.durMs, cue.words, () => subtitles.speechClock());
         subtitles.speak({
@@ -526,6 +613,7 @@ function applyCue(cue: Cue): void {
           subtitle: cue.speaker ? `${cue.speaker}: ${cue.subtitle}` : cue.subtitle,
           durMs: cue.durMs,
           words: cue.words,
+          onEnd: () => ackSpoken(cue.id),
         });
         break;
       }
@@ -534,6 +622,7 @@ function applyCue(cue: Cue): void {
         subtitle: cue.subtitle,
         durMs: cue.durMs,
         words: cue.words,
+        onEnd: () => ackSpoken(cue.id),
       });
       avatar?.lipsync?.(cue.durMs, cue.words, () => subtitles.speechClock());
       break;
@@ -772,6 +861,7 @@ function frame(): void {
   camera.position.lerp(goal, Math.min(1, dt * (camPresetName.startsWith("tiktok") ? 6 : 1.8)));
   camera.lookAt(safe.look);
   drawBurnSubs();
+  drawPodSubs();
 
   renderer.render(scene, camera);
 }

@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { cfg } from "../config.js";
 import { log } from "../log.js";
+import { waitSpoken } from "../voice/spoken.js";
 import { pushFeed } from "../feed.js";
 import { allChat } from "../social/livechat.js";
 import { callFreeform, callJson, hasApiKey } from "../brain/adapter.js";
@@ -58,6 +59,15 @@ interface GuestInfo {
   inbox: { id: string; text: string; emote?: string }[];
 }
 
+/** Both speakers are LLMs and will happily invent a history if you let them —
+ *  ages, anniversaries, trade counts, sol figures. RIKU's own standing rule is
+ *  that every number survives a click, so anything not in the brief is banned
+ *  outright rather than softly discouraged. */
+const GROUNDING =
+  "HARD RULE - NO INVENTED FACTS. Every number, date, age, duration, trade, wallet and event you mention must come from the BRIEF below or from what has already been said in this conversation. " +
+  "You may not estimate, round up, or reminisce. Never invent how long ago something happened, how old anyone is, or how many times something occurred. " +
+  "If you do not have a fact, say so in character ('i don't have that in front of me', 'that's not in my ledger') and move on. A vivid invented number is the single worst thing you can do here.";
+
 const MODELS = ["SM_Chr_Suit_Male_01", "SM_Chr_Boss_Male_01", "SK_Quant"];
 const EMOTES = [
   "wave", "clap", "shrug", "point", "head_nod", "arms_folded", "thumbs_up",
@@ -75,6 +85,8 @@ export class Episode {
   private body: GuestBody;
   private stop = false;
   private convoTurns: number;
+  /** a pre-written episode, staged verbatim instead of produced live */
+  private script: Turn[] | null = null;
   private questionCount: number;
   private startedAt = 0;
 
@@ -82,11 +94,12 @@ export class Episode {
     private hub: Hub,
     private tts: TTSProvider,
     private dir: Director,
-    opts: { guestName: string; guestModel?: string; guestVoice?: string; topic: string; convoTurns?: number; questions?: number },
+    opts: { guestName: string; guestModel?: string; guestVoice?: string; topic: string; convoTurns?: number; questions?: number; script?: Turn[] },
   ) {
     this.body = new GuestBody(hub);
     this.topic = opts.topic;
     this.convoTurns = Math.max(4, Math.min(24, opts.convoTurns ?? 10));
+    this.script = opts.script && opts.script.length ? opts.script : null;
     this.questionCount = Math.max(0, Math.min(5, opts.questions ?? 5));
     this.guest = {
       token: crypto.randomBytes(9).toString("hex"),
@@ -194,6 +207,7 @@ export class Episode {
     const text = await Promise.race([
       callFreeform(
         `You are ${this.guest!.name}, a guest on RIKU's podcast (RIKU is a cocky AI memecoin trader). ` +
+          `${GROUNDING} ` +
           `You are an AI agent with your own opinions — be a real guest, not a yes-man: disagree sometimes, bring your own angle, ask him things back. ` +
           `Answer in ONE short spoken paragraph, under 50 words, conversational, no markdown, no emoji. This is read aloud on a live stream.`,
         `Topic: ${this.topic}\nRecent conversation:\n${this.transcript.slice(-6).map((t) => `${t.speaker}: ${t.text}`).join("\n") || "(just starting)"}\n\nRIKU says: ${prompt}`,
@@ -210,6 +224,7 @@ export class Episode {
     const t = await Promise.race([
       callFreeform(
         `You are RIKU, a cocky deadpan AI memecoin trader hosting your own podcast, RIKUPOD. ` +
+          `${GROUNDING} ` +
           `Your guest is ${this.guest!.name}. You are a GOOD host: curious, sharp, funny, you actually listen and follow up on what they said. ` +
           `Never read stats like a report. Under ${maxWords} words, spoken aloud, no markdown, no emoji, no stage directions.`,
         `Topic: ${this.topic}\nConversation so far:\n${this.transcript.slice(-8).map((x) => `${x.speaker}: ${x.text}`).join("\n") || "(nothing yet)"}\n\nDO THIS: ${instruction}`,
@@ -227,6 +242,33 @@ export class Episode {
       this.buffer.push(turn);
     };
     try {
+      // A DRAFTED episode: every line was written and reviewed before the show,
+      // so there is no producer LLM in the loop at all. This is the only way to
+      // guarantee the figures are right — two improvising models will invent a
+      // history (ages, anniversaries, trade counts) however hard the prompt
+      // leans on them not to.
+      if (this.script) {
+        // The written body airs first, then (if the episode asked for
+        // questions) the live chat segment runs for real, then the written
+        // close. The drafted half cannot drift; the Q&A half is genuinely live,
+        // which is the whole point of doing it on stream.
+        const body = this.script.filter((t) => t.kind !== "outro");
+        const close = this.script.filter((t) => t.kind === "outro");
+        for (const t of body) {
+          push(t);
+          this.transcript.push({ speaker: t.speaker, text: t.text, at: Date.now() });
+        }
+        log.info("podcast", `staged a written episode — ${body.length} scripted turns, no LLM`);
+        if (this.questionCount > 0) {
+          const asked = await this.runChatQuestions(push);
+          log.info("podcast", `chat segment: ${asked} question(s) taken from live chat`);
+        }
+        for (const t of close) {
+          push(t);
+          this.transcript.push({ speaker: t.speaker, text: t.text, at: Date.now() });
+        }
+        return;
+      }
       // 1. RIKU's welcome + intro of the guest
       push({
         speaker: "riku",
@@ -267,28 +309,7 @@ export class Episode {
       }
 
       // 6-7. chat questions
-      const questions = await this.pickChatQuestions();
-      for (const q of questions) {
-        if (this.stop) break;
-        const intro = await this.rikuLine(
-          `Read this question from live chat out loud and say who asked it, then hand it over if it is for ${this.guest!.name}. Question from ${q.user}: "${q.text}"`,
-          45,
-        );
-        push({ speaker: "riku", kind: "question", text: intro, question: q.text, askedBy: q.user, mood: "neutral" });
-        this.transcript.push({ speaker: "riku", text: intro, at: Date.now() });
-
-        const ga = await this.askGuest(
-          `A viewer in the live chat (${q.user}) asks: "${q.text}". Answer them directly.`,
-          "question",
-        );
-        const gtext = ga?.text ?? "Good question. Short answer: nobody knows, and anyone who says otherwise is selling something.";
-        push({ speaker: "guest", kind: "answer", emote: ga?.emote, text: gtext });
-        this.transcript.push({ speaker: "guest", text: gtext, at: Date.now() });
-
-        const rr = await this.rikuLine(`Give your own short take on that same question, then move on.`, 45);
-        push({ speaker: "riku", kind: "answer", text: rr, mood: "neutral" });
-        this.transcript.push({ speaker: "riku", text: rr, at: Date.now() });
-      }
+      await this.runChatQuestions(push);
 
       // 8-9. the close
       const gout = await this.askGuest(`The show is ending. Give a short goodbye to RIKU and the audience.`, "outro", 40_000);
@@ -303,6 +324,35 @@ export class Episode {
     } catch (e) {
       log.warn("podcast", `producer failed: ${String(e).slice(0, 120)}`);
     }
+  }
+
+  /** The live-chat segment: RIKU reads a real viewer question, the guest
+   *  answers, RIKU gives his own take. Shared by produced AND written
+   *  episodes — a drafted show still takes real questions on stream. */
+  private async runChatQuestions(push: (t: Turn) => void): Promise<number> {
+    const questions = await this.pickChatQuestions();
+    for (const q of questions) {
+      if (this.stop) break;
+      const intro = await this.rikuLine(
+        `Read this question from live chat out loud and say who asked it, then hand it over if it is for ${this.guest!.name}. Question from ${q.user}: "${q.text}"`,
+        45,
+      );
+      push({ speaker: "riku", kind: "question", text: intro, question: q.text, askedBy: q.user, mood: "neutral" });
+      this.transcript.push({ speaker: "riku", text: intro, at: Date.now() });
+
+      const ga = await this.askGuest(
+        `A viewer in the live chat (${q.user}) asks: "${q.text}". Answer them directly.`,
+        "question",
+      );
+      const gtext = ga?.text ?? "Good question. Short answer: nobody knows, and anyone who says otherwise is selling something.";
+      push({ speaker: "guest", kind: "answer", emote: ga?.emote, text: gtext });
+      this.transcript.push({ speaker: "guest", text: gtext, at: Date.now() });
+
+      const rr = await this.rikuLine(`Give your own short take on that same question, then move on.`, 45);
+      push({ speaker: "riku", kind: "answer", text: rr, mood: "neutral" });
+      this.transcript.push({ speaker: "riku", text: rr, at: Date.now() });
+    }
+    return questions.length;
   }
 
   /** The best few questions the live chat asked, LLM-picked. */
@@ -350,9 +400,14 @@ export class Episode {
       durMs: s.durMs,
       words: s.words,
       actor,
+      id,
       ...(actor === "guest" ? { speaker: this.guest!.name } : {}),
     });
-    await sleep(s.durMs + 1100); // covers client fetch/decode latency — the tail guard catches the rest
+    // Wait for the client's "this line actually finished" ack rather than a
+    // guessed pad. The cap is only a safety net for a stage that is not
+    // connected, or reloads mid-line, so a show can never hang.
+    await waitSpoken(id, s.durMs + 6000);
+    await sleep(220); // a breath between turns
   }
 
   private cam(p: "podcast_wide" | "podcast_host" | "podcast_guest"): void {
@@ -517,7 +572,7 @@ export function startEpisode(
   hub: Hub,
   tts: TTSProvider,
   dir: Director,
-  opts: { guestName: string; guestModel?: string; guestVoice?: string; topic: string; convoTurns?: number; questions?: number },
+  opts: { guestName: string; guestModel?: string; guestVoice?: string; topic: string; convoTurns?: number; questions?: number; script?: Turn[] },
 ): { ok: boolean; token?: string; why?: string } {
   if (current && current.phase !== "done") return { ok: false, why: "an episode is already running" };
   current = new Episode(hub, tts, dir, opts);

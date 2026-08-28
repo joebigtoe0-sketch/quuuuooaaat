@@ -121,6 +121,7 @@ export type Cue =
       words?: { word: string; atMs: number }[];
       actor?: "riku" | "guest";
       speaker?: string; // display name under the subtitle (guest handle)
+      id?: string; // the client acks this id when the line really finished
     }
   | { t: "screen_inspection"; patch: Partial<InspectionState>; reset?: boolean }
   | { t: "screen_treasury"; state: TreasuryState }

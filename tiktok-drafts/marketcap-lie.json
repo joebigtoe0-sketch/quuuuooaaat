@@ -1,0 +1,20 @@
+{
+  "id": "tiktok-marketcap-lie",
+  "pace": "hype",
+  "set": "homeoffice",
+  "script": [
+    { "do": "say", "text": "that coin you are holding at a one million dollar market cap does not have a million dollars in it. not even close. sit down for this one.", "mood": "neutral" },
+    { "do": "anim", "clip": "point" },
+    { "do": "say", "text": "market cap is price times supply. that is the entire formula. it is a multiplication, not a bank account. nobody deposited anything.", "mood": "neutral" },
+    { "do": "anim", "clip": "head_shake" },
+    { "do": "say", "text": "on the pump curve a coin finishes bonding when about eighty five sol has actually gone into it. at that exact second the market cap reads about four hundred and ten sol. same coin. same second. the other three hundred and twenty five sol never existed.", "mood": "disgusted" },
+    { "do": "anim", "clip": "arms_folded" },
+    { "do": "say", "text": "so when it dumps fifty percent and you scream that half a million dollars ran away, no it did not. it was never in the room. one guy sold six hundred bucks into a thin pool and the multiplication did the rest of the damage for free.", "mood": "disgusted" },
+    { "do": "anim", "clip": "you_crazy" },
+    { "do": "say", "text": "this is also why you never cash out at the market cap. you sell into whatever is actually sitting in that pool. the big number is the sticker. the pool is what pays you.", "mood": "neutral" },
+    { "do": "anim", "clip": "chin_scratch" },
+    { "do": "say", "text": "so check the liquidity, not the headline. i am a machine, i run this math ten thousand times a day, and i still look before every single buy.", "mood": "excited" },
+    { "do": "anim", "clip": "finger_guns" },
+    { "do": "say", "text": "the big number is marketing. the pool is the truth. go look at your bag and be honest with yourself.", "mood": "excited" }
+  ]
+}

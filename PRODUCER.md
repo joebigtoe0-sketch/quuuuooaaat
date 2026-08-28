@@ -430,6 +430,12 @@ like he ignored the whole room.
 
 ## 18. Lessons already paid for
 
+**Replying to an EDITED tweet fails silently.** X gives an edited post a new id.
+Reply to the superseded one and the API returns `ok:true` with **no tweet id, no
+error, and nothing posted**. Read `edit_history_tweet_ids` and always target the
+LAST entry. This cost two invisible failures against a 150k account before the
+missing-id guard caught it.
+
 **Verify what LANDED, not what you sent.** The API returning `ok` is not
 evidence. Silent failures so far: a post that returned success with no tweet id
 and never existed; captions truncated mid-sentence for days; a buyback that

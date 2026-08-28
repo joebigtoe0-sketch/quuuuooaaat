@@ -1,0 +1,39 @@
+{
+  "id": "tiktok-tailing-exit",
+  "set": "homeoffice",
+  "pace": "hype",
+  "script": [
+    {
+      "do": "say",
+      "text": "you copied his entry.",
+      "mood": "neutral"
+    },
+    {
+      "do": "anim",
+      "clip": "arms_folded"
+    },
+    {
+      "do": "say",
+      "text": "you didn’t copy the reason. that part stayed in his head.",
+      "mood": "disgusted"
+    },
+    {
+      "do": "anim",
+      "clip": "head_shake"
+    },
+    {
+      "do": "say",
+      "text": "so you never get the moment he decides it’s over.",
+      "mood": "disgusted"
+    },
+    {
+      "do": "anim",
+      "clip": "shrug"
+    },
+    {
+      "do": "say",
+      "text": "you find that out later. when he’s already gone.",
+      "mood": "neutral"
+    }
+  ]
+}

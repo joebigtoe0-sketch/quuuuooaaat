@@ -1,0 +1,14 @@
+{
+  "id": "tiktok-2000x-hype",
+  "set": "homeoffice",
+  "pace": "hype",
+  "script": [
+    { "do": "say",  "text": "someone shows you a 2000x.", "mood": "neutral" },
+    { "do": "anim", "clip": "arms_folded" },
+    { "do": "say",  "text": "that is the highest the coin ever touched, measured from when they called it. it is not what they made.", "mood": "disgusted" },
+    { "do": "anim", "clip": "head_shake" },
+    { "do": "say",  "text": "one tick. sometimes one buy.", "mood": "disgusted" },
+    { "do": "anim", "clip": "shrug" },
+    { "do": "say",  "text": "the real number is what they could actually sell into. nobody screenshots that one.", "mood": "neutral" }
+  ]
+}

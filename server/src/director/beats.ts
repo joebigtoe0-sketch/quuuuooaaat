@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { log } from "../log.js";
+import { waitSpoken } from "../voice/spoken.js";
 import { store } from "../store.js";
 import type { Hub } from "../hub.js";
 import type { Locomotion } from "./locomotion.js";
@@ -232,10 +233,11 @@ export class Beats {
     ]);
     const s = syn ?? { audioUrl: null, durMs: Math.max(1500, text.split(/\s+/).length * 340), words: [] };
     this.hub.cue({ t: "mood", mood });
-    this.hub.cue({ t: "speak", audioUrl: s.audioUrl, subtitle: text, durMs: s.durMs, words: s.words });
-    // pad covers client fetch/play latency + the subtitle fade — moving on too
-    // early clips the last words of the line on stream
-    await sleep(s.durMs + 900);
+    this.hub.cue({ t: "speak", audioUrl: s.audioUrl, subtitle: text, durMs: s.durMs, words: s.words, id });
+    // The client acks the TRUE end of the line, so we no longer guess a pad —
+    // a fixed pad clipped the last words whenever fetch/decode ran slow.
+    await waitSpoken(id, s.durMs + 6000);
+    await sleep(200);
   }
 
   /** LLM with watchdog + mock fallback. */

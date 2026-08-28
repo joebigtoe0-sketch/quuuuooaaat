@@ -536,6 +536,22 @@ app.post("/admin/podcast/start", async (req, res) => {
   if (guestName.length < 2) return res.json({ ok: false, why: "guest name required" });
   if (topic.length < 3) return res.json({ ok: false, why: "topic required" });
   const { startEpisode } = await import("./podcast/episode.js");
+  // A DRAFTED episode: pass `script` and the producer LLM is skipped entirely,
+  // the turns air verbatim. Order matters — playback stages by `kind`: one riku
+  // intro, one guest intro, the convo, then guest outro + riku outro.
+  const MOODS = ["neutral", "excited", "disgusted", "thinking"];
+  const KINDS = ["intro", "convo", "question", "answer", "outro"];
+  const script = Array.isArray(b.script)
+    ? b.script
+        .map((t: any) => ({
+          speaker: t?.speaker === "guest" ? "guest" : "riku",
+          text: String(t?.text ?? "").trim().slice(0, 900),
+          mood: MOODS.includes(t?.mood) ? t.mood : undefined,
+          emote: typeof t?.emote === "string" ? t.emote.slice(0, 24) : undefined,
+          kind: KINDS.includes(t?.kind) ? t.kind : "convo",
+        }))
+        .filter((t: any) => t.text.length >= 2)
+    : undefined;
   const r = startEpisode(hub, tts, director, {
     guestName,
     topic,
@@ -543,6 +559,7 @@ app.post("/admin/podcast/start", async (req, res) => {
     guestVoice: typeof b.voice === "string" ? b.voice : undefined,
     convoTurns: Number(b.turns) || undefined,
     questions: b.questions === undefined ? undefined : Number(b.questions),
+    script: script && script.length ? (script as any) : undefined,
   });
   if (r.ok) log.info("podcast", `START "${topic}" with ${guestName} — guest link: /guest/${r.token}`);
   res.json({ ...r, guestUrl: r.token ? `/guest/${r.token}` : undefined });
@@ -1336,14 +1353,35 @@ app.all("/admin/say", async (req, res) => {
   }
 });
 
+/** The stage client reports that a spoken line actually finished playing.
+ *  Open like /admin/recstat — the stage has no admin key. */
+app.all("/admin/spoken", async (req, res) => {
+  const id = String(req.query.id ?? "").slice(0, 64);
+  if (id) {
+    const { markSpoken } = await import("./voice/spoken.js");
+    markSpoken(id);
+  }
+  res.json({ ok: true });
+});
+
 app.get("/admin/record", async (req, res) => {
-  const secs = Math.min(20, Math.max(2, Number(req.query.secs ?? 6)));
+  // secs caps at 30min so a whole podcast episode fits in one take — the old
+  // 20s ceiling only ever suited quick grabs. subs=1 burns the karaoke
+  // captions INTO the canvas for the duration: the stage's normal subtitles
+  // are a DOM overlay, so captureStream records the room WITHOUT them.
+  // Cues go straight to the hub (not the director), which is what lets this
+  // run during a podcast — an episode sets director.paused and a queued play
+  // would sit unrun until the show ended.
+  const secs = Math.min(1800, Math.max(2, Number(req.query.secs ?? 6)));
+  const subs = String(req.query.subs ?? "") === "1";
   const id = String(req.query.id ?? `cap_${Date.now()}`).replace(/[^a-zA-Z0-9_-]/g, "");
   const { expectClip } = await import("./media/film.js");
-  const clipP = expectClip(id, (secs + 40) * 1000);
+  const clipP = expectClip(id, (secs + 120) * 1000); // long takes transcode slower
+  if (subs) hub.cue({ t: "burnsubs", on: true });
   hub.cue({ t: "record", on: true, id });
   await new Promise((r) => setTimeout(r, secs * 1000));
   hub.cue({ t: "record", on: false, id });
+  if (subs) hub.cue({ t: "burnsubs", on: false });
   const mp4 = await clipP;
   res.json({ ok: !!mp4, id, mp4 });
 });
@@ -1384,7 +1422,9 @@ app.get("/admin/selfie-last", (_req, res) => {
 });
 
 /** The stage client uploads its recorded greenscreen clip here (raw webm). */
-app.post("/admin/clip", express.raw({ type: () => true, limit: "80mb" }), async (req, res) => {
+// 80mb only ever held ~2min: the recorder runs at 6Mbps, so a full podcast
+// episode uploads a few hundred MB and used to bounce with a silent 413.
+app.post("/admin/clip", express.raw({ type: () => true, limit: "768mb" }), async (req, res) => {
   const id = String(req.query.id ?? "");
   if (!id || !Buffer.isBuffer(req.body) || req.body.length < 5000) {
     return res.status(400).json({ err: "id + webm body required" });

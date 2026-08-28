@@ -104,7 +104,7 @@ export type TakeoverView =
 export type Cue =
   | { t: "anim"; clip: string; actor?: "riku" | "guest" }
   | { t: "walk"; to: StationId; durMs: number }
-  | { t: "speak"; audioUrl: string | null; subtitle: string; durMs: number; words?: { word: string; atMs: number }[]; actor?: "riku" | "guest"; speaker?: string }
+  | { t: "speak"; audioUrl: string | null; subtitle: string; durMs: number; words?: { word: string; atMs: number }[]; actor?: "riku" | "guest"; speaker?: string; id?: string }
   | { t: "screen_inspection"; patch: Partial<InspectionState>; reset?: boolean }
   | { t: "screen_treasury"; state: TreasuryState }
   | { t: "screen_callouts"; cards: CalloutCard[] }
