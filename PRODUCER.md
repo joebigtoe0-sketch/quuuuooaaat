@@ -494,6 +494,22 @@ each one is small. The ones that matter:
 | `freshnums.mjs` `closes.mjs` `dist.mjs` `book.mjs` | live figures |
 | `outreach3.mjs` | ranks the outreach queue, hides handled entries |
 
+**Losses need their own tool.** `wins.mjs` only ever surfaces GREEN closed
+trades, so for a year the only P&L anyone could see was the flattering half.
+When @DegenFever asked for gains *and* losses on 28 Aug there was no way to
+answer until `trade.mjs` was written: it takes explicit mints and reports
+in/out/net win or lose, using the same full-history summing as `wins.mjs` but
+pulling 10 pages instead of 6 because losers are older than the win window.
+
+```
+node trade.mjs <mint> [<mint> ...]
+```
+
+The current strategy's real record, read off chain that day: four winners
+(+0.3360, +0.2548, +0.2462, +0.1775) against two losers (-0.1794, -0.0217),
+net **+0.8134 SOL**, four from six. Publishing the losses next to the wins is
+the entire reason the number was worth posting.
+
 **Auto PNL videos.** Full runbook, with the working scripts, lives in
 `tools/pnl-video/` — read that before touching this pipeline. In short: a
 closed green trade goes to `pnlvid.mjs <mint>`, which
