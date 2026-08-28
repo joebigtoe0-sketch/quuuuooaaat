@@ -1,80 +1,64 @@
 /**
- * Coin Communities client — vendored from calloutbot/src/cc.js, trimmed to
- * Quant's needs (own account env, no thesis-borrowing machinery).
+ * Callout client — pump.fun NATIVE.
  *
- * Callouts are NOT a pump.fun API: api.coincommunities.org has its own
- * accounts (Twitter OAuth) with wallets LINKED to them. Posting needs the
- * account's refresh token, never the wallet's private key. The ~$1-held gate
- * is checked on-chain against the wallet in the body — and Quant's wallet
- * holds the sent coins, so the gate is satisfied by the gift itself.
+ * 2026-08-28: Coin Communities (api.coincommunities.org) was absorbed into
+ * pump.fun; its whole /api/v1/* surface was removed. Callouts are now native
+ * pump.fun endpoints on frontend-api-v3, authed by the account's pump COOKIE
+ * (the same Riku PUMP_COOKIE the discovery follow-feed uses) — NOT a CC bearer
+ * token and NOT the wallet private key. The ~$1-held gate still applies on-chain
+ * against the posting account, and Quant's wallet holds the sent coins, so the
+ * gate is satisfied by the gift itself.
+ *
+ * Exports are unchanged (getAccessToken / ccGet / whoAmI / postCallout /
+ * ccQuietOk) so post.ts and index.ts need no edits — only the transport moved.
+ *
+ *   post:  POST /callout/create   { coinMint, chainId: 1, thesis }   -> 201
+ *   like:  POST /callout/{id}/like
+ *   read:  GET  /home-feed?pageSize=&chain=all   (coins[].positions[] callouts)
  */
-const BASE = process.env.CC_API_BASE || "https://api.coincommunities.org";
-// Shipped in pump.fun's frontend bundle — public app key, not a secret.
-const API_KEY =
-  process.env.CC_API_KEY ||
-  "cc_367f1420841bfb46f31196f4520eff89cdacc311fe001109d181f7675bd7f131";
-
-let cached: { token: string; expMs: number } | null = null;
-
-// Persist the access token across reboots — Railway restarts on every deploy,
-// and the CC refresh endpoint is aggressively rate-limited (429s in bursts). A
-// disk cache means a reboot reuses the still-valid token instead of hammering
-// the refresh endpoint on the first callout.
-import fs from "node:fs";
-import path from "node:path";
-import { cfg } from "../config.js";
-// the real data dir (server/data — the Railway volume), NOT process.cwd()/data
-const TOKEN_FILE = path.join(cfg.dataDir, "cc_token.json");
-function loadDiskToken(): void {
-  if (cached) return;
-  try {
-    const j = JSON.parse(fs.readFileSync(TOKEN_FILE, "utf8"));
-    if (j?.token && j?.expMs > Date.now() + 60_000) cached = j;
-  } catch {}
-}
-function saveDiskToken(): void {
-  try {
-    fs.mkdirSync(path.dirname(TOKEN_FILE), { recursive: true });
-    fs.writeFileSync(TOKEN_FILE, JSON.stringify(cached));
-  } catch {}
-}
+const FE = process.env.PUMP_API_BASE || "https://frontend-api-v3.pump.fun";
+const CHAIN_ID = Number(process.env.PUMP_CHAIN_ID || 1); // pump's Codex network id for Solana
+const UA =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+  "(KHTML, like Gecko) Chrome/126.0 Safari/537.36";
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-function headers(auth?: string): Record<string, string> {
-  const h: Record<string, string> = {
+/** Normalize a pasted cookie: strip quotes, and add the `auth_token=` name if a
+ *  bare JWT was pasted. (Same rule as discovery.normCookie; inlined to avoid an
+ *  import cycle with the discovery module.) */
+function normCookie(v: string): string {
+  v = (v ?? "").trim().replace(/^["']|["']$/g, "");
+  if (!v) return "";
+  if (/(^|;\s*)auth_token=/.test(v)) return v;
+  if (/^ey[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(v)) return `auth_token=${v}`;
+  return v;
+}
+function pumpCookie(): string {
+  return normCookie(process.env.PUMP_COOKIE ?? "");
+}
+
+function headers(): Record<string, string> {
+  return {
     accept: "*/*",
     "content-type": "application/json",
-    "x-api-key": API_KEY,
+    "user-agent": UA,
     origin: "https://pump.fun",
+    referer: "https://pump.fun/",
+    cookie: pumpCookie(),
   };
-  if (auth) h.authorization = `Bearer ${auth}`;
-  return h;
 }
 
-function jwtExpiryMs(token: string): number {
-  try {
-    const part = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
-    const p = JSON.parse(Buffer.from(part, "base64").toString());
-    return typeof p.exp === "number" ? p.exp * 1000 : 0;
-  } catch {
-    return 0;
-  }
-}
-
-// RATE AWARENESS — the API punishes bursts with long 429 penalty windows, and
-// posting callouts is revenue. Background consumers (the caller-intel
-// harvester) must yield to the posting path: check ccQuietOk() before any
-// non-revenue request.
+// RATE AWARENESS — posting callouts is revenue; background reads must yield to it.
 let lastPostAt = 0;
 let last429At = 0;
 export function ccQuietOk(): boolean {
   return Date.now() - lastPostAt > 60_000 && Date.now() - last429At > 10 * 60_000;
 }
 
-async function request(method: string, apiPath: string, body?: unknown, auth?: string): Promise<any> {
-  const res = await fetch(`${BASE}${apiPath}`, {
+async function request(method: string, apiPath: string, body?: unknown): Promise<any> {
+  const res = await fetch(`${FE}${apiPath}`, {
     method,
-    headers: headers(auth),
+    headers: headers(),
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const text = await res.text();
@@ -83,65 +67,49 @@ async function request(method: string, apiPath: string, body?: unknown, auth?: s
     json = text ? JSON.parse(text) : null;
   } catch {}
   if (res.status === 429) last429At = Date.now();
-  if (method === "POST" && apiPath.includes("/callouts")) lastPostAt = Date.now();
+  if (method === "POST" && apiPath.includes("/callout/create")) lastPostAt = Date.now();
   if (!res.ok) throw new Error(`${res.status} ${method} ${apiPath}: ${text.slice(0, 300)}`);
   return json;
 }
 
+/** "Auth" is now just having the pump cookie. post.ts calls this as a preflight
+ *  before committing to a CALL on stream, so keep it throwing when unset. */
 export async function getAccessToken(): Promise<string> {
-  loadDiskToken();
-  if (cached && Date.now() < cached.expMs - 60_000) return cached.token;
-  const refresh = (process.env.QUANT_CC_REFRESH_TOKEN || "").trim();
-  if (!refresh) throw new Error("QUANT_CC_REFRESH_TOKEN is not set");
-
-  // ONE shape (refreshToken — the verified-correct one; probing three tripled
-  // the request rate into a rate-limited endpoint). Retry 429s with backoff.
-  let lastErr = "";
-  for (let attempt = 0; attempt < 4; attempt++) {
-    if (attempt) await sleep(4000 * attempt); // 4s, 8s, 12s
-    try {
-      const j = await request("POST", "/api/v1/users/token/refresh", { refreshToken: refresh });
-      const token = j?.accessToken || j?.access_token || j?.token;
-      if (!token) {
-        lastErr = "200 but no token in response";
-        continue;
-      }
-      cached = { token, expMs: jwtExpiryMs(token) || Date.now() + 30 * 60_000 };
-      saveDiskToken();
-      return token;
-    } catch (e: any) {
-      lastErr = e.message;
-      if (!/^429/.test(String(e.message))) break; // only 429s are worth retrying
-    }
-  }
-  throw new Error(`token refresh failed: ${lastErr}`);
+  const c = pumpCookie();
+  if (!c) throw new Error("PUMP_COOKIE is not set");
+  return c;
 }
 
-/** Authenticated GET with the SAME headers the posting path uses (the API
- *  needs x-api-key as well as the bearer — a probe without it 401s). */
+/** Authenticated GET against pump's frontend-api (used by the admin debug proxy). */
 export async function ccGet(apiPath: string): Promise<any> {
-  return request("GET", apiPath, undefined, await getAccessToken());
+  return request("GET", apiPath);
 }
 
 export async function whoAmI(): Promise<any> {
-  return request("GET", "/api/v1/users/me", undefined, await getAccessToken());
+  return request("GET", "/auth/my-profile");
 }
 
-export async function postCallout(mint: string, content: string, walletAddress: string): Promise<any> {
-  const token = await getAccessToken();
+export async function postCallout(mint: string, content: string, _walletAddress?: string): Promise<any> {
+  // The pump COOKIE identifies the posting account, so no walletAddress in the
+  // body (kept the arg for call-site parity with the old CC signature).
   let lastErr = "";
   for (let attempt = 0; attempt < 3; attempt++) {
     if (attempt) await sleep(5000 * attempt); // 5s, 10s
     try {
-      return await request(
-        "POST",
-        `/api/v1/communities/${mint}/callouts`,
-        { chainId: "solana", walletAddress, content },
-        token,
-      );
+      return await request("POST", "/callout/create", {
+        coinMint: mint,
+        chainId: CHAIN_ID,
+        thesis: content,
+      });
     } catch (e: any) {
-      lastErr = e.message;
-      if (!/^429/.test(String(e.message))) throw e; // only back off on rate limits
+      const msg = String(e?.message ?? e);
+      lastErr = msg;
+      // A repeat call on the same coin is a success upstream (post.ts maps
+      // "duplicate_callout" -> ok). Normalize whatever pump returns for it.
+      if (/duplicate|already\s+call|409/i.test(msg)) {
+        throw new Error(`duplicate_callout: ${msg}`);
+      }
+      if (!/^429/.test(msg)) throw e; // only back off on rate limits
     }
   }
   throw new Error(`callout post failed after retries: ${lastErr}`);
