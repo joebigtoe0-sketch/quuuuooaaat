@@ -18,14 +18,18 @@ import type { HarvestedCall } from "./callers.js";
  * crowd of callers stamped inside minutes, and no buying above
  * CALLER_FOLLOW_MAX_FROM_FIRST_CALL × the earliest call's mc.
  *
- * EXIT: a fixed scale-out ladder priced off OUR ENTRY MC. The caller's median
- * prices the ENTRY only — as an exit it sat 2-3x above the fill by
- * construction, so a position that ran 3.3x and came back paid us nothing.
- * The ladder banks the move instead of predicting it. Checked every ~30s:
+ * EXIT: a scale-out ladder. TP1 rides the CALLER'S MEDIAN TARGET — the level
+ * this caller's calls typically peak at — and TP2/moonbag are fixed multiples of
+ * OUR ENTRY. A flat TP1 was tried and reverted: at +120% it sat above where this
+ * population actually tops out (the 08-27 winners peaked at +102% and +71%), and
+ * since the only exit below TP1 is the −40% stop, a target nobody reaches turns
+ * winners into losers. The median self-calibrates instead: a 1.5x caller banks at
+ * 1.5x, a 3x caller rides. Checked every ~30s:
  *   STOP  — pre-TP1 only: position marks −CALLER_FOLLOW_STOP_PCT% (40%) → all out.
- *   TP1   — mc ≥ entry × (1 + CALLER_FOLLOW_TP1_PCT%) (+120% ⇒ 2.2x) → sell
- *           CALLER_FOLLOW_TP1_FRACTION (60%) and arm the stop
- *           CALLER_FOLLOW_RUNNER_STOP_PCT (20%) under that mc.
+ *   TP1   — mc ≥ call mc × the caller's clamped median (floored at entry
+ *           +CALLER_FOLLOW_TP1_MIN_PCT%, so a target we already traded through
+ *           cannot fire an instant exit) → sell CALLER_FOLLOW_TP1_FRACTION (60%)
+ *           and arm the stop CALLER_FOLLOW_RUNNER_STOP_PCT (20%) under that mc.
  *   TP2   — mc ≥ entry × (1 + CALLER_FOLLOW_TP2_PCT%) (+400% ⇒ 5x) → sell
  *           CALLER_FOLLOW_TP2_FRACTION (90%) OF WHAT REMAINS. What survives is
  *           4% of the original bag.
@@ -289,8 +293,18 @@ async function watchTick(): Promise<void> {
     // legacy rows predate entryMcUsd — the room gate keeps entry within 1.5x
     // of the call, so callMcUsd is the honest fallback rather than a skip
     const entryMc = f.entryMcUsd && f.entryMcUsd > 0 ? f.entryMcUsd : f.callMcUsd;
-    const tp1Mc = entryMc * (1 + cfg.callerFollowTp1Pct / 100);
-    const tp2Mc = entryMc * (1 + cfg.callerFollowTp2Pct / 100);
+    // TP1 = the CALLER'S MEDIAN TARGET, the level this caller's calls typically
+    // peak at. It self-calibrates (a 1.5x caller banks at 1.5x, a 3x caller
+    // rides) and it is the rule that actually caught both 08-27 winners, which
+    // topped out at +102% and +71% — under a flat +120% neither would have paid.
+    // Floored against OUR entry so a target we already traded through cannot
+    // fire an instant exit.
+    const medianTargetMc = f.med > 1 ? f.callMcUsd * f.med : 0;
+    const tp1FloorMc = entryMc * (1 + cfg.callerFollowTp1MinPct / 100);
+    const tp1Mc = Math.max(medianTargetMc, tp1FloorMc);
+    // TP2 keeps its fixed +400%, but never lands so close to TP1 that a single
+    // move trips both in consecutive ticks
+    const tp2Mc = Math.max(entryMc * (1 + cfg.callerFollowTp2Pct / 100), tp1Mc * 1.5);
     const usd = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
 
     let reason = "";
@@ -302,7 +316,10 @@ async function watchTick(): Promise<void> {
 
     if (phase === "full") {
       if (mcUsd >= tp1Mc) {
-        reason = `+${cfg.callerFollowTp1Pct}% from my entry (${usd(tp1Mc)} mc) — ${Math.round(cfg.callerFollowTp1Fraction * 100)}% off the table, the rest rides`;
+        const gainPct = Math.round(((mcUsd - entryMc) / entryMc) * 100);
+        reason = medianTargetMc >= tp1FloorMc
+          ? `the target this caller's calls typically peak at just printed (${usd(tp1Mc)} mc, +${gainPct}% on my entry) — ${Math.round(cfg.callerFollowTp1Fraction * 100)}% off the table, the rest rides`
+          : `+${gainPct}% on my entry (${usd(tp1Mc)} mc) — ${Math.round(cfg.callerFollowTp1Fraction * 100)}% off the table, the rest rides`;
         fraction = cfg.callerFollowTp1Fraction;
         costShare = cfg.callerFollowTp1Fraction;
         nextPhase = "runner";
@@ -391,7 +408,7 @@ export function startCallerFollow(h: StageHooks): void {
     "follower",
     `caller-follow LIVE — ${cfg.callerFollowPct}% of spendable (floor ${cfg.callerFollowSol} SOL), need ${cfg.callerFollowRoom}x room to caller's median; ` +
       `anti-swarm: max ${cfg.callerFollowMaxSwarm} callers/${cfg.callerFollowSwarmWindowMin}min, entry ≤${cfg.callerFollowMaxFromFirstCall}x first call; ` +
-      `exits (all off ENTRY mc): TP1 sells ${Math.round(cfg.callerFollowTp1Fraction * 100)}% at +${cfg.callerFollowTp1Pct}%, ` +
+      `exits: TP1 sells ${Math.round(cfg.callerFollowTp1Fraction * 100)}% at the CALLER'S MEDIAN TARGET (min +${cfg.callerFollowTp1MinPct}% on entry), ` +
       `TP2 sells ${Math.round(cfg.callerFollowTp2Fraction * 100)}% of the rest at +${cfg.callerFollowTp2Pct}%, ` +
       `moonbag (${Math.round((1 - cfg.callerFollowTp1Fraction) * (1 - cfg.callerFollowTp2Fraction) * 100)}%) rides with no target; ` +
       `stop −${cfg.callerFollowRunnerStopPct}% from TP${cfg.callerFollowStopReanchor ? "2" : "1"}, pre-TP1 stop-loss −${cfg.callerFollowStopPct}%; max ${cfg.callerFollowMaxPerDay}/day` +

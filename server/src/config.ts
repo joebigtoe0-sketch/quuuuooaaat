@@ -145,7 +145,11 @@ export const cfg = {
   // THE SCALE-OUT LADDER — every level is priced off OUR ENTRY mc, never the
   // caller's median. The median target sat 2-3x above entry by construction,
   // so anything that peaked below it paid nothing at all.
-  callerFollowTp1Pct: num("CALLER_FOLLOW_TP1_PCT", 120), // +% on entry mc that fires TP1 (120 => 2.2x)
+  // TP1 fires at the CALLER'S MEDIAN TARGET (call mc x their clamped median),
+  // not a fixed multiple: it self-calibrates per caller, and a fixed +120% sat
+  // above where this population actually peaks — the 08-27 winners topped out
+  // at +102% and +71%, so a flat TP1 would have banked neither.
+  callerFollowTp1MinPct: num("CALLER_FOLLOW_TP1_MIN_PCT", 25), // floor under the median target, vs OUR entry
   callerFollowTp1Fraction: num("CALLER_FOLLOW_TP1_FRACTION", 0.6), // share of the FULL bag sold at TP1
   callerFollowTp2Pct: num("CALLER_FOLLOW_TP2_PCT", 400), // +% on entry mc that fires TP2 (400 => 5x)
   callerFollowTp2Fraction: num("CALLER_FOLLOW_TP2_FRACTION", 0.9), // share of WHAT REMAINS sold at TP2
