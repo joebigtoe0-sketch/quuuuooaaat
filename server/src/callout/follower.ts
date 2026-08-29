@@ -256,6 +256,19 @@ export async function attemptFollowBuy(
     st.count++;
     save();
     log.info("follower", `FOLLOWED ${who} into $${symbol} (${sol} SOL @ quality ${quality}, ${room.toFixed(1)}x room)${res.dry ? " [dry]" : ""}`);
+    // A RECEIPT IN HIS OWN MEMORY. Caller-follow is the only strategy actually
+    // trading, and it used to journal NOTHING — so his digest still described
+    // the retired dev-pedigree era ("six of them cut at my line") and he read
+    // that on stream as a losing streak while the book was green. His own
+    // standing lesson is "a diary entry is not a receipt"; this is the receipt.
+    void import("../agent/memory.js").then((m) =>
+      m.memory.journal(
+        "trade",
+        `${res.dry ? "[dry] " : ""}BOUGHT $${symbol} for ${sol} SOL following ${who} ` +
+          `(median ${med.toFixed(1)}x over ${rep.calls} graded calls, ${rep.h2}% hit 2x). ` +
+          `Entry $${Math.round(mcNowUsd).toLocaleString("en-US")} mc, their median target $${Math.round(targetUsd).toLocaleString("en-US")} — ${room.toFixed(1)}x room.`,
+      ),
+    ).catch(() => {});
     // public callout 2s after the fill (the reward window is NOW) — and one
     // more try at ~25s if the first didn't land (earlyCallout is idempotent:
     // it skips itself when the call already posted).
@@ -386,12 +399,37 @@ async function watchTick(): Promise<void> {
         );
         // honest pnl read for the partial: compare against the SOLD share's cost
         hooks?.narrateExit(mint, pos.symbol, reason, r.solReceived ?? 0, pos.costSol * costShare);
+        const slice = pos.costSol * costShare;
+        const slicePct = slice > 0 ? (((r.solReceived ?? 0) - slice) / slice) * 100 : 0;
+        void import("../agent/memory.js").then((m) =>
+          m.memory.journal(
+            "trade",
+            `TOOK PROFIT on $${pos.symbol}: sold ${Math.round(fraction * 100)}% at ${usd(mcUsd)} mc for ` +
+              `${(r.solReceived ?? 0).toFixed(3)} SOL (${slicePct >= 0 ? "+" : ""}${slicePct.toFixed(0)}% on that slice). ` +
+              `Position still open, ${nextPhase === "moon" ? "moonbag" : "runner"} riding a stop at ` +
+              `${usd((f.mcAtPartial ?? mcUsd) * (1 - cfg.callerFollowRunnerStopPct / 100))} mc.`,
+          ),
+        ).catch(() => {});
       } else {
         log.info("follower", `EXITED $${pos.symbol}: ${reason}${r.dry ? " [dry]" : ""}`);
         // round trip: 75% TP + runner stop is one trade. Scoring only the
         // last slice against 25% of cost calls a winner a loser.
         const totalGot = pos.soldSol ?? r.solReceived ?? 0;
         hooks?.narrateExit(mint, pos.symbol, reason, totalGot, pos.costSol);
+        // LEAD WITH THE ROUND TRIP. On a scale-out ladder the LAST event of a
+        // WINNING trade is a stop-out ("gave back 20% from where I took
+        // profit"), so a tape of exit reasons reads as a losing streak even
+        // when every one of them paid. State win/loss first, from cost to
+        // total proceeds, so neither he nor anyone reading the log can mistake
+        // a banked winner for a stop.
+        const tripPct = pos.costSol > 0 ? ((totalGot - pos.costSol) / pos.costSol) * 100 : 0;
+        void import("../agent/memory.js").then((m) =>
+          m.memory.journal(
+            "trade",
+            `CLOSED $${pos.symbol} — ${tripPct >= 0 ? "WIN" : "LOSS"} ${tripPct >= 0 ? "+" : ""}${tripPct.toFixed(0)}% ` +
+              `round trip: ${totalGot.toFixed(3)} SOL out on ${pos.costSol.toFixed(3)} in. Final leg: ${reason}`,
+          ),
+        ).catch(() => {});
         delete st.pos[mint];
         save();
       }
