@@ -994,7 +994,7 @@ export class Beats {
       "excited",
     );
     const res = await Promise.race([doBuyback(sol), realSleep(120000).then(() => null)]).catch(() => null);
-    if (res && (res as any).ok !== false) this.dir.noteAction("BUYBACK", "QUANT");
+    if (res && (res as any).ok !== false) this.dir.noteAction("BUYBACK", cfg.ownSymbol);
     if (res) {
       await this.dir.refreshTreasury();
       this.hub.cue({ t: "fx", kind: "confetti" });
@@ -1158,7 +1158,7 @@ export class Beats {
       this.hub.cue({ t: "fx", kind: "confetti" });
       memory.journal("airdrop", `${cfg.airdropDryRun && !cfg.simMode ? "[dry] " : ""}airdropped ${amount.toLocaleString()} $RIKU to holders — ${why.slice(0, 120)}`);
     }
-    this.dir.noteAction("AIRDROP", "RIKU");
+    this.dir.noteAction("AIRDROP", cfg.ownSymbol);
     this.hub.cue({ t: "camera", preset: "wide" });
     this.loco.stateName = "IDLE";
   }
@@ -1204,7 +1204,7 @@ export class Beats {
       memory.journal("burn", `${cfg.airdropDryRun && !cfg.simMode ? "[dry] " : ""}burned ${amount.toLocaleString()} $RIKU — ${why.slice(0, 120)}`);
     }
     this.hub.cue({ t: "fx", kind: "stamp_rekt" });
-    this.dir.noteAction("BURN", "RIKU");
+    this.dir.noteAction("BURN", cfg.ownSymbol);
     this.hub.cue({ t: "camera", preset: "wide" });
     this.loco.stateName = "IDLE";
   }

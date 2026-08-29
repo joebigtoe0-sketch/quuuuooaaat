@@ -66,6 +66,10 @@ export const cfg = {
     return path.isAbsolute(v) ? v : path.resolve(root, "..", v);
   })(),
   ownMint: str("QUANT_OWN_MINT") || String(liveMeta.ownMint ?? ""),
+  // The on-screen ticker for his OWN token. One place, because the 2026-08-18
+  // Quant->Riku rename left a hardcoded "QUANT" on the desk's buyback row that
+  // survived until someone read it on stream.
+  ownSymbol: str("QUANT_OWN_SYMBOL", "RIKU"),
 
   heliusKey: str("HELIUS_API_KEY"),
   rpcUrl:

@@ -51,7 +51,7 @@ const MOCK_USERS = ["degenDave", "wagmi_wendy", "0xShrimp", "bondwatcher", "gmgn
 const MOCK_LINES = [
   "wen bond",
   "what's the bar at today",
-  "QUANT you sleeping on $WIF",
+  "RIKU you sleeping on $WIF",
   "do a backflip",
   "chat is this guy even real",
   "rate my bag: 14 rugs and a dream",
