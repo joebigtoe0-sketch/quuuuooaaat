@@ -12,12 +12,16 @@
  * Exports are unchanged (getAccessToken / ccGet / whoAmI / postCallout /
  * ccQuietOk) so post.ts and index.ts need no edits — only the transport moved.
  *
- *   post:  POST /callout/create   { coinMint, chainId: 1, thesis }   -> 201
+ *   post:  POST /callout/create   { coinMint, thesis, version: 2 }   -> 201
  *   like:  POST /callout/{id}/like
  *   read:  GET  /home-feed?pageSize=&chain=all   (coins[].positions[] callouts)
+ *
+ * NOTE: `version: 2` is REQUIRED. Without it the server uses the old wallet-
+ * resolution path and 403s NO_ELIGIBLE_WALLET even though the account holds the
+ * coin; with it, it resolves the holding wallet (only the $1 gate remains). Works
+ * with the existing PUMP_COOKIE — no userId in the token needed.
  */
 const FE = process.env.PUMP_API_BASE || "https://frontend-api-v3.pump.fun";
-const CHAIN_ID = Number(process.env.PUMP_CHAIN_ID || 1); // pump's Codex network id for Solana
 const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
   "(KHTML, like Gecko) Chrome/126.0 Safari/537.36";
@@ -98,8 +102,8 @@ export async function postCallout(mint: string, content: string, _walletAddress?
     try {
       return await request("POST", "/callout/create", {
         coinMint: mint,
-        chainId: CHAIN_ID,
         thesis: content,
+        version: 2,
       });
     } catch (e: any) {
       const msg = String(e?.message ?? e);
