@@ -41,6 +41,9 @@ export interface Analysis {
    *  callouts — buying uses this number instead). */
   buyScore: number;
   buyReject: string | null;
+  /** the raw market shape (1h/24h change, volumes) — callers gate on the SHAPE
+   *  of a move, which no score or rug check looks at */
+  dexStats: DexStats | null;
 }
 
 const withTimeout = <T>(p: Promise<T>, ms: number): Promise<T | null> =>
@@ -153,6 +156,9 @@ export async function analyze(mint: string, sentAmountRaw: bigint | null): Promi
     hardReject: scored.hardReject,
     buyScore: buyScored.score,
     buyReject: buyScored.hardReject,
+    // exposed so callers can gate on the SHAPE of the move, not just the score
+    // — already fetched above, so this costs nothing extra
+    dexStats: dexStats ?? null,
     callerTape: (await import("../callout/callers.js").then((m) => m.callerTape(mint)).catch(() => []))
       .map((t) => ({ who: t.who, text: t.text, mult: t.mult })),
   };

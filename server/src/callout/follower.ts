@@ -168,6 +168,27 @@ export async function attemptFollowBuy(
         log.info("follower", `pass ${c.mint.slice(0, 8)}… — buy score ${a.buyScore} too weak to follow anyone into`);
         return false;
       }
+      // THE VERTICAL GATE — the move has to still be ahead of us. A caller
+      // stamping a candle that already went makes us the exit, not the entry:
+      // $retard (08-29) was dead 14h at ~$3k, pumped 7.5x to $22,395 in ten
+      // minutes, and the call landed near the top — we bought the back half at
+      // $11,029 and the peak had printed BEFORE the fill. This reads the shape
+      // of the move, which no score, room check or rug check looks at.
+      // Nulls fail OPEN: a fresh coin dexscreener has not indexed yet is not
+      // evidence of a pump.
+      const chg1h = a.dexStats?.chg1hPct ?? null;
+      const chg24 = a.dexStats?.chg24Pct ?? null;
+      if (chg1h !== null && chg1h > cfg.callerFollowMax1hPct) {
+        log.info("follower", `pass ${c.mint.slice(0, 8)}… — VERTICAL: +${Math.round(chg1h)}% in the last hour, the move already went (bar +${cfg.callerFollowMax1hPct}%)`);
+        return false;
+      }
+      if (
+        chg1h !== null && chg24 !== null &&
+        chg1h > cfg.callerFollowRevival1hPct && chg24 < cfg.callerFollowRevival24hPct
+      ) {
+        log.info("follower", `pass ${c.mint.slice(0, 8)}… — REVIVAL PUMP: +${Math.round(chg1h)}% this hour but ${Math.round(chg24)}% on the day — a dead chart being walked back up`);
+        return false;
+      }
     } catch (e) {
       log.warn("follower", `analysis failed for ${c.mint.slice(0, 8)}… — no blind buys: ${String(e).slice(0, 60)}`);
       return false;
@@ -408,6 +429,7 @@ export function startCallerFollow(h: StageHooks): void {
     "follower",
     `caller-follow LIVE — ${cfg.callerFollowPct}% of spendable (floor ${cfg.callerFollowSol} SOL), need ${cfg.callerFollowRoom}x room to caller's median; ` +
       `anti-swarm: max ${cfg.callerFollowMaxSwarm} callers/${cfg.callerFollowSwarmWindowMin}min, entry ≤${cfg.callerFollowMaxFromFirstCall}x first call; ` +
+      `vertical gate: skip >+${cfg.callerFollowMax1hPct}%/1h, and >+${cfg.callerFollowRevival1hPct}%/1h while <${cfg.callerFollowRevival24hPct}%/24h; ` +
       `exits: TP1 sells ${Math.round(cfg.callerFollowTp1Fraction * 100)}% at the CALLER'S MEDIAN TARGET (min +${cfg.callerFollowTp1MinPct}% on entry), ` +
       `TP2 sells ${Math.round(cfg.callerFollowTp2Fraction * 100)}% of the rest at +${cfg.callerFollowTp2Pct}%, ` +
       `moonbag (${Math.round((1 - cfg.callerFollowTp1Fraction) * (1 - cfg.callerFollowTp2Fraction) * 100)}%) rides with no target; ` +

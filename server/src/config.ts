@@ -162,7 +162,15 @@ export const cfg = {
   callerFollowMaxFromFirstCall: num("CALLER_FOLLOW_MAX_FROM_FIRST_CALL", 1.4), // mcNow vs EARLIEST call's mc — later = the move already happened
   callerFollowMedCap: num("CALLER_FOLLOW_MED_CAP", 3), // clamp the median used in room/target math — an 8x med over 5 calls is a pump farmer, not a target
   callerFollowMinCallMc: num("CALLER_FOLLOW_MIN_CALL_MC", 10_000), // calls on sub-$10k coins are launch snipes wearing a caller costume
-  callerFollowMinH2: num("CALLER_FOLLOW_MIN_H2", 27), // caller must land 2x on >this % of graded calls — the 08-25 autopsy: losers followed 11-25% callers, winners 33-38%
+  callerFollowMinH2: num("CALLER_FOLLOW_MIN_H2", 27),
+  // THE VERTICAL GATE — do not buy a candle that already went. $retard (08-29)
+  // sat dead for 14h at ~$3k, got pumped 7.5x to $22,395 in ten minutes, a
+  // caller stamped it near the top, and we bought the back half at $11,029.
+  callerFollowMax1hPct: num("CALLER_FOLLOW_MAX_1H_PCT", 100), // it just doubled in an hour = we are the exit
+  // REVIVAL: a hard spike that is still deep underwater on the day is a dead
+  // chart being walked back up, not a coin finding demand.
+  callerFollowRevival1hPct: num("CALLER_FOLLOW_REVIVAL_1H_PCT", 50),
+  callerFollowRevival24hPct: num("CALLER_FOLLOW_REVIVAL_24H_PCT", -50), // caller must land 2x on >this % of graded calls — the 08-25 autopsy: losers followed 11-25% callers, winners 33-38%
 
   // ---- midcap: the investment book — omo-inspired mid-cap buys, NO auto-exits ----
   // ---- podcast (RIKUPOD) ----
