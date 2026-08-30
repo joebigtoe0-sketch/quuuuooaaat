@@ -35,12 +35,29 @@ async function v2(pathq: string): Promise<any | null> {
   }
 }
 const idCache = new Map<string, string>();
+// A FAILED lookup used to cache nothing, so a dead quota was re-asked forever:
+// seven identical /users/by/username/QuantRiku calls in 23 minutes, all 402,
+// for a handle that never changes. Back off on failure instead of hammering —
+// a 402 does not become a 200 by asking again sooner, and lookups are quota too.
+const idMiss = new Map<string, { at: number; tries: number }>();
+const ID_MISS_BASE_MS = 10 * 60_000;
 async function userId(handle: string): Promise<string | null> {
   const h = handle.replace(/^@/, "");
   if (idCache.has(h)) return idCache.get(h)!;
+  const miss = idMiss.get(h);
+  if (miss) {
+    // 10min, 20min, 40min … capped at 4h
+    const wait = Math.min(ID_MISS_BASE_MS * 2 ** (miss.tries - 1), 4 * 3600_000);
+    if (Date.now() - miss.at < wait) return null;
+  }
   const j = await v2(`/users/by/username/${h}`);
   const id = j?.data?.id ? String(j.data.id) : null;
-  if (id) idCache.set(h, id);
+  if (id) {
+    idCache.set(h, id);
+    idMiss.delete(h);
+  } else {
+    idMiss.set(h, { at: Date.now(), tries: Math.min((miss?.tries ?? 0) + 1, 6) });
+  }
   return id;
 }
 function v2Texts(j: any): { author: string; text: string; id: string }[] {
