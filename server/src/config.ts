@@ -136,7 +136,13 @@ export const cfg = {
   callerDiscovery: bool("CALLER_DISCOVERY", true),
   callerDiscoveryS: num("CALLER_DISCOVERY_S", 480),
   callerDiscoveryAvg: num("CALLER_DISCOVERY_AVG", 1.5),
-  callerDiscoveryMinCalls: num("CALLER_DISCOVERY_MIN_CALLS", 3),
+  // 8, not 3. A caller with three or four graded calls has no record — "50%
+  // hit 2x" over four calls is two successes, indistinguishable from a coin
+  // flip or from someone grading their own pumps. $retard (08-29) was followed
+  // into a revival pump on a FOUR-call caller and cost 1.099 SOL. Production
+  // already ran 8 via Railway; this makes the safe value survive that variable
+  // being cleared, instead of silently falling back to 3 with no log line.
+  callerDiscoveryMinCalls: num("CALLER_DISCOVERY_MIN_CALLS", 8),
   callerDiscoveryMaxPerDay: num("CALLER_DISCOVERY_MAX_PER_DAY", 8),
   // caller-follow: BUY when a graded caller with skin calls fresh and there's
   // still room to their median; EXIT when their wallet sells (on-chain watch)
