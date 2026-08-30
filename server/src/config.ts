@@ -242,6 +242,13 @@ export const cfg = {
   // answering people who @ him is the highest-value engagement there is —
   // never leave it to the planner alone. Floor, not a ceiling.
   replyXMin: num("REPLY_X_MIN", 20),
+  // X's read quota is metered in POSTS RETRIEVED, not requests. The mention
+  // sweep asked for 25 every 20 min = 1,800 posts/day for an account that
+  // never sees anywhere near that many mentions. 6 is the real ceiling.
+  xMentionsMax: num("X_MENTIONS_MAX", 6),
+  // reads that twexapi can serve go there instead of the official API — its
+  // key is billed separately and does not touch the X developer quota
+  xPreferTwexReads: bool("X_PREFER_TWEX_READS", true),
   // answering people who @ him: a hard-coded 10/day silently muted him for the
   // rest of every busy day. Real limit is X's 80-post rail.
   maxXRepliesPerDay: num("MAX_X_REPLIES_PER_DAY", 40),

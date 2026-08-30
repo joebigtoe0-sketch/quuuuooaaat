@@ -340,7 +340,7 @@ export async function readMentions(
     const me = await userId(HANDLE);
     if (me) {
       const start = new Date(Date.now() - sinceMinutes * 60_000).toISOString();
-      const j = await v2(`/users/${me}/mentions?max_results=25&start_time=${start}&${THREAD_FIELDS}`);
+      const j = await v2(`/users/${me}/mentions?max_results=${Math.max(5, cfg.xMentionsMax)}&start_time=${start}&${THREAD_FIELDS}`);
       if (j) return parseMentionRows(j).slice(0, 12);
     }
   }
@@ -488,8 +488,19 @@ export interface RichTweet {
 }
 
 /** Search with full author stats + tweet ids — what outreach needs and
- *  searchTweets throws away. twitterapi.io first (richest), v2 fallback. */
+ *  searchTweets throws away. twitterapi.io first (richest), then twexapi
+ *  (off-quota), and the official v2 search only as the last resort. */
 export async function searchTweetsRich(query: string, maxResults = 20): Promise<RichTweet[]> {
+  if (cfg.xPreferTwexReads) {
+    try {
+      const { twexReadReady, twexSearch } = await import("./twex.js");
+      // twexapi yields roughly a fifth of maxItems, so ask high
+      if (twexReadReady()) {
+        const rows = await twexSearch(query, Math.max(30, maxResults * 3));
+        if (rows.length) return rows.slice(0, maxResults);
+      }
+    } catch { /* fall through */ }
+  }
   if (READ_KEY) {
     try {
       const res = await fetch(
@@ -670,6 +681,23 @@ export async function followUser(handle: string): Promise<boolean> {
 }
 
 export async function readUserTweets(handle: string, sinceMinutes = 240): Promise<string[]> {
+  // THE BIGGEST READ ON THE BOOK: 6 handles x 10 posts every 35 min was ~2,469
+  // posts/day of X quota, plus a userId lookup each. twexapi serves the same
+  // timeline off its own billing and returns MORE rows than asked.
+  if (cfg.xPreferTwexReads) {
+    try {
+      const { twexReadReady, twexTimeline } = await import("./twex.js");
+      if (twexReadReady()) {
+        const cutoff = Date.now() - sinceMinutes * 60_000;
+        const rows = (await twexTimeline(handle, 10))
+          .filter((t) => t.at === null || t.at >= cutoff)
+          .map((t) => t.text)
+          .filter((t) => t.length > 5)
+          .slice(0, 8);
+        if (rows.length) return rows;
+      }
+    } catch { /* fall through to the official API */ }
+  }
   if (BEARER) {
     const id = await userId(handle);
     if (id) {
