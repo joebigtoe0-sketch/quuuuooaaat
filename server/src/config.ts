@@ -129,12 +129,12 @@ export const cfg = {
   // ---------- caller intel (pump.fun callout reputation) ----------
   // background harvester: one coin's callout list per interval, ALWAYS yielding
   // to the posting path — reads must never starve the thing that earns.
-  callerHarvestS: num("CALLER_HARVEST_S", 90),
+  callerHarvestS: num("CALLER_HARVEST_S", 360),
   callerRefreshH: num("CALLER_REFRESH_H", 6),
   // callout discovery: the public firehose nominates coins called by callers
   // whose accumulated record clears the bar (research only — never a buy)
   callerDiscovery: bool("CALLER_DISCOVERY", true),
-  callerDiscoveryS: num("CALLER_DISCOVERY_S", 120),
+  callerDiscoveryS: num("CALLER_DISCOVERY_S", 480),
   callerDiscoveryAvg: num("CALLER_DISCOVERY_AVG", 1.5),
   callerDiscoveryMinCalls: num("CALLER_DISCOVERY_MIN_CALLS", 3),
   callerDiscoveryMaxPerDay: num("CALLER_DISCOVERY_MAX_PER_DAY", 8),
@@ -196,7 +196,7 @@ export const cfg = {
   quietResearchMult: num("QUIET_RESEARCH_MULT", 3), // research interval x this when quiet
 
   midcap: bool("MIDCAP", true),
-  midcapTickMin: num("MIDCAP_TICK_MIN", 30),
+  midcapTickMin: num("MIDCAP_TICK_MIN", 120),
   midcapSol: num("MIDCAP_SOL", 0.05), // FLOOR per buy
   midcapPct: num("MIDCAP_PCT", 5), // % of spendable at conviction 5/5
   midcapMaxPerDay: num("MIDCAP_MAX_PER_DAY", 2),
@@ -208,7 +208,7 @@ export const cfg = {
 
   // ---- outreach: find small crypto accounts, draft replies, producer approves ----
   outreach: bool("OUTREACH", true), // discovery only — sends ALWAYS need approval
-  outreachTickMin: num("OUTREACH_TICK_MIN", 30),
+  outreachTickMin: num("OUTREACH_TICK_MIN", 120),
   outreachMinFollowers: num("OUTREACH_MIN_FOLLOWERS", 200),
   outreachMaxFollowers: num("OUTREACH_MAX_FOLLOWERS", 5000),
   outreachMaxSendsPerHour: num("OUTREACH_MAX_SENDS_PER_HOUR", 2),
@@ -252,7 +252,7 @@ export const cfg = {
   // answering people who @ him: a hard-coded 10/day silently muted him for the
   // rest of every busy day. Real limit is X's 80-post rail.
   maxXRepliesPerDay: num("MAX_X_REPLIES_PER_DAY", 40),
-  inboxPollS: num("INBOX_POLL_S", 15),
+  inboxPollS: num("INBOX_POLL_S", 60),
 
   floatSol: num("FLOAT_SOL", 0.05),
   minBuybackSol: num("MIN_BUYBACK_SOL", 0.02),
