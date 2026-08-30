@@ -176,17 +176,20 @@ export async function attemptFollowBuy(
       // of the move, which no score, room check or rug check looks at.
       // Nulls fail OPEN: a fresh coin dexscreener has not indexed yet is not
       // evidence of a pump.
-      const chg1h = a.dexStats?.chg1hPct ?? null;
-      const chg24 = a.dexStats?.chg24Pct ?? null;
+      // candles first, dexscreener only as backup — see recentMove()
+      const move = await recentMove(c.mint);
+      const chg1h = move.chg1h ?? a.dexStats?.chg1hPct ?? null;
+      const chg24 = move.chg24h ?? a.dexStats?.chg24Pct ?? null;
+      const src = move.chg1h !== null ? "candles" : "dexscreener";
       if (chg1h !== null && chg1h > cfg.callerFollowMax1hPct) {
-        log.info("follower", `pass ${c.mint.slice(0, 8)}… — VERTICAL: +${Math.round(chg1h)}% in the last hour, the move already went (bar +${cfg.callerFollowMax1hPct}%)`);
+        log.info("follower", `pass ${c.mint.slice(0, 8)}… — VERTICAL: +${Math.round(chg1h)}% in the last hour per ${src}, the move already went (bar +${cfg.callerFollowMax1hPct}%)`);
         return false;
       }
       if (
         chg1h !== null && chg24 !== null &&
         chg1h > cfg.callerFollowRevival1hPct && chg24 < cfg.callerFollowRevival24hPct
       ) {
-        log.info("follower", `pass ${c.mint.slice(0, 8)}… — REVIVAL PUMP: +${Math.round(chg1h)}% this hour but ${Math.round(chg24)}% on the day — a dead chart being walked back up`);
+        log.info("follower", `pass ${c.mint.slice(0, 8)}… — REVIVAL PUMP: +${Math.round(chg1h)}% this hour but ${Math.round(chg24)}% on the day per ${src} — a dead chart being walked back up`);
         return false;
       }
     } catch (e) {
@@ -288,6 +291,46 @@ export async function attemptFollowBuy(
   } catch (e) {
     log.warn("follower", `attempt failed: ${String(e).slice(0, 100)}`);
     return false;
+  }
+}
+
+/**
+ * The REAL recent move, straight off pump.fun's own candles.
+ *
+ * The vertical gate first read dexscreener's priceChange.h1, and $PILL walked
+ * straight through it: the coin sat dead near $6.8k for hours, went 4.5x to
+ * $28,872 inside one 5-minute candle at 01:05, and we bought the dump at
+ * $17,443 at 01:12. The candles said +134% on the hour at that exact moment —
+ * dexscreener's aggregate did not, seven minutes after the fact. It agrees on
+ * a quiet chart and lags precisely when the answer matters.
+ *
+ * Ratios only, so the token supply cancels and no price conversion is needed.
+ * Candles exist only for minutes WITH trades, so 24 of them reach back hours on
+ * exactly the dead-then-pumped coins this is meant to catch.
+ */
+async function recentMove(mint: string): Promise<{ chg1h: number | null; chg24h: number | null }> {
+  try {
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), 2_500);
+    const res = await fetch(
+      `https://swap-api.pump.fun/v1/coins/${mint}/candles?interval=5m&limit=24&currency=USD`,
+      { signal: ctl.signal, headers: { "user-agent": "riku/1.0" } },
+    );
+    clearTimeout(timer);
+    if (!res.ok) return { chg1h: null, chg24h: null };
+    const rows = (await res.json()) as { timestamp: number; close: string }[];
+    if (!Array.isArray(rows) || rows.length < 2) return { chg1h: null, chg24h: null };
+    const closeAt = (t: number): number | null => {
+      let out: number | null = null;
+      for (const r of rows) if (r.timestamp <= t) out = Number(r.close);
+      return out && Number.isFinite(out) && out > 0 ? out : null;
+    };
+    const now = closeAt(Date.now());
+    if (!now) return { chg1h: null, chg24h: null };
+    const pct = (then: number | null) => (then ? ((now - then) / then) * 100 : null);
+    return { chg1h: pct(closeAt(Date.now() - 3_600_000)), chg24h: pct(closeAt(Date.now() - 86_400_000)) };
+  } catch {
+    return { chg1h: null, chg24h: null };
   }
 }
 
