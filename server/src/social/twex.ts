@@ -68,6 +68,10 @@ export interface TwexTweet {
   authorCreatedAt: number | null;
   text: string;
   at: number | null;
+  /** the post this one replies to — twexapi gives in_reply_to, not a
+   *  conversation root, which is all the mention path actually needs */
+  replyToId?: string;
+  replyToHandle?: string;
 }
 
 function toTweet(t: any): TwexTweet | null {
@@ -85,6 +89,8 @@ function toTweet(t: any): TwexTweet | null {
     authorCreatedAt: Number.isFinite(ats) ? ats : null,
     text,
     at: Number.isFinite(ts) ? ts : null,
+    replyToId: t?.in_reply_to ? String(t.in_reply_to) : undefined,
+    replyToHandle: t?.in_reply_to_screen_name ? String(t.in_reply_to_screen_name) : undefined,
   };
 }
 
@@ -175,5 +181,61 @@ export async function twexReply(replyToId: string, text: string): Promise<{ ok: 
     return { ok: true, id };
   } catch (e) {
     return { ok: false, why: String(e).slice(0, 120) };
+  }
+}
+
+/** Mentions, as a search for "@handle". twexapi exposes no mentions timeline,
+ *  but the search index carries them with in_reply_to intact — and the official
+ *  mentions endpoint is the single most expensive read on the book. Search
+ *  coverage is not identical to the mentions timeline; it is however infinitely
+ *  better than the 402 the official endpoint currently returns. */
+export async function twexMentions(handle: string, sinceMinutes = 720): Promise<TwexTweet[]> {
+  const h = handle.replace(/^@/, "").trim();
+  if (!h) return [];
+  const cutoff = Date.now() - sinceMinutes * 60_000;
+  const rows = await twexSearch(`@${h}`, 40);
+  return rows
+    .filter((t) => t.author.toLowerCase() !== h.toLowerCase())
+    .filter((t) => t.at === null || t.at >= cutoff);
+}
+
+/** The KOL feed's query shape — (from:a OR from:b …) — batched the same way the
+ *  official search does it. Verified: twexapi honours from: operators. */
+export async function twexFromHandles(
+  handles: string[],
+  sinceMinutes = 180,
+  perBatch = 10,
+): Promise<TwexTweet[]> {
+  const cutoff = Date.now() - sinceMinutes * 60_000;
+  const out: TwexTweet[] = [];
+  for (let i = 0; i < handles.length; i += 25) {
+    const batch = handles.slice(i, i + 25).map((h) => h.replace(/^@/, "").trim()).filter(Boolean);
+    if (!batch.length) continue;
+    const q = `(${batch.map((h) => `from:${h}`).join(" OR ")}) -filter:replies`;
+    if (q.length > 505) continue;
+    out.push(...(await twexSearch(q, Math.max(30, perBatch * 3))).filter((t) => t.at === null || t.at >= cutoff));
+  }
+  return out;
+}
+
+/** Profile lookup — replaces the v2 /users/by/username call that was 402-looping
+ *  on riku's OWN handle. GET, not POST. */
+export async function twexUserId(handle: string): Promise<string | null> {
+  const h = handle.replace(/^@/, "").trim();
+  if (!h || !KEY) return null;
+  try {
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), 8_000);
+    const res = await fetch(`${BASE}/twitter/${encodeURIComponent(h)}/about`, {
+      signal: ctl.signal,
+      headers: { Authorization: `Bearer ${KEY}`, Accept: "application/json" },
+    });
+    clearTimeout(timer);
+    if (!res.ok) return null;
+    const j = (await res.json()) as any;
+    const id = j?.data?.user_id ?? j?.data?.id ?? j?.user_id;
+    return id ? String(id) : null;
+  } catch {
+    return null;
   }
 }

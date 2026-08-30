@@ -50,8 +50,17 @@ async function userId(handle: string): Promise<string | null> {
     const wait = Math.min(ID_MISS_BASE_MS * 2 ** (miss.tries - 1), 4 * 3600_000);
     if (Date.now() - miss.at < wait) return null;
   }
-  const j = await v2(`/users/by/username/${h}`);
-  const id = j?.data?.id ? String(j.data.id) : null;
+  let id: string | null = null;
+  if (cfg.xPreferTwexReads) {
+    try {
+      const { twexReadReady, twexUserId } = await import("./twex.js");
+      if (twexReadReady()) id = await twexUserId(h);
+    } catch { /* fall through to the official lookup */ }
+  }
+  if (!id) {
+    const j = await v2(`/users/by/username/${h}`);
+    id = j?.data?.id ? String(j.data.id) : null;
+  }
   if (id) {
     idCache.set(h, id);
     idMiss.delete(h);
@@ -353,6 +362,29 @@ export async function readMentions(
   sinceMinutes = 720,
 ): Promise<Mention[]> {
   if (!HANDLE) return [];
+  // The official mentions timeline was ~1,800 posts/day of read quota and is
+  // currently 402ing anyway. twexapi has no mentions route, but its search
+  // index carries "@handle" with in_reply_to intact, which is everything the
+  // reply path uses (conversationId is written but never read anywhere).
+  if (cfg.xPreferTwexReads) {
+    try {
+      const { twexReadReady, twexMentions } = await import("./twex.js");
+      if (twexReadReady()) {
+        const rows = await twexMentions(HANDLE, sinceMinutes);
+        if (rows.length) {
+          return rows
+            .map((t): Mention => ({
+              id: t.id,
+              author: t.author || "?",
+              text: t.text,
+              parent: t.replyToId ? { id: t.replyToId, author: t.replyToHandle ?? "?", text: "" } : undefined,
+            }))
+            .filter((m) => m.id && m.text)
+            .slice(0, 12);
+        }
+      }
+    } catch { /* fall through to the official API */ }
+  }
   if (BEARER) {
     const me = await userId(HANDLE);
     if (me) {
@@ -651,7 +683,17 @@ export async function searchFromHandles(
   sinceMinutes = 180,
   perBatch = 10,
 ): Promise<{ id: string; author: string; text: string }[]> {
-  if (!BEARER || !handles.length) return [];
+  if (!handles.length) return [];
+  if (cfg.xPreferTwexReads) {
+    try {
+      const { twexReadReady, twexFromHandles } = await import("./twex.js");
+      if (twexReadReady()) {
+        const rows = await twexFromHandles(handles, sinceMinutes, perBatch);
+        if (rows.length) return rows.map((t) => ({ id: t.id, author: t.author || "?", text: t.text }));
+      }
+    } catch { /* fall through */ }
+  }
+  if (!BEARER) return [];
   const out: { id: string; author: string; text: string }[] = [];
   const start = new Date(Date.now() - sinceMinutes * 60_000).toISOString();
   for (let i = 0; i < handles.length; i += 25) {
