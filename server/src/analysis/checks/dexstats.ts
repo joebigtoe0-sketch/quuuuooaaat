@@ -18,6 +18,16 @@ export interface DexStats {
   buys24: number | null;
   sells24: number | null;
   fdvUsd: number | null;
+  // --- card fields: the token card renders these, nothing scores on them ---
+  priceUsd: number | null;
+  buys1h: number | null;
+  sells1h: number | null;
+  pairAddress: string | null;
+  /** dexscreener's paid banner — Phanes-style cards head with this */
+  headerUrl: string | null;
+  iconUrl: string | null;
+  websites: { url: string; label?: string }[];
+  socials: { url: string; type?: string }[];
 }
 
 export async function fetchDexStats(mint: string): Promise<DexStats | null> {
@@ -49,6 +59,14 @@ export async function fetchDexStats(mint: string): Promise<DexStats | null> {
       buys24: num(p?.txns?.h24?.buys),
       sells24: num(p?.txns?.h24?.sells),
       fdvUsd: num(p?.fdv) ?? num(p?.marketCap),
+      priceUsd: num(p?.priceUsd),
+      buys1h: num(p?.txns?.h1?.buys),
+      sells1h: num(p?.txns?.h1?.sells),
+      pairAddress: p?.pairAddress ? String(p.pairAddress) : null,
+      headerUrl: p?.info?.header ? String(p.info.header) : null,
+      iconUrl: p?.info?.imageUrl ? String(p.info.imageUrl) : null,
+      websites: Array.isArray(p?.info?.websites) ? p.info.websites : [],
+      socials: Array.isArray(p?.info?.socials) ? p.info.socials : [],
     };
   } catch {
     return null;

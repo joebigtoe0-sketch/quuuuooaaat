@@ -2,9 +2,10 @@ import { Bot } from "grammy";
 import { cfg } from "../config.js";
 import { log } from "../log.js";
 import {
-  recordCall, leaderboard, callsForMint, callerHistory, gradeOpenCalls, stats,
+  recordCall, leaderboard, callsForMint, callerHistory, gradeOpenCalls, stats, athFromTape,
   type BoardRow,
 } from "./calls.js";
+import { renderCard, money, ago, esc } from "./card.js";
 
 /**
  * RIKUBOT — the caller tracker. A SEPARATE identity from the userbot that talks
@@ -30,20 +31,6 @@ const DENY = new Set([
   "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
   "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA",
 ]);
-
-const usd = (n: number | null | undefined): string => {
-  if (n == null || !Number.isFinite(n)) return "?";
-  if (n >= 1e6) return `$${(n / 1e6).toFixed(1)}m`;
-  if (n >= 1e3) return `$${(n / 1e3).toFixed(1)}k`;
-  return `$${Math.round(n)}`;
-};
-const ago = (at: number): string => {
-  const m = Math.max(0, Math.round((Date.now() - at) / 60_000));
-  if (m < 60) return `${m}m ago`;
-  if (m < 1440) return `${Math.round(m / 60)}h ago`;
-  return `${Math.round(m / 1440)}d ago`;
-};
-const esc = (s: string): string => s.replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c]!));
 
 /** In-flight + recently-carded mints, so a CA pasted five times in a minute
  *  produces one card rather than five. */
@@ -125,7 +112,7 @@ export function startTelegram(): void {
     const row = leaderboard().find((r) => r.callerId === id);
     const recentCalls = mine.slice(0, 8).map((c) => {
       const m = c.exitMult != null ? `${c.exitMult.toFixed(1)}x` : "grading…";
-      return `• $${esc(c.symbol)} — ${m}${c.scored ? "" : " <i>(not first)</i>"} · ${ago(c.at)}`;
+      return `• $${esc(c.symbol)} — ${m}${c.scored ? "" : " <i>(not first)</i>"} · ${ago(c.at)} ago`;
     });
     const head = row
       ? `score <b>${row.score.toFixed(2)}</b> · ${row.calls} graded · med ${row.medianMult.toFixed(1)}x · ${row.hit2x.toFixed(0)}% hit 2x` +
@@ -162,49 +149,47 @@ export function startTelegram(): void {
       try {
         const { analyze } = await import("../analysis/engine.js");
         const a = await Promise.race([
-          analyze(mint, null),
-          new Promise<null>((r) => setTimeout(() => r(null), 15_000)),
+          analyze(mint, null, { forceBubble: cfg.tgBubbleOnCard }),
+          new Promise<null>((r) => setTimeout(() => r(null), 20_000)),
         ]);
-        if (!a || a.state.kind === "none") continue; // not a pump coin — say nothing
-        const mc = a.dexStats?.mcUsd ?? (a.state.kind !== "unsupported" ? a.state.mcSol * a.solUsd : null);
+        if (!a || a.state.kind === "none" || a.state.kind === "unsupported") continue; // not ours — say nothing
+        const mc = a.dexStats?.mcUsd ?? a.state.mcSol * a.solUsd;
         const liq = a.dexStats?.liqUsd ?? null;
 
         // floors: a 3x on a $2k coin with $300 of volume is manufacturable for
         // pocket change, so it is carded but never scored
-        const tooSmall = (mc != null && mc < cfg.tgMinCallMcUsd) || (liq != null && liq < cfg.tgMinLiqUsd);
-
-        const res = tooSmall
+        const belowFloor = (mc != null && mc < cfg.tgMinCallMcUsd) || (liq != null && liq < cfg.tgMinLiqUsd);
+        const res = belowFloor
           ? null
           : await recordCall({ mint, symbol: a.symbol, callerId, callerName, groupId, groupTitle, mcAtCall: mc });
 
-        const { pumpCallerCount } = await import("../callout/callers.js");
-        const pumpCalls = pumpCallerCount(mint);
-        const prior = callsForMint(mint);
+        const [{ pumpCallerCount }, ath] = await Promise.all([
+          import("../callout/callers.js"),
+          athFromTape(mint).catch(() => null),
+        ]);
 
-        const lines: string[] = [];
-        lines.push(`<b>$${esc(a.symbol)}</b> — ${esc(a.name)}`);
-        lines.push(
-          `mc ${usd(mc)} · liq ${usd(liq)}` +
-            (a.ageMin != null ? ` · ${a.ageMin < 120 ? `${Math.round(a.ageMin)}m` : `${(a.ageMin / 60).toFixed(1)}h`} old` : ""),
-        );
-        if (a.holders) lines.push(`holders: top1 ${a.holders.top1Pct.toFixed(0)}% · top10 ${a.holders.top10Pct.toFixed(0)}%`);
-        if (a.dev?.known) lines.push(`dev: ${a.dev.launches} prior launches, ${a.dev.bonds} bonded (${(a.dev.bondRate * 100).toFixed(0)}%)`);
-        else lines.push("dev: first launch I've seen");
-        if (pumpCalls > 0) lines.push(`pump.fun: called by ${pumpCalls} graded caller${pumpCalls === 1 ? "" : "s"}`);
+        const { text, headerUrl } = renderCard(a, {
+          ath,
+          pumpCallers: pumpCallerCount(mint),
+          belowFloor,
+          caller: {
+            name: callerName,
+            mcUsd: mc,
+            first: !!res?.first,
+            priorName: res?.priorCaller?.callerName,
+            priorAt: res?.priorCaller?.at,
+          },
+        });
 
-        lines.push("");
-        if (tooSmall) {
-          lines.push(`⚠️ <b>Below the scoring floor</b> (needs ${usd(cfg.tgMinCallMcUsd)} mc / ${usd(cfg.tgMinLiqUsd)} liq) — carded, not scored.`);
-        } else if (res?.first) {
-          lines.push(`✅ <b>First call</b> — ${esc(callerName)} owns this one globally.`);
-        } else if (res) {
-          lines.push(
-            `↩️ Already called by <b>${esc(res.priorCaller!.callerName)}</b> ${ago(res.priorCaller!.at)} — recorded for this group, no global score.`,
-          );
-        }
-        if (prior.length > 1) lines.push(`<i>${prior.length} calls on this coin so far</i>`);
-
-        await ctx.reply(lines.join("\n"), { parse_mode: "HTML", reply_parameters: { message_id: ctx.message.message_id } });
+        await ctx.reply(text, {
+          parse_mode: "HTML",
+          reply_parameters: { message_id: ctx.message.message_id },
+          // dexscreener's paid banner rendered ABOVE the card, the way the
+          // caller bots people already read do it
+          link_preview_options: headerUrl
+            ? { url: headerUrl, prefer_large_media: true, show_above_text: true }
+            : { is_disabled: true },
+        });
       } catch (e) {
         log.warn("tg", `card failed for ${mint.slice(0, 8)}…: ${String(e).slice(0, 90)}`);
       }

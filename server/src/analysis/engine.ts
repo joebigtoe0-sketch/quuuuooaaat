@@ -44,12 +44,20 @@ export interface Analysis {
   /** the raw market shape (1h/24h change, volumes) — callers gate on the SHAPE
    *  of a move, which no score or rug check looks at */
   dexStats: DexStats | null;
+  /** fresh-wallet + cluster read on the top holders — the card's security block */
+  bubble: BubbleInfo | null;
+  /** dexscreener paid profile */
+  dexPaid: boolean | null;
 }
 
 const withTimeout = <T>(p: Promise<T>, ms: number): Promise<T | null> =>
   Promise.race([p, new Promise<null>((r) => setTimeout(() => r(null), ms))]).catch(() => null);
 
-export async function analyze(mint: string, sentAmountRaw: bigint | null): Promise<Analysis> {
+export async function analyze(
+  mint: string,
+  sentAmountRaw: bigint | null,
+  opts?: { forceBubble?: boolean },
+): Promise<Analysis> {
   const pk = new PublicKey(mint);
   const t0 = Date.now();
 
@@ -82,7 +90,10 @@ export async function analyze(mint: string, sentAmountRaw: bigint | null): Promi
     withTimeout(fetchDexStats(mint), 5000),
   ]);
   let bubble: BubbleInfo | null = null;
-  if (sentUsd !== null && owners && owners.length >= 5 && holdersRaw) {
+  // forceBubble lets the Telegram card opt in: Fresh/Cluster is the single most
+  // useful security row, but it is ~10 RPC calls, and a card fires on every CA
+  // anyone posts. Off by default so it can never quietly become a Helius bill.
+  if ((sentUsd !== null || opts?.forceBubble) && owners && owners.length >= 5 && holdersRaw) {
     bubble = await withTimeout(bubbleScreen(owners, holdersRaw.amounts), 12000);
   }
 
@@ -159,6 +170,8 @@ export async function analyze(mint: string, sentAmountRaw: bigint | null): Promi
     // exposed so callers can gate on the SHAPE of the move, not just the score
     // — already fetched above, so this costs nothing extra
     dexStats: dexStats ?? null,
+    bubble: bubble ?? null,
+    dexPaid: paid ?? null,
     callerTape: (await import("../callout/callers.js").then((m) => m.callerTape(mint)).catch(() => []))
       .map((t) => ({ who: t.who, text: t.text, mult: t.mult })),
   };

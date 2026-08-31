@@ -94,6 +94,10 @@ export const cfg = {
   // change, so it is not a call
   tgMinCallMcUsd: num("TG_MIN_CALL_MC_USD", 8_000),
   tgMinLiqUsd: num("TG_MIN_LIQ_USD", 4_000),
+  // adds the Fresh/Cluster security row to the card — the best rug tell it has,
+  // at ~10 Helius calls per card. A card fires on every CA anyone posts, so this
+  // is OFF until you decide the credits are worth it.
+  tgBubbleOnCard: bool("TG_BUBBLE_ON_CARD", false),
 
   heliusKey: str("HELIUS_API_KEY"),
   rpcUrl:

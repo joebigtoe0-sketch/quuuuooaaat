@@ -101,6 +101,15 @@ async function candles(mint: string, limit = 200): Promise<{ timestamp: number; 
   }
 }
 
+/** All-time-high from the tape, as a market cap. Uses the highest 5m CLOSE for
+ *  the same reason grading does — a wick is not a price anyone got. */
+export async function athFromTape(mint: string, supply = 1e9): Promise<{ mcUsd: number; at: number } | null> {
+  const rows = await candles(mint, 1000);
+  if (!rows.length) return null;
+  const top = rows.reduce((b, r) => (r.close > b.close ? r : b));
+  return { mcUsd: top.close * supply, at: top.timestamp };
+}
+
 export async function priceNow(mint: string): Promise<number | null> {
   const c = await candles(mint, 5);
   return c.length ? c[c.length - 1].close : null;
