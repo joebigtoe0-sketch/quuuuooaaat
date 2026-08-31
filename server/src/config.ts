@@ -90,10 +90,22 @@ export const cfg = {
   tgMinScoredCalls: num("TG_MIN_SCORED_CALLS", 8),
   tgGradeAfterMin: num("TG_GRADE_AFTER_MIN", 60), // a call younger than this has no outcome yet
   tgGradeWindowH: num("TG_GRADE_WINDOW_H", 168), // 7 days, then the grade is final
-  // floors: a 3x on a $2k coin with $300 of volume is manufacturable for pocket
-  // change, so it is not a call
-  tgMinCallMcUsd: num("TG_MIN_CALL_MC_USD", 8_000),
-  tgMinLiqUsd: num("TG_MIN_LIQ_USD", 4_000),
+  // Entry floors, DEFAULT OFF (0). They were 8k/4k and that was wrong: a floor
+  // excludes the call entirely, so a caller who finds a real gem at $5k gets no
+  // credit for a 1000x — while also carrying no downside if it rugs. A free
+  // option on exactly the early calls the board should reward.
+  //
+  // The obvious replacement (only credit a peak that carried real volume) was
+  // tested and FAILED: $retard's manufactured 7.5x pump had $63,083 in its peak
+  // candle against $1,605 for a genuine run. Wash volume is real volume.
+  //
+  // What actually deters manufacturing is the economics already in the scoring:
+  // mean (not sum) so each fake must beat your own average, credit capped at
+  // TG_MAX_CREDIT_MULT, TG_MIN_SCORED_CALLS before a prize, and a 28-day window
+  // — you would have to pay for the impact eight times over to place. Set these
+  // above 0 only if abuse actually shows up in the data.
+  tgMinCallMcUsd: num("TG_MIN_CALL_MC_USD", 0),
+  tgMinLiqUsd: num("TG_MIN_LIQ_USD", 0),
   // adds the Fresh/Cluster security row to the card — the best rug tell it has,
   // at ~10 Helius calls per card. A card fires on every CA anyone posts, so this
   // is OFF until you decide the credits are worth it.

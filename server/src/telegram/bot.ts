@@ -49,7 +49,8 @@ function boardText(rows: BoardRow[], title: string, note: string): string {
   const lines = rows.slice(0, 15).map((r, i) => {
     const medal = ["🥇", "🥈", "🥉"][i] ?? `${i + 1}.`;
     const flag = r.eligible ? "" : " <i>(not prize-eligible)</i>";
-    return `${medal} <b>${esc(r.callerName)}</b> — score ${r.score.toFixed(2)} · ${r.calls} calls · med ${r.medianMult.toFixed(1)}x · ${r.hit2x.toFixed(0)}% hit 2x${flag}`;
+    const per = `${r.score >= 0 ? "+" : ""}${(r.score * 100).toFixed(0)}%`;
+    return `${medal} <b>${esc(r.callerName)}</b> — <b>${per}/call</b> · ${r.calls} calls · med ${r.medianMult.toFixed(1)}x · ${r.hit2x.toFixed(0)}% hit 2x${flag}`;
   });
   return `<b>${title}</b>\n${lines.join("\n")}\n\n<i>${note}</i>`;
 }
@@ -74,9 +75,9 @@ export function startTelegram(): void {
       "<b>How scoring works</b>\n\n" +
         "Every call is scored on the best price that held for a full 5 minutes after you called it — not the wick. " +
         "A spike nobody could have sold into is not a result.\n\n" +
-        "Your score is the <b>average</b> of your calls, in log terms, so:\n" +
-        "• calling more does NOT raise your score\n" +
-        "• a loser subtracts as much as a winner adds\n" +
+        "Your score is what a follower would have <b>earned per call</b> staking the same clip on each, so:\n" +
+        "• calling more does NOT raise your score — it is an average\n" +
+        "• a rug costs you -95%, so spraying is expensive\n" +
         `• one moon can't carry you — credit per call caps at ${cfg.tgMaxCreditMult}x\n` +
         `• thin records get pulled toward the average until you have a real sample\n\n` +
         `<b>First caller only.</b> If a coin was already called anywhere, a later post is recorded for your group but scores nothing globally.\n\n` +
@@ -115,7 +116,7 @@ export function startTelegram(): void {
       return `• $${esc(c.symbol)} — ${m}${c.scored ? "" : " <i>(not first)</i>"} · ${ago(c.at)} ago`;
     });
     const head = row
-      ? `score <b>${row.score.toFixed(2)}</b> · ${row.calls} graded · med ${row.medianMult.toFixed(1)}x · ${row.hit2x.toFixed(0)}% hit 2x` +
+      ? `<b>${row.score >= 0 ? "+" : ""}${(row.score * 100).toFixed(0)}%/call</b> · ${row.calls} graded · med ${row.medianMult.toFixed(1)}x · ${row.hit2x.toFixed(0)}% hit 2x` +
         (row.eligible ? " · <b>prize-eligible</b>" : ` · needs ${cfg.tgMinScoredCalls} scored calls to be prize-eligible`)
       : "nothing graded yet";
     return ctx.reply(`<b>${esc(ctx.from?.first_name ?? "You")}</b>\n${head}\n\n${recentCalls.join("\n")}`, {
@@ -156,9 +157,11 @@ export function startTelegram(): void {
         const mc = a.dexStats?.mcUsd ?? a.state.mcSol * a.solUsd;
         const liq = a.dexStats?.liqUsd ?? null;
 
-        // floors: a 3x on a $2k coin with $300 of volume is manufacturable for
-        // pocket change, so it is carded but never scored
-        const belowFloor = (mc != null && mc < cfg.tgMinCallMcUsd) || (liq != null && liq < cfg.tgMinLiqUsd);
+        // Floors default to 0 — see config. An early call is the valuable kind,
+        // and excluding it removed its downside too.
+        const belowFloor =
+          (cfg.tgMinCallMcUsd > 0 && mc != null && mc < cfg.tgMinCallMcUsd) ||
+          (cfg.tgMinLiqUsd > 0 && liq != null && liq < cfg.tgMinLiqUsd);
         const res = belowFloor
           ? null
           : await recordCall({ mint, symbol: a.symbol, callerId, callerName, groupId, groupTitle, mcAtCall: mc });

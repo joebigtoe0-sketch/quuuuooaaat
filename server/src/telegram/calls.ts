@@ -13,16 +13,21 @@ import { log } from "../log.js";
  *            the same mint in another group is group-recorded and globally
  *            worth nothing. Prizes pay off the global board only.
  *
- * SCORING — mean log-return at a REACHABLE exit, shrunk toward the population.
+ * SCORING — EXPECTED PROFIT PER CALL at a REACHABLE exit, shrunk toward the
+ * population, with per-call credit capped.
+ *
+ * This was mean-LOG-return first, and that was wrong. Log-mean is the growth
+ * rate you get compounding your whole stack into every call, and nobody follows
+ * a caller that way — you stake a fixed clip per call, so what you actually
+ * earn is the arithmetic mean. The difference is not academic: a caller who
+ * rugged 5 of 10 and mooned 3 made a fixed-clip follower +223% per call, and
+ * log-mean ranked him BELOW someone buying eight consistent 3x's. Asymmetric
+ * calling is what a good memecoin caller does; the metric was punishing it.
  *
  * Every term is there to close a specific hole:
- *   log()      a 10x (+2.30) exactly cancels a -90% (-2.30), and the sum of
- *              logs IS the compounded return of equal-weight following this
- *              caller. It answers the only question a bounty should pay on.
- *   mean       more calls is not more score. Calling less and better wins.
- *   losers     subtract. Under "average multiple" a rug costs a sprayer almost
- *              nothing (multiples floor at 0); in log space it is a real hole,
- *              so spraying is actively expensive rather than merely diluted.
+ *   profit/call the honest number: what a follower earns per unit staked.
+ *   mean        more calls is not more score. Calling less and better wins.
+ *   losers      subtract properly — a rug is -95%, not a small positive.
  *   reachable  the exit is the best 5-minute CLOSE after the call, never the
  *              high. A wick to 20x that lasted nine seconds on $200 of volume
  *              is not a 20x call — nobody could have sold into it. This is the
@@ -209,7 +214,8 @@ export interface BoardRow {
   callerName: string;
   calls: number;
   scored: number;
-  meanLog: number;
+  /** raw expected profit per call, before shrinkage (0.5 = +50% per call) */
+  meanProfit: number;
   score: number;
   medianMult: number;
   hit2x: number;
@@ -238,7 +244,7 @@ export function leaderboard(groupId?: string): BoardRow[] {
   // population mean is what a thin record gets shrunk toward
   // one call cannot carry a caller — see TG_MAX_CREDIT_MULT
   const credit = (m: number) => Math.min(m, cfg.tgMaxCreditMult);
-  const popMean = pool.reduce((s, c) => s + Math.log(credit(c.exitMult!)), 0) / pool.length;
+  const popMean = pool.reduce((s, c) => s + (credit(c.exitMult!) - 1), 0) / pool.length;
 
   const by = new Map<string, TgCall[]>();
   for (const c of pool) {
@@ -250,17 +256,18 @@ export function leaderboard(groupId?: string): BoardRow[] {
   const rows: BoardRow[] = [];
   for (const [callerId, cs] of by) {
     const mults = cs.map((c) => c.exitMult!);
-    const logs = mults.map((m) => Math.log(credit(m)));
-    const meanLog = logs.reduce((a, b) => a + b, 0) / logs.length;
-    const n = logs.length;
+    // profit per unit staked: a 3x returns +2.00, a rug at 0.05 returns -0.95
+    const profits = mults.map((m) => credit(m) - 1);
+    const meanProfit = profits.reduce((a, b) => a + b, 0) / profits.length;
+    const n = profits.length;
     const best = cs.reduce<TgCall | null>((b, c) => (!b || c.exitMult! > b.exitMult! ? c : b), null);
     rows.push({
       callerId,
       callerName: cs[cs.length - 1].callerName,
       calls: cs.length,
       scored: cs.filter((c) => c.scored).length,
-      meanLog,
-      score: (meanLog * n + popMean * k) / (n + k),
+      meanProfit,
+      score: (meanProfit * n + popMean * k) / (n + k),
       medianMult: median(mults),
       hit2x: (mults.filter((m) => m >= 2).length / mults.length) * 100,
       best: best ? { symbol: best.symbol, mult: best.exitMult! } : null,
