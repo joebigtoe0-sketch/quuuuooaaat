@@ -342,6 +342,12 @@ export function callerTape(mint: string): TapeLine[] {
   return db.mints[mint]?.tape ?? [];
 }
 
+/** How many distinct pump.fun callers have called this mint, from the harvested
+ *  index. callerTape() only keeps the last 6 lines, so it cannot be counted. */
+export function pumpCallerCount(mint: string): number {
+  return db.mints[mint]?.callers?.length ?? 0;
+}
+
 /** A caller's accumulated reputation, if they have one.
  *  med is the honest quality number; avg is kept for context/content only. */
 export function callerRep(

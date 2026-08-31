@@ -71,6 +71,30 @@ export const cfg = {
   // survived until someone read it on stream.
   ownSymbol: str("QUANT_OWN_SYMBOL", "RIKU"),
 
+  // ---------- TELEGRAM: RikuBot, the caller tracker ----------
+  // Separate identity from the userbot that talks in groups as Riku himself:
+  // a Bot API bot can be added to any group by anyone (that is how the caller
+  // network grows) and a bot posting cards all day is expected behaviour,
+  // whereas a user account doing it reads as spam and risks the real account.
+  tgEnabled: bool("TG_ENABLED", false),
+  tgBotToken: str("TG_BOT_TOKEN"),
+  // scoring (see telegram/calls.ts for why each term exists)
+  tgScoreWindowDays: num("TG_SCORE_WINDOW_DAYS", 28), // rolling, so one lucky week cannot take a prize
+  tgScoreShrinkK: num("TG_SCORE_SHRINK_K", 5), // pseudo-calls of population mean mixed into a thin record
+  // ONE call must not carry a caller. Uncapped, a single 50x (log 3.9) put a
+  // 2-call account above a caller with eight clean 3x — the same failure the
+  // trade side already fixed with CALLER_FOLLOW_MED_CAP ("an 8x med over 5
+  // calls is a pump farmer, not a target"). 10x and 50x credit identically.
+  tgMaxCreditMult: num("TG_MAX_CREDIT_MULT", 10),
+  // ranked below this, but never paid: a thin record is not a track record
+  tgMinScoredCalls: num("TG_MIN_SCORED_CALLS", 8),
+  tgGradeAfterMin: num("TG_GRADE_AFTER_MIN", 60), // a call younger than this has no outcome yet
+  tgGradeWindowH: num("TG_GRADE_WINDOW_H", 168), // 7 days, then the grade is final
+  // floors: a 3x on a $2k coin with $300 of volume is manufacturable for pocket
+  // change, so it is not a call
+  tgMinCallMcUsd: num("TG_MIN_CALL_MC_USD", 8_000),
+  tgMinLiqUsd: num("TG_MIN_LIQ_USD", 4_000),
+
   heliusKey: str("HELIUS_API_KEY"),
   rpcUrl:
     str("RPC_URL") ||

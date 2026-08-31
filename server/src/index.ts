@@ -994,6 +994,9 @@ startLaunchFeed(
 armDevSniper(director);
 // the agent brain (plans its own tweets/films/trades/scouts)
 if (cfg.agentEnabled && !cfg.playbackProducer) director.planner.start();
+void import("./telegram/bot.js").then((m) => m.startTelegram()).catch((e) =>
+  log.warn("tg", `RikuBot failed to start: ${String(e).slice(0, 120)}`),
+);
 if (cfg.playbackProducer) {
   store.kvSet("planner:off", "1");
   store.kvSet("autoreply:off", "1");
