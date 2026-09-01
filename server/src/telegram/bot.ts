@@ -285,8 +285,11 @@ export function startTelegram(): void {
       ]);
       const prior = callsForMint(mint);
       const first = prior.find((c) => c.scored) ?? prior[0];
+      const { marketCap } = await import("../chain/marketcap.js");
+      const exact = await marketCap(mint).catch(() => null);
       const { text } = renderCard(a, {
         ath,
+        mcUsd: exact?.mcUsd ?? null,
         pumpCallers: pumpCallerCount(mint),
         caller: first
           ? { name: first.callerName, mcUsd: first.mcAtCall, first: true }
@@ -345,7 +348,12 @@ export function startTelegram(): void {
           new Promise<null>((r) => setTimeout(() => r(null), 20_000)),
         ]);
         if (!a || a.state.kind === "none" || a.state.kind === "unsupported") continue; // not ours — say nothing
-        const mc = a.dexStats?.mcUsd ?? a.state.mcSol * a.solUsd;
+        // pump.fun's own number, chain second, dexscreener last — this is also
+        // what gets RECORDED as the call price, so a 3-4% low feed would bias
+        // every score on the board, not just the display.
+        const { marketCap } = await import("../chain/marketcap.js");
+        const exact = await marketCap(mint).catch(() => null);
+        const mc = exact?.mcUsd ?? a.state.mcSol * a.solUsd;
         const liq = a.dexStats?.liqUsd ?? null;
 
         // Floors default to 0 — see config. An early call is the valuable kind,
@@ -364,6 +372,7 @@ export function startTelegram(): void {
 
         const { text, headerUrl } = renderCard(a, {
           ath,
+          mcUsd: mc,
           pumpCallers: pumpCallerCount(mint),
           belowFloor,
           caller: {

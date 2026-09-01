@@ -68,12 +68,19 @@ export interface CardExtras {
   caller?: { name: string; mcUsd: number | null; first: boolean; priorName?: string; priorAt?: number };
   /** set when the coin is below the scoring floor */
   belowFloor?: boolean;
+  /** exact mc from marketCap() — prefers pump.fun's own number over any feed */
+  mcUsd?: number | null;
 }
 
 export function renderCard(an: Analysis, x: CardExtras = {}): { text: string; headerUrl: string | null } {
   const d = an.dexStats;
   const mint = an.mint;
-  const mc = d?.mcUsd ?? (an.state.kind === "curve" || an.state.kind === "amm" ? an.state.mcSol * an.solUsd : null);
+  // CHAIN FIRST. dexscreener's marketCap ran 3-4% under pump.fun's own number on
+  // every coin checked ($N64X $3,476 vs $3,611; $RIKU $21,786 vs $22,539) while
+  // mcSol x solUsd matched it to within 0.5%. People read the card next to
+  // pump.fun, so the card has to agree with pump.fun.
+  const chainMc = an.state.kind === "curve" || an.state.kind === "amm" ? an.state.mcSol * an.solUsd : null;
+  const mc = x.mcUsd ?? chainMc ?? d?.mcUsd ?? null;
   const L: string[] = [];
 
   // ---- head ----
@@ -192,5 +199,7 @@ export function renderCard(an: Analysis, x: CardExtras = {}): { text: string; he
     }
   }
 
-  return { text: L.join("\n"), headerUrl: d?.headerUrl ?? null };
+  // no paid dexscreener banner? use the token's own image — a card with art
+  // reads as a card, one without reads as a log line
+  return { text: L.join("\n"), headerUrl: d?.headerUrl ?? d?.iconUrl ?? an.image ?? null };
 }
