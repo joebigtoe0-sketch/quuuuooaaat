@@ -235,8 +235,8 @@ const median = (a: number[]): number => {
  * @param groupId omit for the GLOBAL board (scored calls only — first callers).
  *                pass a group to see that group's own activity, scored or not.
  */
-export function leaderboard(groupId?: string): BoardRow[] {
-  const cutoff = Date.now() - cfg.tgScoreWindowDays * 86_400_000;
+export function leaderboard(groupId?: string, days?: number): BoardRow[] {
+  const cutoff = Date.now() - (days ?? cfg.tgScoreWindowDays) * 86_400_000;
   const pool = db.calls.filter(
     (c) => c.at >= cutoff && c.exitMult != null && c.exitMult > 0 && (groupId ? c.groupId === groupId : c.scored),
   );
@@ -293,4 +293,76 @@ export function stats(): { calls: number; mints: number; callers: number; graded
     callers: new Set(db.calls.map((c) => c.callerId)).size,
     graded: db.calls.filter((c) => c.exitMult != null).length,
   };
+}
+
+// ------------------------------------------------------------- the board --
+
+export interface CallRank {
+  symbol: string;
+  mint: string;
+  callerName: string;
+  callerId: string;
+  mult: number;
+  at: number;
+}
+
+/** Individual calls in a window, best first — the ranked list under the board. */
+export function topCalls(groupId: string | undefined, days: number, limit = 10): CallRank[] {
+  const cutoff = Date.now() - days * 86_400_000;
+  return db.calls
+    .filter((c) => c.at >= cutoff && c.exitMult != null && (groupId ? c.groupId === groupId : c.scored))
+    .sort((a, b) => b.exitMult! - a.exitMult!)
+    .slice(0, limit)
+    .map((c) => ({ symbol: c.symbol, mint: c.mint, callerName: c.callerName, callerId: c.callerId, mult: c.exitMult!, at: c.at }));
+}
+
+export interface WindowStats {
+  calls: number;
+  graded: number;
+  hit2x: number;
+  median: number;
+  avgProfit: number;
+  best: number | null;
+}
+
+export function windowStats(groupId: string | undefined, days: number): WindowStats {
+  const cutoff = Date.now() - days * 86_400_000;
+  const inWin = db.calls.filter((c) => c.at >= cutoff && (groupId ? c.groupId === groupId : c.scored));
+  const graded = inWin.filter((c) => c.exitMult != null).map((c) => c.exitMult!);
+  const capped = graded.map((m) => Math.min(m, cfg.tgMaxCreditMult));
+  return {
+    calls: inWin.length,
+    graded: graded.length,
+    hit2x: graded.length ? (graded.filter((m) => m >= 2).length / graded.length) * 100 : 0,
+    median: median(graded),
+    avgProfit: capped.length ? capped.reduce((a, b) => a + b, 0) / capped.length - 1 : 0,
+    best: graded.length ? Math.max(...graded) : null,
+  };
+}
+
+/**
+ * Undo a call. The magnifying-glass button turns a card back into a lookup, so
+ * someone can check a coin without it counting against their record — but only
+ * inside the grace window, or it becomes a free "delete the ones that rugged".
+ * If it was the global first call, the mint is released so the next caller can
+ * claim it honestly.
+ */
+export function unrecordCall(mint: string, callerId: string, groupId: string, graceMs: number): boolean {
+  const i = db.calls.findIndex((c) => c.mint === mint && c.callerId === callerId && c.groupId === groupId);
+  if (i < 0) return false;
+  if (Date.now() - db.calls[i].at > graceMs) return false;
+  const wasFirst = db.calls[i].scored && db.firstBy[mint]?.callerId === callerId;
+  db.calls.splice(i, 1);
+  if (wasFirst) {
+    delete db.firstBy[mint];
+    // promote the earliest surviving call on this mint, if any
+    const next = db.calls.filter((c) => c.mint === mint).sort((a, b) => a.at - b.at)[0];
+    if (next) {
+      next.scored = true;
+      db.firstBy[mint] = { callerId: next.callerId, at: next.at, callerName: next.callerName };
+    }
+  }
+  dirty = true;
+  save();
+  return true;
 }

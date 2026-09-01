@@ -98,7 +98,10 @@ export async function renderPnlCard(x: PnlCardInput): Promise<Buffer> {
       bgCache = await loadImage(path.join(cfg.root, "..", "client", "public", "media", "tgpnlbackground.png"));
     }
     c.drawImage(bgCache, 0, 0, W, H);
-  } catch {
+  } catch (e) {
+    // LOUD. The first deploy of this shipped without the art because the png
+    // was never git-added, and a silent fallback made it look intentional.
+    log.warn("tgpnl", `background art missing — flat fallback: ${String(e).slice(0, 100)}`);
     c.fillStyle = "#0b0d0a";
     c.fillRect(0, 0, W, H);
   }

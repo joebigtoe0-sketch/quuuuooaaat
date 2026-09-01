@@ -1,8 +1,9 @@
-import { Bot, InputFile } from "grammy";
+import { Bot, InputFile, InlineKeyboard } from "grammy";
 import { cfg } from "../config.js";
 import { log } from "../log.js";
 import {
   recordCall, leaderboard, callsForMint, callerHistory, gradeOpenCalls, stats, athFromTape, gradeCall,
+  topCalls, windowStats, unrecordCall,
   type BoardRow,
 } from "./calls.js";
 import { renderCard, money, ago, esc } from "./card.js";
@@ -55,6 +56,64 @@ function boardText(rows: BoardRow[], title: string, note: string): string {
   return `<b>${title}</b>\n${lines.join("\n")}\n\n<i>${note}</i>`;
 }
 
+
+// ------------------------------------------------------------ /lb board --
+
+const WINDOWS: { label: string; days: number }[] = [
+  { label: "1D", days: 1 },
+  { label: "7D", days: 7 },
+  { label: "14D", days: 14 },
+  { label: "30D", days: 30 },
+];
+const MEDAL = ["🥇", "🥈", "🥉"];
+/** how a call FEELS, at a glance, before you read the number */
+const mood = (m: number): string => (m >= 3 ? "🤩" : m >= 2 ? "😎" : m >= 1.2 ? "🙂" : m >= 0.8 ? "🥱" : "😭");
+
+function lbKeyboard(scope: "group" | "global", days: number): InlineKeyboard {
+  const kb = new InlineKeyboard();
+  for (const w of WINDOWS) {
+    kb.text(w.days === days ? `· ${w.label} ·` : w.label, `lb:${scope}:${w.days}`);
+  }
+  return kb;
+}
+
+function lbText(scope: "group" | "global", days: number, groupId: string, title: string): string {
+  const gid = scope === "group" ? groupId : undefined;
+  const rows = leaderboard(gid, days);
+  const st = windowStats(gid, days);
+  const calls = topCalls(gid, days, 10);
+  const L: string[] = [];
+  L.push(`<b>${esc(scope === "global" ? "🌍 GLOBAL — first calls only" : title)}</b>`);
+  L.push("");
+  L.push("👑 <b>Top Callers</b>");
+  if (!rows.length) {
+    L.push(" └ <i>nothing graded in this window yet</i>");
+  } else {
+    rows.slice(0, 3).forEach((r, i) => {
+      const last = i === Math.min(2, rows.length - 1);
+      const pts = `${r.score >= 0 ? "+" : ""}${(r.score * 100).toFixed(0)}%/call`;
+      L.push(` ${last ? "└" : "├"}${MEDAL[i]} ${esc(r.callerName)} [${pts}]${r.eligible ? "" : " *"}`);
+    });
+  }
+  L.push("");
+  L.push("📊 <b>Stats</b>");
+  L.push(` ├ Period    ${days}d`);
+  L.push(` ├ Calls     ${st.calls}${st.graded < st.calls ? ` <i>(${st.graded} graded)</i>` : ""}`);
+  L.push(` ├ Hit Rate  ${st.hit2x.toFixed(0)}% ≥2x`);
+  L.push(` ├ Median    ${st.median.toFixed(1)}x`);
+  L.push(` └ Avg       ${st.avgProfit >= 0 ? "+" : ""}${(st.avgProfit * 100).toFixed(0)}%/call`);
+  if (calls.length) {
+    L.push("");
+    calls.forEach((c, i) => {
+      L.push(
+        `${mood(c.mult)} <b>${i + 1}</b>  <b>${esc(c.symbol)}</b> » ${esc(c.callerName)} [${c.mult.toFixed(1)}x]`,
+      );
+    });
+  }
+  if (rows.some((r) => !r.eligible)) L.push(`\n<i>* fewer than ${cfg.tgMinScoredCalls} scored calls — ranked, not prize-eligible</i>`);
+  return L.join("\n");
+}
+
 export function startTelegram(): void {
   if (!cfg.tgEnabled || !cfg.tgBotToken) {
     log.info("tg", "RikuBot off (TG_ENABLED / TG_BOT_TOKEN)");
@@ -65,7 +124,7 @@ export function startTelegram(): void {
   bot.command("start", (ctx) =>
     ctx.reply(
       "I track calls. Post a contract address in a group I'm in and I'll card it and record who called it first.\n\n" +
-        "/board — this group's callers\n/global — the global board (prizes pay off this one)\n/me — your record\n/rules — how scoring works",
+        "/lb — this group's leaderboard (1D/7D/14D/30D)\n/lb global — the global board, prizes pay off this one\n/pnl &lt;ca&gt; — a shareable card: how far that call ran\n/me — your record\n/rules — how scoring works",
       { parse_mode: "HTML" },
     ),
   );
@@ -85,6 +144,32 @@ export function startTelegram(): void {
       { parse_mode: "HTML" },
     ),
   );
+
+  bot.command("lb", (ctx) => {
+    const scope: "group" | "global" = /global/i.test((ctx.match ?? "").toString()) ? "global" : "group";
+    const gid = String(ctx.chat?.id ?? "");
+    const title = ctx.chat?.title ?? "This group";
+    return ctx.reply(lbText(scope, 1, gid, title), {
+      parse_mode: "HTML",
+      link_preview_options: { is_disabled: true },
+      reply_markup: lbKeyboard(scope, 1),
+    });
+  });
+
+  bot.callbackQuery(/^lb:(group|global):(\d+)$/, async (ctx) => {
+    const [, scope, d] = ctx.match as unknown as string[];
+    const days = Number(d);
+    const gid = String(ctx.chat?.id ?? "");
+    const title = ctx.chat?.title ?? "This group";
+    try {
+      await ctx.editMessageText(lbText(scope as "group" | "global", days, gid, title), {
+        parse_mode: "HTML",
+        link_preview_options: { is_disabled: true },
+        reply_markup: lbKeyboard(scope as "group" | "global", days),
+      });
+    } catch { /* "message is not modified" when the same window is re-tapped */ }
+    await ctx.answerCallbackQuery();
+  });
 
   bot.command("board", (ctx) => {
     const gid = String(ctx.chat?.id ?? "");
@@ -173,6 +258,70 @@ export function startTelegram(): void {
     ),
   );
 
+  // 🗑 — removes the CARD. The call stays on the record either way.
+  bot.callbackQuery(/^del:(\d+)$/, async (ctx) => {
+    const [, owner] = ctx.match as unknown as string[];
+    if (String(ctx.from?.id) !== owner) {
+      return ctx.answerCallbackQuery({ text: "Only the caller can clear their own card.", show_alert: true });
+    }
+    await ctx.deleteMessage().catch(() => {});
+    await ctx.answerCallbackQuery({ text: "Card cleared — the call is still recorded." });
+  });
+
+  // 🔄 — re-pull the tape and redraw
+  bot.callbackQuery(/^ref:([1-9A-HJ-NP-Za-km-z]{32,44})$/, async (ctx) => {
+    const [, mint] = ctx.match as unknown as string[];
+    await ctx.answerCallbackQuery({ text: "refreshing…" });
+    try {
+      const { analyze } = await import("../analysis/engine.js");
+      const a = await Promise.race([
+        analyze(mint, null, { forceBubble: cfg.tgBubbleOnCard }),
+        new Promise<null>((r) => setTimeout(() => r(null), 20_000)),
+      ]);
+      if (!a) return;
+      const [{ pumpCallerCount }, ath] = await Promise.all([
+        import("../callout/callers.js"),
+        athFromTape(mint).catch(() => null),
+      ]);
+      const prior = callsForMint(mint);
+      const first = prior.find((c) => c.scored) ?? prior[0];
+      const { text } = renderCard(a, {
+        ath,
+        pumpCallers: pumpCallerCount(mint),
+        caller: first
+          ? { name: first.callerName, mcUsd: first.mcAtCall, first: true }
+          : undefined,
+      });
+      await ctx.editMessageText(text, {
+        parse_mode: "HTML",
+        reply_markup: ctx.callbackQuery.message?.reply_markup,
+        link_preview_options: { is_disabled: true },
+      });
+    } catch (e) {
+      log.warn("tg", `refresh failed: ${String(e).slice(0, 90)}`);
+    }
+  });
+
+  // 🔍 — "I was only looking": un-records the call inside the grace window
+  bot.callbackQuery(/^scan:([1-9A-HJ-NP-Za-km-z]{32,44}):(\d+)$/, async (ctx) => {
+    const [, mint, owner] = ctx.match as unknown as string[];
+    if (String(ctx.from?.id) !== owner) {
+      return ctx.answerCallbackQuery({ text: "Only the caller can turn their own call into a scan.", show_alert: true });
+    }
+    const gid = String(ctx.chat?.id ?? "");
+    const ok = unrecordCall(mint, owner, gid, cfg.tgScanGraceS * 1000);
+    await ctx.answerCallbackQuery({
+      text: ok
+        ? "Marked as a scan — not counted as your call."
+        : `Too late: a call can only become a scan within ${cfg.tgScanGraceS}s.`,
+      show_alert: !ok,
+    });
+    if (ok) {
+      const kb = new InlineKeyboard().text("🔄", `ref:${mint}`).text("🗑", `del:${owner}`);
+      await ctx.editMessageReplyMarkup({ reply_markup: kb }).catch(() => {});
+    }
+  });
+
   // ------------------------------------------------------- the call card --
   bot.on("message:text", async (ctx) => {
     const text = ctx.message.text ?? "";
@@ -226,8 +375,16 @@ export function startTelegram(): void {
           },
         });
 
+        // 🔍 within the grace window turns this back into a lookup — you can
+        // check a coin without it counting against your record. After that it
+        // is a call, or the button becomes "delete the ones that rugged".
+        const kb = new InlineKeyboard()
+          .text("🔍", `scan:${mint}:${callerId}`)
+          .text("🔄", `ref:${mint}`)
+          .text("🗑", `del:${callerId}`);
         await ctx.reply(text, {
           parse_mode: "HTML",
+          reply_markup: kb,
           reply_parameters: { message_id: ctx.message.message_id },
           // dexscreener's paid banner rendered ABOVE the card, the way the
           // caller bots people already read do it

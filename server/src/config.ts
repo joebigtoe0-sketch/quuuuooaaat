@@ -110,6 +110,10 @@ export const cfg = {
   // at ~10 Helius calls per card. A card fires on every CA anyone posts, so this
   // is OFF until you decide the credits are worth it.
   tgBubbleOnCard: bool("TG_BUBBLE_ON_CARD", false),
+  // 🔍 grace: how long after posting a CA you can say "I was only looking" and
+  // have it not count as your call. Short on purpose — any longer and it is a
+  // button for deleting the calls that went wrong.
+  tgScanGraceS: num("TG_SCAN_GRACE_S", 10),
 
   heliusKey: str("HELIUS_API_KEY"),
   rpcUrl:
