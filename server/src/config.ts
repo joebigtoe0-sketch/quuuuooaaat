@@ -204,6 +204,13 @@ export const cfg = {
   // above where this population actually peaks — the 08-27 winners topped out
   // at +102% and +71%, so a flat TP1 would have banked neither.
   callerFollowTp1MinPct: num("CALLER_FOLLOW_TP1_MIN_PCT", 25), // floor under the median target, vs OUR entry
+  // ...and a CEILING, vs our entry. The median target is an absolute mc anchored
+  // to the CALLER'S call price, so a deep-dip entry can leave it 3x+ away — far
+  // more than the 1.5x move that caller typically makes. $PUMP (09-01) was
+  // bought at $37.5k against a $117,090 target: 3.12x, never reached, -0.474
+  // SOL. At a 2.5x cap the target is $93,750, which it held above for 7
+  // straight 15s closes. Verified not to move DAC (2.02x) or 中国黑牛 (1.71x).
+  callerFollowTp1MaxMult: num("CALLER_FOLLOW_TP1_MAX_MULT", 2.5),
   callerFollowTp1Fraction: num("CALLER_FOLLOW_TP1_FRACTION", 0.6), // share of the FULL bag sold at TP1
   callerFollowTp2Pct: num("CALLER_FOLLOW_TP2_PCT", 400), // +% on entry mc that fires TP2 (400 => 5x)
   callerFollowTp2Fraction: num("CALLER_FOLLOW_TP2_FRACTION", 0.9), // share of WHAT REMAINS sold at TP2

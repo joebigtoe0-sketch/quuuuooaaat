@@ -415,7 +415,11 @@ async function watchTick(): Promise<void> {
     // fire an instant exit.
     const medianTargetMc = f.med > 1 ? f.callMcUsd * f.med : 0;
     const tp1FloorMc = entryMc * (1 + cfg.callerFollowTp1MinPct / 100);
-    const tp1Mc = Math.max(medianTargetMc, tp1FloorMc);
+    const tp1CeilMc = entryMc * cfg.callerFollowTp1MaxMult;
+    // clamped BOTH ways against our own entry: the median target is anchored to
+    // the caller's price, so a deep dip below their call leaves it further away
+    // than the move that caller actually makes.
+    const tp1Mc = Math.min(Math.max(medianTargetMc, tp1FloorMc), Math.max(tp1CeilMc, tp1FloorMc));
     // TP2 keeps its fixed +400%, but never lands so close to TP1 that a single
     // move trips both in consecutive ticks
     const tp2Mc = Math.max(entryMc * (1 + cfg.callerFollowTp2Pct / 100), tp1Mc * 1.5);
@@ -548,7 +552,8 @@ export function startCallerFollow(h: StageHooks): void {
     `caller-follow LIVE — ${cfg.callerFollowPct}% of spendable (floor ${cfg.callerFollowSol} SOL), need ${cfg.callerFollowRoom}x room to caller's median; ` +
       `anti-swarm: max ${cfg.callerFollowMaxSwarm} callers/${cfg.callerFollowSwarmWindowMin}min, entry ≤${cfg.callerFollowMaxFromFirstCall}x first call; ` +
       `vertical gate: skip >+${cfg.callerFollowMax1hPct}%/1h, and >+${cfg.callerFollowRevival1hPct}%/1h while <${cfg.callerFollowRevival24hPct}%/24h; ` +
-      `exits: TP1 sells ${Math.round(cfg.callerFollowTp1Fraction * 100)}% at the CALLER'S MEDIAN TARGET (min +${cfg.callerFollowTp1MinPct}% on entry), ` +
+      `exits: TP1 sells ${Math.round(cfg.callerFollowTp1Fraction * 100)}% at the CALLER'S MEDIAN TARGET ` +
+      `(clamped to +${cfg.callerFollowTp1MinPct}%..${cfg.callerFollowTp1MaxMult}x on entry), ` +
       `TP2 sells ${Math.round(cfg.callerFollowTp2Fraction * 100)}% of the rest at +${cfg.callerFollowTp2Pct}%, ` +
       `moonbag (${Math.round((1 - cfg.callerFollowTp1Fraction) * (1 - cfg.callerFollowTp2Fraction) * 100)}%) rides with no target; ` +
       `stop −${cfg.callerFollowRunnerStopPct}% from TP${cfg.callerFollowStopReanchor ? "2" : "1"}, pre-TP1 stop-loss −${cfg.callerFollowStopPct}%; max ${cfg.callerFollowMaxPerDay}/day` +
