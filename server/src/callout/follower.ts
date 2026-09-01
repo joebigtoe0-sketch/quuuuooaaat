@@ -253,9 +253,34 @@ export async function attemptFollowBuy(
     st.pos[c.mint] = {
       wallet: c.wallet, who,
       // entryMcUsd is the yardstick for the whole exit ladder; med is kept for
-      // the record (it priced the ENTRY, it no longer prices any exit)
+      // the record (it priced the ENTRY, it no longer prices any exit).
+      // Set from the pre-trade quote here and corrected to the REAL fill below.
       boughtAt: Date.now(), callMcUsd: c.mcAtCall, entryMcUsd: mcNowUsd, med, phase: "full",
     };
+    // THE REAL ENTRY, from the fill. mcNowUsd is a pre-trade quote taken before
+    // the gauntlet ran, and executeBuy's own mcSol is read before the tx is even
+    // sent — on $PUMP (09-01) the price swung $28.8k-$89.3k inside the buy
+    // minute and we recorded $54,601 for a fill pump.fun priced at $37.5k.
+    // SOL paid over tokens received is the only number that cannot drift.
+    try {
+      const { openPositions } = await import("../chain/trader.js");
+      const pos = openPositions().find((p) => p.mint === c.mint);
+      const toks = pos ? Number(pos.tokensRaw) / 1e6 : 0;
+      if (pos && toks > 0 && pos.costSol > 0) {
+        const { getSolUsd } = await import("../chain/solana.js");
+        const solUsd = await getSolUsd().catch(() => 0);
+        const fillMcUsd = (pos.costSol / toks) * 1e9 * solUsd;
+        if (Number.isFinite(fillMcUsd) && fillMcUsd > 0) {
+          st.pos[c.mint].entryMcUsd = fillMcUsd;
+          if (Math.abs(fillMcUsd - mcNowUsd) / mcNowUsd > 0.15) {
+            log.info(
+              "follower",
+              `entry mc corrected to the fill: quote $${Math.round(mcNowUsd).toLocaleString("en-US")} -> actual $${Math.round(fillMcUsd).toLocaleString("en-US")}`,
+            );
+          }
+        }
+      }
+    } catch { /* keep the quote if the position is not readable yet */ }
     st.count++;
     save();
     log.info("follower", `FOLLOWED ${who} into $${symbol} (${sol} SOL @ quality ${quality}, ${room.toFixed(1)}x room)${res.dry ? " [dry]" : ""}`);
@@ -318,8 +343,8 @@ async function recentMove(mint: string): Promise<{ chg1h: number | null; chg24h:
     );
     clearTimeout(timer);
     if (!res.ok) return { chg1h: null, chg24h: null };
-    const rows = (await res.json()) as { timestamp: number; close: string }[];
-    if (!Array.isArray(rows) || rows.length < 2) return { chg1h: null, chg24h: null };
+    const rows = (await res.json()) as { timestamp: number; open: string; close: string }[];
+    if (!Array.isArray(rows) || !rows.length) return { chg1h: null, chg24h: null };
     const closeAt = (t: number): number | null => {
       let out: number | null = null;
       for (const r of rows) if (r.timestamp <= t) out = Number(r.close);
@@ -328,7 +353,19 @@ async function recentMove(mint: string): Promise<{ chg1h: number | null; chg24h:
     const now = closeAt(Date.now());
     if (!now) return { chg1h: null, chg24h: null };
     const pct = (then: number | null) => (then ? ((now - then) / then) * 100 : null);
-    return { chg1h: pct(closeAt(Date.now() - 3_600_000)), chg24h: pct(closeAt(Date.now() - 86_400_000)) };
+    // A coin younger than the lookback has NO candle an hour back, so chg1h was
+    // null and the gate failed open — on exactly the coins that move hardest.
+    // $PUMP (09-01) was four minutes old and +2755% off its first print when we
+    // bought it; it rugged 96% twelve minutes later for -0.47 SOL. Fall back to
+    // the OLDEST candle we have: on a fresh coin that is its whole life, which
+    // is the most honest "how far has this already run" available.
+    // the coin's OPENING price, not the first candle's close: on a 4-minute-old
+    // coin the close is already most of the way up the pump. $PUMP measured +96%
+    // off the first close (under the +100% bar, so it still passed) and +2755%
+    // off the open, which is what actually happened.
+    const born = Number(rows[0].open) || Number(rows[0].close);
+    const h1 = closeAt(Date.now() - 3_600_000) ?? born;
+    return { chg1h: pct(h1), chg24h: pct(closeAt(Date.now() - 86_400_000)) };
   } catch {
     return { chg1h: null, chg24h: null };
   }
