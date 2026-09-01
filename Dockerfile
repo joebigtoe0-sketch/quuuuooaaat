@@ -38,6 +38,11 @@ RUN set -eux; \
     rm -f /tmp/piper-smoke.wav; \
     du -sh /opt/piper
 
+# Fonts. A Debian base ships almost none, and @napi-rs/canvas renders unnamed
+# families as nothing at all — the /pnl card's body text would come out blank.
+# Anton (the display face) is registered from the repo; this is the fallback.
+RUN apt-get update && apt-get install -y --no-install-recommends fonts-dejavu-core     && rm -rf /var/lib/apt/lists/*
+
 # piper ships libpiper_phonemize + espeak-ng-data next to the binary
 ENV LD_LIBRARY_PATH=/opt/piper
 ENV ESPEAK_DATA_PATH=/opt/piper/espeak-ng-data

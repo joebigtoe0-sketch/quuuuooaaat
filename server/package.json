@@ -8,6 +8,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@napi-rs/canvas": "^1.0.8",
     "@pump-fun/pump-sdk": "^1.7.0",
     "@pump-fun/pump-swap-sdk": "^1.9.0",
     "@solana/spl-token": "^0.4.9",

@@ -1,8 +1,8 @@
-import { Bot } from "grammy";
+import { Bot, InputFile } from "grammy";
 import { cfg } from "../config.js";
 import { log } from "../log.js";
 import {
-  recordCall, leaderboard, callsForMint, callerHistory, gradeOpenCalls, stats, athFromTape,
+  recordCall, leaderboard, callsForMint, callerHistory, gradeOpenCalls, stats, athFromTape, gradeCall,
   type BoardRow,
 } from "./calls.js";
 import { renderCard, money, ago, esc } from "./card.js";
@@ -122,6 +122,48 @@ export function startTelegram(): void {
     return ctx.reply(`<b>${esc(ctx.from?.first_name ?? "You")}</b>\n${head}\n\n${recentCalls.join("\n")}`, {
       parse_mode: "HTML",
     });
+  });
+
+  // /pnl <ca> — the shareable card: how far a call actually ran
+  bot.command("pnl", async (ctx) => {
+    const arg = (ctx.match ?? "").toString().trim();
+    const mint = (arg.match(BASE58) ?? [])[0];
+    if (!mint || DENY.has(mint)) return ctx.reply("Usage: /pnl <contract address>");
+    const calls = callsForMint(mint);
+    const first = calls.find((c) => c.scored) ?? calls[0];
+    if (!first) {
+      return ctx.reply("Nobody has called that one in any group I'm watching — so there's no call to price it from.");
+    }
+    const wait = await ctx.reply("📸 building the card…");
+    try {
+      const mult = (await gradeCall(first)) ?? first.exitMult ?? null;
+      if (mult == null) {
+        await ctx.api.editMessageText(ctx.chat!.id, wait.message_id, "No tape on that coin yet — nothing to measure the call against.");
+        return;
+      }
+      const [{ renderPnlCard, fetchAvatar }] = await Promise.all([import("./pnlImage.js")]);
+      const avatar = await fetchAvatar(cfg.tgBotToken, first.callerId).catch(() => null);
+      const png = await renderPnlCard({
+        symbol: first.symbol,
+        multiple: mult,
+        calledAtMcUsd: first.mcAtCall,
+        calledAt: first.at,
+        callerName: first.callerName,
+        avatar,
+        live: Date.now() - first.at < cfg.tgGradeWindowH * 3_600_000,
+      });
+      await ctx.api.deleteMessage(ctx.chat!.id, wait.message_id).catch(() => {});
+      await ctx.replyWithPhoto(new InputFile(png, `pnl-${first.symbol}.png`), {
+        caption:
+          `<b>$${esc(first.symbol)}</b> — called by ${esc(first.callerName)} at ${money(first.mcAtCall)}` +
+          `
+<i>peak since the call: ${mult.toFixed(2)}x${calls.length > 1 ? ` · ${calls.length} calls on this coin` : ""}</i>`,
+        parse_mode: "HTML",
+      });
+    } catch (e) {
+      log.warn("tg", `pnl card failed: ${String(e).slice(0, 120)}`);
+      await ctx.api.editMessageText(ctx.chat!.id, wait.message_id, "Card generator fell over — try again in a minute.").catch(() => {});
+    }
   });
 
   bot.command("deep", (ctx) =>
