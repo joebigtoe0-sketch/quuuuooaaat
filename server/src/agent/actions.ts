@@ -1,3 +1,4 @@
+import { cfg } from "../config.js";
 import { z } from "zod";
 
 /**
@@ -32,7 +33,13 @@ export const ActionSchema = z.discriminatedUnion("do", [
   }),
   z.object({ do: z.literal("blacklist"), mint: mint(), why: txt(5, 160) }),
   z.object({ do: z.literal("engage_chat") }),
-  z.object({ do: z.literal("buyback"), sol: z.number().min(0.01).max(0.5), why: txt(3, 200) }),
+  // The REAL cap is cfg.maxBuybackSolPerTx, applied with the war chest and the
+  // daily room at execution (beats.ts). This bound is only a sanity guard
+  // against a hallucinated number — and it must never be the binding one:
+  // hardcoded at 0.5 it silently equalled the config DEFAULT, so raising
+  // MAX_BUYBACK_SOL_PER_TX in env changed nothing and the action was rejected
+  // outright instead of being clamped.
+  z.object({ do: z.literal("buyback"), sol: z.number().min(0.01).max(Math.max(5, cfg.maxBuybackSolPerTx)), why: txt(3, 200) }),
   z.object({ do: z.literal("strategy_create"), name: txt(3, 40), thesis: txt(10, 300), code: z.string().min(30).max(8000), buyBar: z.number().min(35).max(90), sizeSol: z.number().min(0.01).max(2) }),
   z.object({ do: z.literal("strategy_update"), id: z.string().min(4).max(16), thesis: txt(0, 300).optional(), code: z.string().max(8000).optional(), buyBar: z.number().min(35).max(90).optional(), sizeSol: z.number().min(0.01).max(2).optional(), enabled: z.boolean().optional() }),
   z.object({ do: z.literal("strategy_retire"), id: z.string().min(4).max(16) }),
