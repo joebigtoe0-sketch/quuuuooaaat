@@ -65,6 +65,11 @@ export function startLaunchFeed(
         if (m?.mint && m?.txType === "migrate") {
           // a graduation — credit the dev's live bond record
           void import("../analysis/checks/creator.js").then(({ noteMigration }) => noteMigration(String(m.mint))).catch(() => {});
+          // ...and tell the groups that called it. THIS event is the graduation;
+          // a bonding-progress threshold misses roughly two thirds of real bonds.
+          void import("../telegram/bot.js")
+            .then((t) => t.noteMigration(String(m.mint)))
+            .catch(() => {});
           return;
         }
         if (m?.mint && (m?.txType === "create" || m?.name)) {

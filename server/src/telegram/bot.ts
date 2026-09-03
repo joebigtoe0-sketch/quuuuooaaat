@@ -114,12 +114,51 @@ function lbText(scope: "group" | "global", days: number, groupId: string, title:
   return L.join("\n");
 }
 
+
+/** Live bot handle so the feed can post updates into the groups a coin was
+ *  called in. Set on start, null when RikuBot is off. */
+let live: Bot | null = null;
+
+/**
+ * A called coin just graduated. Posted from the pumpportal `migrate` event —
+ * the real graduation, never a bonding-progress threshold, which misses roughly
+ * two thirds of real bonds.
+ */
+export async function noteMigration(mint: string): Promise<void> {
+  if (!live) return;
+  const calls = callsForMint(mint);
+  if (!calls.length) return;
+  const first = calls.find((c) => c.scored) ?? calls[0];
+  try {
+    const { marketCap } = await import("../chain/marketcap.js");
+    const mc = (await marketCap(mint).catch(() => null))?.mcUsd ?? null;
+    const mult = mc && first.mcAtCall ? mc / first.mcAtCall : null;
+    const line =
+      `🎓 <b>$${esc(first.symbol)}</b> just graduated to PumpSwap.
+
+` +
+      `Called by <b>${esc(first.callerName)}</b> at ${money(first.mcAtCall)}` +
+      (mc ? ` — now <b>${money(mc)}</b>` : "") +
+      (mult ? `  (<b>${mult.toFixed(2)}x</b> ${mult >= 1 ? "🟢" : "🔴"})` : "");
+    // every group that called it hears about it, once each
+    for (const gid of [...new Set(calls.map((c) => c.groupId))]) {
+      await live.api
+        .sendMessage(gid, line, { parse_mode: "HTML", link_preview_options: { is_disabled: true } })
+        .catch(() => {});
+    }
+    log.info("tg", `migration update posted for $${first.symbol}`);
+  } catch (e) {
+    log.warn("tg", `migration update failed: ${String(e).slice(0, 80)}`);
+  }
+}
+
 export function startTelegram(): void {
   if (!cfg.tgEnabled || !cfg.tgBotToken) {
     log.info("tg", "RikuBot off (TG_ENABLED / TG_BOT_TOKEN)");
     return;
   }
   const bot = new Bot(cfg.tgBotToken);
+  live = bot;
 
   bot.command("start", (ctx) =>
     ctx.reply(
@@ -295,7 +334,10 @@ export function startTelegram(): void {
           ? { name: first.callerName, mcUsd: first.mcAtCall, first: true }
           : undefined,
       });
-      await ctx.editMessageText(text, {
+      // a visible stamp: without it a refresh that changed nothing looked broken
+      const stamped = `${text}
+<i>↻ updated ${new Date().toISOString().slice(11, 16)} UTC</i>`;
+      await ctx.editMessageText(stamped, {
         parse_mode: "HTML",
         reply_markup: ctx.callbackQuery.message?.reply_markup,
         link_preview_options: { is_disabled: true },

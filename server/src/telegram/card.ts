@@ -96,9 +96,9 @@ export function renderCard(an: Analysis, x: CardExtras = {}): { text: string; he
   // ---- stats ----
   L.push("");
   L.push("📊 <b>Stats</b>");
-  L.push(` ├ USD   ${price(d?.priceUsd)} <i>(${pct(d?.chg24Pct)} 24h)</i>`);
-  L.push(` ├ MC    ${money(mc)}`);
-  L.push(` ├ Vol   ${money(d?.vol24Usd)}`);
+  L.push(` ├ USD   <b>${price(d?.priceUsd)}</b> <i>(${pct(d?.chg24Pct)} 24h)</i>`);
+  L.push(` ├ MC    <b>${money(mc)}</b>`);
+  L.push(` ├ Vol   <b>${money(d?.vol24Usd)}</b>`);
   // dexscreener omits liquidity on some pairs; we are already holding the
   // reserves, so fall back to them rather than printing "?"
   const lp =
@@ -108,14 +108,14 @@ export function renderCard(an: Analysis, x: CardExtras = {}): { text: string; he
       : an.state.kind === "amm"
         ? (Number(an.state.quoteReserveRaw) / 1e9) * an.solUsd * 2
         : null);
-  L.push(` ├ LP    ${money(lp)}`);
+  L.push(` ├ LP    <b>${money(lp)}</b>`);
   L.push(` ├ Sup   1B/1B`);
   const b = d?.buys1h ?? null;
   const s = d?.sells1h ?? null;
-  L.push(` ├ 1H    ${pct(d?.chg1hPct)}` + (b != null || s != null ? `  🅑${b ?? 0} Ⓢ${s ?? 0}` : ""));
+  L.push(` ├ 1H    <b>${pct(d?.chg1hPct)}</b>` + (b != null || s != null ? `  🅑${b ?? 0} Ⓢ${s ?? 0}` : ""));
   if (x.ath) {
     const off = mc ? ((mc - x.ath.mcUsd) / x.ath.mcUsd) * 100 : null;
-    L.push(` └ ATH   ${money(x.ath.mcUsd)} <i>(${pct(off)} / ${ago(x.ath.at)} ago)</i>`);
+    L.push(` └ ATH   <b>${money(x.ath.mcUsd)}</b> <i>(${pct(off)} / ${ago(x.ath.at)} ago)</i>`);
   } else {
     L.push(` └ ATH   —`);
   }
@@ -140,7 +140,7 @@ export function renderCard(an: Analysis, x: CardExtras = {}): { text: string; he
   if (bub?.checked && bub.topChecked > 0)
     L.push(` ├ Fresh     ${((bub.freshTop / bub.topChecked) * 100).toFixed(0)}% <i>(${bub.freshTop}/${bub.topChecked} top)</i>`);
   if (an.holders) {
-    L.push(` ├ Top 10    ${an.holders.top10Pct.toFixed(0)}%  <i>(top1 ${an.holders.top1Pct.toFixed(0)}%)</i>`);
+    L.push(` ├ Top 10    <b>${an.holders.top10Pct.toFixed(0)}%</b>  <i>(top1 ${an.holders.top1Pct.toFixed(0)}%)</i>`);
     // individual top holders, each linked to solscan — the row people actually click
     const th = an.holders.owners.slice(0, 5).map((o, i) => {
       const share = (an.holders!.amounts[i] / TOTAL_RAW) * 100;
@@ -191,7 +191,16 @@ export function renderCard(an: Analysis, x: CardExtras = {}): { text: string; he
     if (x.belowFloor) {
       L.push(`⚠️ <b>Below the scoring floor</b> — carded, not scored.`);
     } else if (x.caller.first) {
-      L.push(`✅ <b>${esc(x.caller.name)}</b> called it first @ ${money(x.caller.mcUsd)}`);
+      // the moving part: what the call is worth NOW. Without it a refresh looked
+      // like it did nothing, because the static header barely changes.
+      const since =
+        x.caller.mcUsd && mc
+          ? (() => {
+              const m = mc / x.caller.mcUsd!;
+              return `  →  <b>${m.toFixed(2)}x</b> ${m >= 1 ? "🟢" : "🔴"}`;
+            })()
+          : "";
+      L.push(`✅ <b>${esc(x.caller.name)}</b> called it first @ ${money(x.caller.mcUsd)}${since}`);
     } else {
       L.push(
         `↩️ ${esc(x.caller.name)} — already called by <b>${esc(x.caller.priorName ?? "?")}</b> ${ago(x.caller.priorAt ?? Date.now())} ago. No global score.`,
