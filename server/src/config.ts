@@ -114,6 +114,11 @@ export const cfg = {
   // have it not count as your call. Short on purpose — any longer and it is a
   // button for deleting the calls that went wrong.
   tgScanGraceS: num("TG_SCAN_GRACE_S", 10),
+  // monthly global callout competition — paid in $RIKU at the USD value below,
+  // settled on the last day of the month
+  tgPrize1Usd: num("TG_PRIZE_1_USD", 100),
+  tgPrize2Usd: num("TG_PRIZE_2_USD", 50),
+  tgPrize3Usd: num("TG_PRIZE_3_USD", 25),
 
   heliusKey: str("HELIUS_API_KEY"),
   rpcUrl:

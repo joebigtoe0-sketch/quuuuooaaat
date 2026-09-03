@@ -152,6 +152,22 @@ export async function noteMigration(mint: string): Promise<void> {
   }
 }
 
+
+// ------------------------------------------------------ /competition --
+
+/** Month-to-date, and how long is left. The competition settles on the last
+ *  day of the month, so the window is calendar — not the rolling one /lb uses. */
+function monthWindow(): { daysElapsed: number; daysLeft: number; endsOn: string } {
+  const now = new Date();
+  const start = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1);
+  const end = Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0, 23, 59, 59);
+  return {
+    daysElapsed: Math.max(1, (Date.now() - start) / 86_400_000),
+    daysLeft: Math.max(0, Math.ceil((end - Date.now()) / 86_400_000)),
+    endsOn: new Date(end).toLocaleDateString("en-GB", { day: "numeric", month: "long", timeZone: "UTC" }),
+  };
+}
+
 export function startTelegram(): void {
   if (!cfg.tgEnabled || !cfg.tgBotToken) {
     log.info("tg", "RikuBot off (TG_ENABLED / TG_BOT_TOKEN)");
@@ -163,7 +179,7 @@ export function startTelegram(): void {
   bot.command("start", (ctx) =>
     ctx.reply(
       "I track calls. Post a contract address in a group I'm in and I'll card it and record who called it first.\n\n" +
-        "/lb — this group's leaderboard (1D/7D/14D/30D)\n/lb global — the global board, prizes pay off this one\n/pnl &lt;ca&gt; — a shareable card: how far that call ran\n/me — your record\n/rules — how scoring works",
+        "/competition — the monthly $RIKU prize board\n/lb — this group's leaderboard (1D/7D/14D/30D)\n/lb global — the global board, prizes pay off this one\n/pnl &lt;ca&gt; — a shareable card: how far that call ran\n/me — your record\n/rules — how scoring works",
       { parse_mode: "HTML" },
     ),
   );
@@ -183,6 +199,54 @@ export function startTelegram(): void {
       { parse_mode: "HTML" },
     ),
   );
+
+  bot.command("competition", (ctx) => {
+    const w = monthWindow();
+    // FULL month's bar all month: otherwise on the 2nd one lucky call tops the
+    // standings and they swing every day as the month fills in.
+    const rows = leaderboard(undefined, w.daysElapsed, 30);
+    const prizes = [cfg.tgPrize1Usd, cfg.tgPrize2Usd, cfg.tgPrize3Usd];
+    const pool = prizes.reduce((a, b) => a + b, 0);
+    const L: string[] = [];
+    L.push(`🏆 <b>RIKU GLOBAL CALLOUT COMPETITION</b>`);
+    L.push(`<i>$${pool} in $RIKU every month — settled ${w.endsOn}, ${w.daysLeft}d left</i>`);
+    L.push("");
+    L.push(`🥇 <b>$${cfg.tgPrize1Usd}</b>   🥈 <b>$${cfg.tgPrize2Usd}</b>   🥉 <b>$${cfg.tgPrize3Usd}</b>  <i>(paid in $RIKU)</i>`);
+    L.push("");
+    L.push("<b>How to enter</b>");
+    L.push(" └ Post a contract address in any group I'm in. That's it.");
+    L.push("");
+    L.push("<b>How it's scored</b>");
+    L.push(` ├ <b>First caller wins the coin.</b> Globally — if it was already called in any other group, yours is recorded for that group but scores nothing here.`);
+    L.push(` ├ <b>Quality over quantity.</b> Your score is what a follower would have earned <b>per call</b>, so calling more never helps — a rug costs you as much as a winner pays.`);
+    L.push(` ├ Scored on the best price that <b>held for 5 minutes</b> after your call, never a wick nobody could sell into.`);
+    L.push(` ├ One moon can't carry you: credit per call caps at <b>${cfg.tgMaxCreditMult}x</b>.`);
+    L.push(` └ Prizes need at least <b>${cfg.tgMinScoredCalls} scored calls</b> this month.`);
+    L.push("");
+    L.push(`<b>📊 Standings — if it ended right now</b>`);
+    const winners = rows.filter((r) => r.eligible).slice(0, 3);
+    if (!winners.length) {
+      L.push(` └ <i>nobody has ${cfg.tgMinScoredCalls} scored calls yet this month — wide open</i>`);
+      const near = rows.slice(0, 3);
+      if (near.length) {
+        L.push("");
+        L.push("<i>closest so far (not yet eligible):</i>");
+        near.forEach((r) =>
+          L.push(` · ${esc(r.callerName)} — ${r.score >= 0 ? "+" : ""}${(r.score * 100).toFixed(0)}%/call, ${r.scored}/${cfg.tgMinScoredCalls} calls`),
+        );
+      }
+    } else {
+      winners.forEach((r, i) => {
+        const last = i === winners.length - 1;
+        L.push(
+          ` ${last ? "└" : "├"}${MEDAL[i]} <b>${esc(r.callerName)}</b> — ${r.score >= 0 ? "+" : ""}${(r.score * 100).toFixed(0)}%/call · ${r.scored} calls  <b>$${prizes[i]}</b>`,
+        );
+      });
+    }
+    L.push("");
+    L.push(`<i>/lb global for the full board · /rules for the detail</i>`);
+    return ctx.reply(L.join("\n"), { parse_mode: "HTML", link_preview_options: { is_disabled: true } });
+  });
 
   bot.command("lb", (ctx) => {
     const scope: "group" | "global" = /global/i.test((ctx.match ?? "").toString()) ? "global" : "group";

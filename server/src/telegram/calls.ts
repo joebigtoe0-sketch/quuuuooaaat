@@ -235,7 +235,15 @@ const median = (a: number[]): number => {
  * @param groupId omit for the GLOBAL board (scored calls only — first callers).
  *                pass a group to see that group's own activity, scored or not.
  */
-export function leaderboard(groupId?: string, days?: number): BoardRow[] {
+/**
+ * @param days   how far back to count calls
+ * @param kDays  what window the shrinkage should be sized for. Normally the
+ *               same as `days`, but the monthly competition wants the FULL
+ *               month's bar all month long — otherwise on the 2nd a single
+ *               lucky call tops the standings and the board swings wildly as
+ *               the month fills in.
+ */
+export function leaderboard(groupId?: string, days?: number, kDays?: number): BoardRow[] {
   const cutoff = Date.now() - (days ?? cfg.tgScoreWindowDays) * 86_400_000;
   const pool = db.calls.filter(
     (c) => c.at >= cutoff && c.exitMult != null && c.exitMult > 0 && (groupId ? c.groupId === groupId : c.scored),
@@ -261,7 +269,7 @@ export function leaderboard(groupId?: string, days?: number): BoardRow[] {
   // thirty is not participating. sqrt keeps it gentle: at 30d a single perfect
   // 10x still scores +32% against +24% for twelve solid calls — possible, but it
   // has to be genuinely exceptional.
-  const k = cfg.tgScoreShrinkK * Math.sqrt(Math.max(1, days ?? cfg.tgScoreWindowDays));
+  const k = cfg.tgScoreShrinkK * Math.sqrt(Math.max(1, kDays ?? days ?? cfg.tgScoreWindowDays));
   const rows: BoardRow[] = [];
   for (const [callerId, cs] of by) {
     const mults = cs.map((c) => c.exitMult!);
