@@ -241,10 +241,15 @@ export function leaderboard(groupId?: string, days?: number): BoardRow[] {
     (c) => c.at >= cutoff && c.exitMult != null && c.exitMult > 0 && (groupId ? c.groupId === groupId : c.scored),
   );
   if (!pool.length) return [];
-  // population mean is what a thin record gets shrunk toward
   // one call cannot carry a caller — see TG_MAX_CREDIT_MULT
   const credit = (m: number) => Math.min(m, cfg.tgMaxCreditMult);
-  const popMean = pool.reduce((s, c) => s + (credit(c.exitMult!) - 1), 0) / pool.length;
+  // SHRINK TOWARD ZERO, not the population mean. Shrinking toward the population
+  // was backwards: on the live 1D board the population averaged +132%/call
+  // (inflated by one 14x), so a caller with a SINGLE 3.6x had five phantom calls
+  // at +132% added to him and ranked ABOVE a caller with six real ones. The term
+  // meant to punish thin records was protecting them. Zero is the honest prior:
+  // no evidence, no assumed edge.
+  const prior = 0;
 
   const by = new Map<string, TgCall[]>();
   for (const c of pool) {
@@ -252,7 +257,11 @@ export function leaderboard(groupId?: string, days?: number): BoardRow[] {
     arr.push(c);
     by.set(c.callerId, arr);
   }
-  const k = cfg.tgScoreShrinkK;
+  // k grows with the window. One call in a day is a normal day; one call in
+  // thirty is not participating. sqrt keeps it gentle: at 30d a single perfect
+  // 10x still scores +32% against +24% for twelve solid calls — possible, but it
+  // has to be genuinely exceptional.
+  const k = cfg.tgScoreShrinkK * Math.sqrt(Math.max(1, days ?? cfg.tgScoreWindowDays));
   const rows: BoardRow[] = [];
   for (const [callerId, cs] of by) {
     const mults = cs.map((c) => c.exitMult!);
@@ -267,7 +276,7 @@ export function leaderboard(groupId?: string, days?: number): BoardRow[] {
       calls: cs.length,
       scored: cs.filter((c) => c.scored).length,
       meanProfit,
-      score: (meanProfit * n + popMean * k) / (n + k),
+      score: (meanProfit * n + prior * k) / (n + k),
       medianMult: median(mults),
       hit2x: (mults.filter((m) => m >= 2).length / mults.length) * 100,
       best: best ? { symbol: best.symbol, mult: best.exitMult! } : null,
