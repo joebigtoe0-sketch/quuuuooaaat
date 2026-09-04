@@ -1604,6 +1604,22 @@ app.get("/callers", (req, res) => {
   res.redirect(302, `/public/callers${q}`);
 });
 
+// tg-ledger diagnostics: is the call history intact, and are there corrupt
+// backups on the volume worth recovering?
+app.get("/admin/tgcalls", async (_req, res) => {
+  try {
+    const { stats, callerHistory } = await import("./telegram/calls.js");
+    const fsx = await import("node:fs");
+    const backups = fsx.readdirSync(cfg.dataDir).filter((f) => f.startsWith("tgcalls.json.corrupt"));
+    const raw = (() => {
+      try { return fsx.statSync(path.join(cfg.dataDir, "tgcalls.json")).size; } catch { return 0; }
+    })();
+    res.json({ ok: true, stats: stats(), fileBytes: raw, corruptBackups: backups });
+  } catch (e) {
+    res.json({ ok: false, why: String(e).slice(0, 120) });
+  }
+});
+
 app.get("/admin/agent-status", async (_req, res) => {
   res.json({
     kpis: await snapshotKPIs().catch(() => null),

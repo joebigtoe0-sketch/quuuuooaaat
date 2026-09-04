@@ -66,21 +66,38 @@ interface Db {
 const FILE = () => path.join(cfg.dataDir, "tgcalls.json");
 let db: Db = { calls: [], firstBy: {} };
 try {
-  const j = JSON.parse(fs.readFileSync(FILE(), "utf8"));
-  if (j?.calls) db = { calls: j.calls, firstBy: j.firstBy ?? {} };
-} catch { /* first run */ }
+  const raw = fs.readFileSync(FILE(), "utf8");
+  try {
+    const j = JSON.parse(raw);
+    if (j?.calls) db = { calls: j.calls, firstBy: j.firstBy ?? {} };
+  } catch (e) {
+    // A file that EXISTS but will not parse is a truncated write, not a first
+    // run — the crash-loop marathon (SIGKILL mid-writeFileSync) produced
+    // exactly this, and the old code then silently started empty and OVERWROTE
+    // the recoverable file on the next save. Days of caller history gone.
+    // Preserve the evidence, scream, start fresh only after both.
+    const bak = `${FILE()}.corrupt-${Date.now()}`;
+    try { fs.copyFileSync(FILE(), bak); } catch {}
+    log.warn("tgcalls", `LEDGER CORRUPT — preserved to ${path.basename(bak)}, starting fresh: ${String(e).slice(0, 60)}`);
+  }
+} catch { /* genuinely no file — first run */ }
 
 let dirty = false;
 export function save(): void {
   if (!dirty) return;
   try {
-    fs.writeFileSync(FILE(), JSON.stringify(db));
+    // atomic: a kill mid-write leaves a stale .tmp, never a truncated ledger
+    const tmp = `${FILE()}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify(db));
+    fs.renameSync(tmp, FILE());
     dirty = false;
   } catch (e) {
     log.warn("tgcalls", `save failed: ${String(e).slice(0, 80)}`);
   }
 }
 setInterval(save, 30_000).unref?.();
+// flush on shutdown — Railway SIGTERMs us on every deploy
+for (const sig of ["SIGTERM", "SIGINT"] as const) process.once(sig, save);
 
 // ------------------------------------------------------------------ tape --
 
