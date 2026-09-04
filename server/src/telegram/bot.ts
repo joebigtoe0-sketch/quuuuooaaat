@@ -515,10 +515,42 @@ export function startTelegram(): void {
 
   bot.catch((err) => log.warn("tg", `bot error: ${String(err?.message ?? err).slice(0, 140)}`));
 
-  void bot.start({
-    drop_pending_updates: true,
-    onStart: (me) => log.info("tg", `RikuBot LIVE as @${me.username} — auto-carding CAs, first-caller-wins`),
-  });
+  // SUPERVISED polling. bot.start()'s promise REJECTS on a fatal polling error
+  // — most famously 409 Conflict, which is guaranteed during a Railway rolling
+  // deploy because the old and new containers briefly poll the same token. As
+  // `void bot.start(...)` that rejection was unhandled, and an unhandled
+  // rejection kills the whole process on Node 20: bot conflict -> stage,
+  // trading, everything down. Retry with backoff instead; polling errors are
+  // the bot's problem, never the show's.
+  let stopping = false;
+  void (async () => {
+    let backoffMs = 5_000;
+    while (!stopping) {
+      try {
+        await bot.start({
+          drop_pending_updates: true,
+          onStart: (me) => {
+            backoffMs = 5_000;
+            log.info("tg", `RikuBot LIVE as @${me.username} — auto-carding CAs, first-caller-wins`);
+          },
+        });
+        break; // resolved = bot.stop() was called
+      } catch (e) {
+        if (stopping) break;
+        log.warn("tg", `polling died (${String(e).slice(0, 90)}) — retrying in ${Math.round(backoffMs / 1000)}s`);
+        await new Promise((r) => setTimeout(r, backoffMs));
+        backoffMs = Math.min(backoffMs * 2, 5 * 60_000);
+      }
+    }
+  })();
+  // release getUpdates the moment Railway says stop, so the incoming container
+  // doesn't spend its first minute fighting us for the token
+  for (const sig of ["SIGTERM", "SIGINT"] as const) {
+    process.once(sig, () => {
+      stopping = true;
+      void bot.stop().catch(() => {});
+    });
+  }
 
   // grading loop: calls need an hour before they mean anything
   setInterval(() => {

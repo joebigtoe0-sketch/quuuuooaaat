@@ -953,6 +953,13 @@ async function relaunch(): Promise<void> {
 }
 
 // ---------- boot ----------
+// A 24/7 stage server does not die because one floating promise rejected —
+// every subsystem here is already built to degrade (mock brain, silent TTS,
+// canned lines). Log it loudly and keep the show on. uncaughtException still
+// exits: by then state is untrustworthy and Railway restarts us clean.
+process.on("unhandledRejection", (e) => {
+  log.warn("boot", `UNHANDLED REJECTION (kept alive): ${String((e as any)?.stack ?? e).slice(0, 300)}`);
+});
 loadIntel();
 const wallet = ensureWallet();
 // TTS is a CHAIN, not a pick. TTS_PROVIDER only says who goes FIRST; every
