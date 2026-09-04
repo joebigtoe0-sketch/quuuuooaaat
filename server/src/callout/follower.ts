@@ -353,18 +353,21 @@ async function recentMove(mint: string): Promise<{ chg1h: number | null; chg24h:
     const now = closeAt(Date.now());
     if (!now) return { chg1h: null, chg24h: null };
     const pct = (then: number | null) => (then ? ((now - then) / then) * 100 : null);
-    // A coin younger than the lookback has NO candle an hour back, so chg1h was
-    // null and the gate failed open — on exactly the coins that move hardest.
-    // $PUMP (09-01) was four minutes old and +2755% off its first print when we
-    // bought it; it rugged 96% twelve minutes later for -0.47 SOL. Fall back to
-    // the OLDEST candle we have: on a fresh coin that is its whole life, which
-    // is the most honest "how far has this already run" available.
-    // the coin's OPENING price, not the first candle's close: on a 4-minute-old
-    // coin the close is already most of the way up the pump. $PUMP measured +96%
-    // off the first close (under the +100% bar, so it still passed) and +2755%
-    // off the open, which is what actually happened.
+    // A coin younger than the lookback has NO candle an hour back, and this
+    // fallback has now been wrong in BOTH directions:
+    //   v1: chg1h null -> gate failed OPEN. $PUMP, 4 minutes old and +2755%
+    //       off its first print, sailed through and rugged 96% for -0.47 SOL.
+    //   v2: fall back to the coin's OPENING price -> gate failed SHUT. The
+    //       curve starts near $4.2k and the call floor is $10k, so every
+    //       sub-hour coin worth calling read as >+138% "in the last hour" and
+    //       young coins were categorically banned. Riku took zero autonomous
+    //       trades in the 62 hours this was live.
+    // v3: judge a young coin on its LAST 30 MINUTES. A launch spike still
+    // rejects ($PUMP had no candle 30m back either, so its baseline stays the
+    // open and it reads +2755%); a coin that climbed the curve organically
+    // reads only its recent move, like every older coin does.
     const born = Number(rows[0].open) || Number(rows[0].close);
-    const h1 = closeAt(Date.now() - 3_600_000) ?? born;
+    const h1 = closeAt(Date.now() - 3_600_000) ?? closeAt(Date.now() - 30 * 60_000) ?? born;
     return { chg1h: pct(h1), chg24h: pct(closeAt(Date.now() - 86_400_000)) };
   } catch {
     return { chg1h: null, chg24h: null };
