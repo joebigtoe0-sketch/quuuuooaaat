@@ -6,7 +6,7 @@ import {
   topCalls, windowStats, unrecordCall,
   type BoardRow,
 } from "./calls.js";
-import { renderCard, money, ago, esc } from "./card.js";
+import { renderCard, money, price, ago, esc } from "./card.js";
 
 /**
  * RIKUBOT — the caller tracker. A SEPARATE identity from the userbot that talks
@@ -169,6 +169,93 @@ function monthWindow(): { daysElapsed: number; daysLeft: number; endsOn: string 
     daysLeft: Math.max(0, Math.ceil((end - Date.now()) / 86_400_000)),
     endsOn: new Date(end).toLocaleDateString("en-GB", { day: "numeric", month: "long", timeZone: "UTC" }),
   };
+}
+
+
+// ---------------------------------------------------- non-pump solana calls --
+
+async function handleSolCall(
+  ctx: any,
+  mint: string,
+  who: { callerId: string; callerName: string; groupId: string; groupTitle: string },
+): Promise<void> {
+  try {
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), 8_000);
+    const r = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`, {
+      signal: ctl.signal, headers: { accept: "application/json" },
+    }).then((x) => x.json() as any);
+    clearTimeout(timer);
+    const pair = (r?.pairs ?? [])
+      .filter((p: any) => p?.chainId === "solana")
+      .sort((a: any, b: any) => (b?.liquidity?.usd ?? 0) - (a?.liquidity?.usd ?? 0))[0];
+    if (!pair) return; // no Solana market anywhere — stay silent
+    const priceUsd = Number(pair.priceUsd);
+    if (!Number.isFinite(priceUsd) || priceUsd <= 0) return;
+    const symbol = String(pair.baseToken?.symbol ?? mint.slice(0, 6));
+    const mc = Number(pair.marketCap ?? pair.fdv) || null;
+
+    const res = await recordCall({
+      mint, symbol,
+      callerId: who.callerId, callerName: who.callerName,
+      groupId: who.groupId, groupTitle: who.groupTitle,
+      mcAtCall: mc, pool: String(pair.pairAddress), entryPriceUsd: priceUsd,
+    });
+
+    if (throttled(`${who.groupId}:${mint}`)) {
+      if (res && !res.first) {
+        await ctx.reply(
+          `↩️ $${esc(symbol)} — already called by <b>${esc(res.priorCaller!.callerName)}</b> ${ago(res.priorCaller!.at)} ago. Recorded for this group, no global score.`,
+          { parse_mode: "HTML", reply_parameters: { message_id: ctx.message.message_id } },
+        ).catch(() => {});
+      }
+      return;
+    }
+
+    // the light card — dexscreener is the only source off-venue, so no
+    // holders/dev/security block: an empty row would be a guess, not a fact
+    const pct = (n: any) => (n == null || !Number.isFinite(Number(n)) ? "?" : `${Number(n) >= 0 ? "+" : ""}${Number(n).toFixed(1)}%`);
+    const a = (l: string, u: string) => `<a href="${u}">${l}</a>`;
+    const L: string[] = [];
+    L.push(`🪙 <b>${esc(String(pair.baseToken?.name ?? symbol))}</b> ($${esc(symbol)})`);
+    L.push(` └ 🟪 ${esc(String(pair.dexId ?? "solana"))}${pair.pairCreatedAt ? ` | 🌱 ${ago(Number(pair.pairCreatedAt))}` : ""}`);
+    L.push("");
+    L.push("📊 <b>Stats</b>");
+    L.push(` ├ USD   <b>${price(priceUsd)}</b> <i>(${pct(pair.priceChange?.h24)} 24h)</i>`);
+    L.push(` ├ MC    <b>${money(mc)}</b>`);
+    L.push(` ├ Vol   <b>${money(Number(pair.volume?.h24) || null)}</b>`);
+    L.push(` ├ LP    <b>${money(Number(pair.liquidity?.usd) || null)}</b>`);
+    L.push(` └ 1H    <b>${pct(pair.priceChange?.h1)}</b>  🅑${pair.txns?.h1?.buys ?? 0} Ⓢ${pair.txns?.h1?.sells ?? 0}`);
+    const links: string[] = [];
+    for (const so of pair.info?.socials ?? []) links.push(a((so.type ?? "").toLowerCase() === "twitter" ? "𝕏" : so.type || "link", so.url));
+    for (const w of pair.info?.websites ?? []) links.push(a(w.label || "Web", w.url));
+    if (links.length) { L.push(""); L.push(`🔗 ${links.join(" • ")}`); }
+    L.push("");
+    L.push([
+      a("DS", `https://dexscreener.com/solana/${pair.pairAddress}`),
+      a("GT", `https://www.geckoterminal.com/solana/pools/${pair.pairAddress}`),
+      a("EXP", `https://solscan.io/token/${mint}`),
+      a("AXI", `https://axiom.trade/t/${mint}`),
+      a("GMGN", `https://gmgn.ai/sol/token/${mint}`),
+      a("PHO", `https://photon-sol.tinyastro.io/en/lp/${mint}`),
+    ].join(" • "));
+    L.push("");
+    L.push(`<code>${mint}</code>`);
+    L.push("");
+    if (res?.first) L.push(`✅ <b>${esc(who.callerName)}</b> called it first @ ${money(mc)}`);
+    else if (res) L.push(`↩️ ${esc(who.callerName)} — already called by <b>${esc(res.priorCaller!.callerName)}</b> ${ago(res.priorCaller!.at)} ago. No global score.`);
+
+    const headerUrl = pair.info?.header ?? pair.info?.imageUrl ?? null;
+    const kb = new InlineKeyboard().text("🔍", `scan:${mint}:${who.callerId}`).text("🗑", `del:${who.callerId}`);
+    await ctx.reply(L.join("\n"), {
+      parse_mode: "HTML",
+      reply_markup: kb,
+      reply_parameters: { message_id: ctx.message.message_id },
+      link_preview_options: headerUrl ? { url: headerUrl, prefer_large_media: true, show_above_text: true } : { is_disabled: true },
+    });
+  } catch (e) {
+    log.warn("tg", `sol call failed for ${mint.slice(0, 8)}…: ${String(e).slice(0, 90)}`);
+  }
 }
 
 export function startTelegram(): void {
@@ -460,7 +547,13 @@ export function startTelegram(): void {
         // marketCap() is the pump-authoritative gate: no pump price = not ours.
         const { marketCap } = await import("../chain/marketcap.js");
         const exact = await marketCap(mint).catch(() => null);
-        if (!exact || (exact.mcUsd == null && exact.mcSol == null)) continue; // not a pump coin — stay silent
+        if (!exact || (exact.mcUsd == null && exact.mcSol == null)) {
+          // NOT a pump coin — but "all of Solana counts" now. Dexscreener is
+          // the is-this-real gate: any Solana pair with a price makes it a
+          // callable token; grading rides GeckoTerminal on its deepest pool.
+          await handleSolCall(ctx, mint, { callerId, callerName, groupId, groupTitle });
+          continue;
+        }
         const mc = exact.mcUsd;
         const symbolEarly = exact.symbol ?? mint.slice(0, 6);
 

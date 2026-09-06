@@ -52,6 +52,9 @@ export interface TgCall {
   mcAtCall: number | null;
   /** true only for the global first caller of this mint */
   scored: boolean;
+  /** non-pump Solana tokens: the dexscreener pool address — grading reads
+   *  GeckoTerminal OHLCV for this pool instead of pump.fun candles */
+  pool?: string | null;
   /** reachable exit multiple; null until graded, 0 excluded from scoring */
   exitMult?: number | null;
   gradedAt?: number;
@@ -132,6 +135,41 @@ export async function athFromTape(mint: string, supply = 1e9): Promise<{ mcUsd: 
   return { mcUsd: top.close * supply, at: top.timestamp };
 }
 
+/** GeckoTerminal OHLCV for any Solana pool — the grading tape for non-pump
+ *  tokens. Free, keyless, ~30 req/min; 1000 5m candles cover ~5 days on an
+ *  active pool, and the 15m fallback stretches the window when the call is
+ *  older than the 5m span reaches. */
+async function gtCandles(pool: string, agg: 5 | 15 = 5): Promise<{ timestamp: number; close: number }[]> {
+  try {
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), 9_000);
+    const res = await fetch(
+      `https://api.geckoterminal.com/api/v2/networks/solana/pools/${pool}/ohlcv/minute?aggregate=${agg}&limit=1000`,
+      { signal: ctl.signal, headers: { accept: "application/json", "user-agent": "riku/1.0" } },
+    );
+    clearTimeout(timer);
+    if (!res.ok) return [];
+    const rows = ((await res.json()) as any)?.data?.attributes?.ohlcv_list ?? [];
+    if (!Array.isArray(rows)) return [];
+    return rows
+      .map((r: any[]) => ({ timestamp: Number(r[0]) * 1000, close: Number(r[4]) }))
+      .filter((r) => Number.isFinite(r.timestamp) && Number.isFinite(r.close) && r.close > 0)
+      .sort((a, b) => a.timestamp - b.timestamp);
+  } catch {
+    return [];
+  }
+}
+
+/** The right tape for a call, whatever venue it lives on. */
+async function tapeFor(c: TgCall): Promise<{ timestamp: number; close: number }[]> {
+  if (!c.pool) return candles(c.mint, 500);
+  const five = await gtCandles(c.pool, 5);
+  if (five.length && five[0].timestamp <= c.at) return five;
+  // the 5m window does not reach back to the call — stretch with 15m
+  const fifteen = await gtCandles(c.pool, 15);
+  return fifteen.length ? fifteen : five;
+}
+
 export async function priceNow(mint: string): Promise<number | null> {
   const c = await candles(mint, 5);
   return c.length ? c[c.length - 1].close : null;
@@ -153,6 +191,11 @@ export async function recordCall(args: {
   groupId: string;
   groupTitle: string;
   mcAtCall: number | null;
+  /** non-pump tokens: dexscreener pool address for GT grading */
+  pool?: string | null;
+  /** when the caller path already knows the price (dexscreener), skip the
+   *  pump-candle lookup that would return null off-venue anyway */
+  entryPriceUsd?: number | null;
 }): Promise<RecordResult> {
   const prior = db.firstBy[args.mint];
   const first = !prior;
@@ -170,9 +213,10 @@ export async function recordCall(args: {
       at: Date.now(),
       groupId: args.groupId,
       groupTitle: args.groupTitle,
-      entryPrice: await priceNow(args.mint),
+      entryPrice: args.entryPriceUsd ?? (await priceNow(args.mint)),
       mcAtCall: args.mcAtCall,
       scored: first,
+      pool: args.pool ?? null,
     });
     if (first) db.firstBy[args.mint] = { callerId: args.callerId, at: Date.now(), callerName: args.callerName };
     dirty = true;
@@ -187,7 +231,7 @@ export async function recordCall(args: {
  *  not a result. */
 export async function gradeCall(c: TgCall): Promise<number | null> {
   if (!c.entryPrice || c.entryPrice <= 0) return null;
-  const rows = await candles(c.mint, 500);
+  const rows = await tapeFor(c);
   if (!rows.length) return null;
   const until = c.at + cfg.tgGradeWindowH * 3_600_000;
   const after = rows.filter((r) => r.timestamp > c.at && r.timestamp <= until);
