@@ -113,12 +113,24 @@ export async function attemptFollowBuy(
       return false;
     }
     if (st.pos[c.mint]) return false;
-    // no skin, no trade — their wallet IS our exit signal
-    if (!c.skin || c.skin.costUsd < 10) return false;
+    // no skin, no trade — their wallet IS our exit signal. Logged when a
+    // QUALITY caller dies here: this was the only silent gate, and with ~23
+    // active quality callers each calling a few times a day, every eaten call
+    // matters — an invisible reject is indistinguishable from "they never call".
+    if (!c.skin || c.skin.costUsd < 10) {
+      if (rep.h2 > cfg.callerFollowMinH2)
+        log.info("follower", `pass ${c.mint.slice(0, 8)}… — ${c.username || "caller"} (h2 ${rep.h2}%!) has no skin in it — not following a call they won't hold`);
+      return false;
+    }
     if (!(c.mcAtCall > 0) || !(rep.med > 1)) return false;
     // THE H2 GATE — the 14-trade autopsy's one clean separator: losers came
     // from spray-callers (median 17 graded calls, 21% hit-2x); winners from
     // callers who actually land 2x. Median alone lets the spammers through.
+    if (rep.h2 > cfg.callerFollowMinH2) {
+      // a QUALITY call arriving is the rare event the whole funnel exists for —
+      // make it loud so "are they even reaching us" is answerable from the log
+      log.info("follower", `QUALITY CALL: ${c.username || c.wallet.slice(0, 8)} (h2 ${rep.h2}%, ${rep.calls} calls) called ${c.symbol || c.mint.slice(0, 8)} at $${Math.round(c.mcAtCall).toLocaleString("en-US")}`);
+    }
     if (rep.h2 <= cfg.callerFollowMinH2) {
       log.info("follower", `pass ${c.mint.slice(0, 8)}… — ${c.username || "caller"} h2 ${rep.h2}% ≤ ${cfg.callerFollowMinH2}% bar (${rep.calls} calls — spray, not skill)`);
       return false;
