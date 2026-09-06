@@ -1001,6 +1001,9 @@ startLaunchFeed(
 armDevSniper(director);
 // the agent brain (plans its own tweets/films/trades/scouts)
 if (cfg.agentEnabled && !cfg.playbackProducer) director.planner.start();
+void import("./callout/autofollow.js").then((m) => m.startAutoFollow()).catch((e) =>
+  log.warn("autofollow", `failed to start: ${String(e).slice(0, 100)}`),
+);
 void import("./telegram/bot.js").then((m) => m.startTelegram()).catch((e) =>
   log.warn("tg", `RikuBot failed to start: ${String(e).slice(0, 120)}`),
 );
@@ -1606,6 +1609,17 @@ app.get("/callers", (req, res) => {
 
 // tg-ledger diagnostics: is the call history intact, and are there corrupt
 // backups on the volume worth recovering?
+// run the caller auto-follow sweep NOW and report statuses (401/403 = pump
+// refused the write from this IP — fall back to running it residentially)
+app.post("/admin/pump-follow", async (req, res) => {
+  try {
+    const { runAutoFollow } = await import("./callout/autofollow.js");
+    res.json({ ok: true, run: await runAutoFollow(Number(req.query.max) || 30) });
+  } catch (e) {
+    res.json({ ok: false, why: String(e).slice(0, 120) });
+  }
+});
+
 app.get("/admin/tgcalls", async (_req, res) => {
   try {
     const { stats, callerHistory } = await import("./telegram/calls.js");

@@ -342,6 +342,13 @@ export function callerTape(mint: string): TapeLine[] {
   return db.mints[mint]?.tape ?? [];
 }
 
+/** Every graded caller's reputation — the auto-follow sweep reads this. */
+export function allCallerReps(): { userId: string; username: string; calls: number; avg: number; med: number; h2: number }[] {
+  return Object.entries(db.callers)
+    .filter(([, c]) => c.calls >= 1)
+    .map(([userId, c]) => ({ userId, username: c.username, calls: c.calls, avg: c.sumMax / c.calls, med: c.med, h2: c.h2 }));
+}
+
 /** How many distinct pump.fun callers have called this mint, from the harvested
  *  index. callerTape() only keeps the last 6 lines, so it cannot be counted. */
 export function pumpCallerCount(mint: string): number {

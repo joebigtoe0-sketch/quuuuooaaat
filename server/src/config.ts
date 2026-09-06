@@ -193,6 +193,10 @@ export const cfg = {
   // being cleared, instead of silently falling back to 3 with no log line.
   callerDiscoveryMinCalls: num("CALLER_DISCOVERY_MIN_CALLS", 8),
   callerDiscoveryMaxPerDay: num("CALLER_DISCOVERY_MAX_PER_DAY", 8),
+  // auto-follow qualifying callers on pump.fun so their calls reach the fast
+  // feed — the follow list IS the discovery funnel (see callout/autofollow.ts)
+  pumpAutoFollow: bool("PUMP_AUTO_FOLLOW", true),
+  pumpAutoFollowH: num("PUMP_AUTO_FOLLOW_H", 6),
   // caller-follow: BUY when a graded caller with skin calls fresh and there's
   // still room to their median; EXIT when their wallet sells (on-chain watch)
   callerFollow: bool("CALLER_FOLLOW", true),
