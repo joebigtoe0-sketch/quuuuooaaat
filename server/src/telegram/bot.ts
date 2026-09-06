@@ -19,7 +19,10 @@ import { renderCard, money, ago, esc } from "./card.js";
  * Confirmed on @quantRIKU_bot: can_read_all_group_messages = true.
  */
 
-const BASE58 = /[1-9A-HJ-NP-Za-km-z]{32,44}/g;
+// Boundary-guarded: without the lookarounds, a mint glued to other base58-ish
+// text matched the wrong 44 chars of a longer run and then failed analysis
+// silently — the call vanished. URLs are safe either way (slashes break runs).
+const BASE58 = /(?<![1-9A-HJ-NP-Za-km-z])[1-9A-HJ-NP-Za-km-z]{32,44}(?![1-9A-HJ-NP-Za-km-z])/g;
 // addresses that show up in chat constantly and are never a callable mint
 const DENY = new Set([
   "11111111111111111111111111111111",
@@ -432,9 +435,12 @@ export function startTelegram(): void {
   });
 
   // ------------------------------------------------------- the call card --
-  bot.on("message:text", async (ctx) => {
-    const text = ctx.message.text ?? "";
-    if (text.startsWith("/")) return;
+  // ALL messages, not message:text — a call posted as a chart screenshot puts
+  // the CA in the CAPTION, and message:text never fires for those. Half the
+  // missed registrations were exactly this.
+  bot.on("message", async (ctx) => {
+    const text = ctx.message.text ?? ctx.message.caption ?? "";
+    if (!text || text.startsWith("/")) return;
     const chat = ctx.chat;
     if (!chat || (chat.type !== "group" && chat.type !== "supergroup")) return;
     const found = [...new Set(text.match(BASE58) ?? [])].filter((m) => !DENY.has(m));
@@ -446,30 +452,53 @@ export function startTelegram(): void {
     const callerName = ctx.from?.username ? `@${ctx.from.username}` : ctx.from?.first_name ?? "anon";
 
     for (const mint of found.slice(0, 2)) {
-      if (throttled(`${groupId}:${mint}`)) continue;
       try {
+        // ---- RECORD FIRST, independent of the card. A registration must never
+        // die because rendering did: the old flow lost calls to the 90s card
+        // throttle (anyone re-posting a mint inside it erased the next
+        // caller's claim), to analyze() timeouts, and to slow RPC.
+        // marketCap() is the pump-authoritative gate: no pump price = not ours.
+        const { marketCap } = await import("../chain/marketcap.js");
+        const exact = await marketCap(mint).catch(() => null);
+        if (!exact || (exact.mcUsd == null && exact.mcSol == null)) continue; // not a pump coin — stay silent
+        const mc = exact.mcUsd;
+        const symbolEarly = exact.symbol ?? mint.slice(0, 6);
+
+        const belowFloor =
+          cfg.tgMinCallMcUsd > 0 && mc != null && mc < cfg.tgMinCallMcUsd;
+        const res = belowFloor
+          ? null
+          : await recordCall({ mint, symbol: symbolEarly, callerId, callerName, groupId, groupTitle, mcAtCall: mc });
+
+        // ---- THE CARD. Throttled per group+mint so a pasted-five-times CA
+        // renders once — but only the card is throttled, never the record.
+        if (throttled(`${groupId}:${mint}`)) {
+          // their claim still deserves an answer, one line instead of a card
+          if (res && !res.first) {
+            await ctx.reply(
+              `↩️ $${esc(symbolEarly)} — already called by <b>${esc(res.priorCaller!.callerName)}</b> ${ago(res.priorCaller!.at)} ago. Recorded for this group, no global score.`,
+              { parse_mode: "HTML", reply_parameters: { message_id: ctx.message.message_id } },
+            ).catch(() => {});
+          }
+          continue;
+        }
         const { analyze } = await import("../analysis/engine.js");
         const a = await Promise.race([
           analyze(mint, null, { forceBubble: cfg.tgBubbleOnCard }),
           new Promise<null>((r) => setTimeout(() => r(null), 20_000)),
         ]);
-        if (!a || a.state.kind === "none" || a.state.kind === "unsupported") continue; // not ours — say nothing
-        // pump.fun's own number, chain second, dexscreener last — this is also
-        // what gets RECORDED as the call price, so a 3-4% low feed would bias
-        // every score on the board, not just the display.
-        const { marketCap } = await import("../chain/marketcap.js");
-        const exact = await marketCap(mint).catch(() => null);
-        const mc = exact?.mcUsd ?? a.state.mcSol * a.solUsd;
+        if (!a || a.state.kind === "none" || a.state.kind === "unsupported") {
+          // recorded but uncardable right now — confirm the claim anyway
+          if (res?.first) {
+            await ctx.reply(
+              `✅ <b>${esc(callerName)}</b> called $${esc(symbolEarly)} first @ ${money(mc)} — card unavailable, tracking anyway.`,
+              { parse_mode: "HTML", reply_parameters: { message_id: ctx.message.message_id } },
+            ).catch(() => {});
+          }
+          continue;
+        }
         const liq = a.dexStats?.liqUsd ?? null;
-
-        // Floors default to 0 — see config. An early call is the valuable kind,
-        // and excluding it removed its downside too.
-        const belowFloor =
-          (cfg.tgMinCallMcUsd > 0 && mc != null && mc < cfg.tgMinCallMcUsd) ||
-          (cfg.tgMinLiqUsd > 0 && liq != null && liq < cfg.tgMinLiqUsd);
-        const res = belowFloor
-          ? null
-          : await recordCall({ mint, symbol: a.symbol, callerId, callerName, groupId, groupTitle, mcAtCall: mc });
+        void liq;
 
         const [{ pumpCallerCount }, ath] = await Promise.all([
           import("../callout/callers.js"),
