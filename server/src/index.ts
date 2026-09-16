@@ -1637,8 +1637,7 @@ app.get("/admin/decisions-file", async (req, res) => {
   try {
     const fsx = await import("node:fs");
     const p = path.join(cfg.dataDir, "decisions.jsonl");
-    const lines = fsx.readFileSync(p, "utf8").trim().split("
-");
+    const lines = fsx.readFileSync(p, "utf8").trim().split("\n");
     const n = Math.min(Number(req.query.n) || 2000, 20000);
     res.json({ ok: true, total: lines.length, rows: lines.slice(-n).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean) });
   } catch (e) {
