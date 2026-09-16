@@ -18,25 +18,21 @@ import type { HarvestedCall } from "./callers.js";
  * crowd of callers stamped inside minutes, and no buying above
  * CALLER_FOLLOW_MAX_FROM_FIRST_CALL × the earliest call's mc.
  *
- * EXIT: a scale-out ladder. TP1 rides the CALLER'S MEDIAN TARGET — the level
- * this caller's calls typically peak at — and TP2/moonbag are fixed multiples of
- * OUR ENTRY. A flat TP1 was tried and reverted: at +120% it sat above where this
- * population actually tops out (the 08-27 winners peaked at +102% and +71%), and
- * since the only exit below TP1 is the −40% stop, a target nobody reaches turns
- * winners into losers. The median self-calibrates instead: a 1.5x caller banks at
- * 1.5x, a 3x caller rides. Checked every ~30s:
+ * EXIT: bank a slice at the caller's median target, then TRAIL the rest with no
+ * upper cap. The old ladder capped the runner at a fixed +400% (TP2 sold 90% of
+ * it at 5x), so a 77x coin ($TRUMP, 09-16) could never pay above 5x — it banked
+ * 36% at 5x and the 4% dust round-tripped to a manual sell. A 30% trailing stop
+ * lets the monster run and still catches a normal winner on the pullback:
+ * backtested on 28 real trades it netted +3.66 SOL vs the old +1.74, +3.15 with
+ * TRUMP removed. Checked every ~30s:
  *   STOP  — pre-TP1 only: position marks −CALLER_FOLLOW_STOP_PCT% (40%) → all out.
  *   TP1   — mc ≥ call mc × the caller's clamped median (floored at entry
- *           +CALLER_FOLLOW_TP1_MIN_PCT%, so a target we already traded through
- *           cannot fire an instant exit) → sell CALLER_FOLLOW_TP1_FRACTION (60%)
- *           and arm the stop CALLER_FOLLOW_RUNNER_STOP_PCT (20%) under that mc.
- *   TP2   — mc ≥ entry × (1 + CALLER_FOLLOW_TP2_PCT%) (+400% ⇒ 5x) → sell
- *           CALLER_FOLLOW_TP2_FRACTION (90%) OF WHAT REMAINS. What survives is
- *           4% of the original bag.
- *   MOON  — that 4% has NO take-profit. It rides until the stop takes it.
- * The stop anchors on TP1 and STAYS there; CALLER_FOLLOW_STOP_REANCHOR=true
- * drags it up to TP2's mc instead, which locks the 5x but ends the ride.
- * A stop always outranks a target — it is checked first every tick.
+ *           +CALLER_FOLLOW_TP1_MIN_PCT%) → bank CALLER_FOLLOW_TP1_FRACTION (40%)
+ *           and arm the trailing runner on the rest.
+ *   RUNNER— rides its running peak; exits the WHOLE remainder when price gives
+ *           back CALLER_FOLLOW_RUNNER_TRAIL_PCT (30%) from that peak. No cap.
+ *           Floored at CALLER_FOLLOW_RUNNER_STOP_PCT (20%) below TP1, so an
+ *           immediate reversal still banks the runner near TP1.
  * The caller HOLDING at entry stays required (conviction filter), but their
  * wallet is no longer watched after the buy.
  *
@@ -58,8 +54,9 @@ interface FollowState {
      *  callMcUsd (the room gate keeps entry within 1.5x of it). */
     entryMcUsd?: number;
     med: number;
-    phase?: "full" | "runner" | "moon"; // absent = "full"
-    mcAtPartial?: number; // mc of the take-profit the stop is anchored to
+    phase?: "full" | "runner"; // absent = "full"
+    mcAtPartial?: number; // mc of TP1 — the trailing stop's FLOOR anchors here
+    peakMc?: number; // highest mc seen since TP1 — the trailing stop rides this
     fails?: number; // consecutive exit failures — bounded, never infinite
     mcFails?: number; // consecutive ticks the mc was unreadable — a silent watcher is how a 3.3x got missed
   };
@@ -435,14 +432,11 @@ async function watchTick(): Promise<void> {
     // the caller's price, so a deep dip below their call leaves it further away
     // than the move that caller actually makes.
     const tp1Mc = Math.min(Math.max(medianTargetMc, tp1FloorMc), Math.max(tp1CeilMc, tp1FloorMc));
-    // TP2 keeps its fixed +400%, but never lands so close to TP1 that a single
-    // move trips both in consecutive ticks
-    const tp2Mc = Math.max(entryMc * (1 + cfg.callerFollowTp2Pct / 100), tp1Mc * 1.5);
     const usd = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
 
     let reason = "";
     let fraction = 1;
-    let nextPhase: "runner" | "moon" | null = null;
+    let nextPhase: "runner" | null = null;
     // share OF THE ORIGINAL bag this sell represents — the stage narration
     // has to price a partial against the right slice of cost, not all of it
     let costShare = 1;
@@ -467,34 +461,44 @@ async function watchTick(): Promise<void> {
         } catch {}
       }
     } else {
-      // runner AND moonbag sit under the same stop, and it is checked FIRST:
-      // a stop always outranks a target
-      const stopMc = f.mcAtPartial ? f.mcAtPartial * (1 - cfg.callerFollowRunnerStopPct / 100) : 0;
-      if (stopMc && mcUsd <= stopMc) {
-        reason = `stopped out at ${usd(mcUsd)} — gave back ${cfg.callerFollowRunnerStopPct}% from where I took profit`;
-      } else if (phase === "runner" && mcUsd >= tp2Mc) {
-        reason = `+${cfg.callerFollowTp2Pct}% from my entry (${usd(tp2Mc)} mc) — ${Math.round(cfg.callerFollowTp2Fraction * 100)}% of what's left, the dust rides free`;
-        fraction = cfg.callerFollowTp2Fraction;
-        costShare = (1 - cfg.callerFollowTp1Fraction) * cfg.callerFollowTp2Fraction;
-        nextPhase = "moon";
+      // THE RUNNER: a trailing stop with NO upper cap — this is what lets a
+      // monster actually pay. It rides its running peak and exits the WHOLE
+      // remainder when price gives back TRAIL_PCT from that peak. Floored at
+      // RUNNER_STOP_PCT below TP1, so an immediate reversal still banks the
+      // runner near TP1 (the old fixed-stop behaviour, kept as a floor).
+      const prevPeak = f.peakMc ?? f.mcAtPartial ?? mcUsd;
+      if (mcUsd > prevPeak) {
+        f.peakMc = mcUsd;
+        // persist a meaningful new high so a reboot doesn't reset the trail low
+        if (mcUsd > prevPeak * 1.05) save();
       }
-      // phase "moon": no target at all, only the stop above
+      const peak = f.peakMc ?? mcUsd;
+      const trailStop = peak * (1 - cfg.callerFollowRunnerTrailPct / 100);
+      const floorStop = (f.mcAtPartial ?? mcUsd) * (1 - cfg.callerFollowRunnerStopPct / 100);
+      const stopMc = Math.max(trailStop, floorStop);
+      if (mcUsd <= stopMc) {
+        const offPeak = Math.round((1 - mcUsd / peak) * 100);
+        reason = floorStop >= trailStop
+          ? `stopped out at ${usd(mcUsd)} — held the ${cfg.callerFollowRunnerStopPct}% floor under my take-profit`
+          : `trailing stop — ${usd(mcUsd)}, ${offPeak}% off the ${usd(peak)} peak. rode it up, banked it on the turn`;
+        // fraction stays 1 → the whole remainder goes, position closes
+      }
     }
     if (!reason) continue;
 
     const r = await tradeSell(mint, fraction, reason);
     if (r.ok) {
       if (nextPhase) {
+        // TP1 fired: bank the fraction, arm the trailing runner. mcAtPartial is
+        // the floor anchor; peakMc starts here and rises with the price.
         f.phase = nextPhase;
-        // TP1 sets the anchor. TP2 leaves it alone unless the operator asked
-        // otherwise — a moonbag re-stopped 20% under 5x is just a slower exit.
-        if (nextPhase === "runner" || cfg.callerFollowStopReanchor) f.mcAtPartial = mcUsd;
+        f.mcAtPartial = mcUsd;
+        f.peakMc = mcUsd;
         f.fails = 0;
         save();
         log.info(
           "follower",
-          `${nextPhase === "runner" ? "TP1" : "TP2"} $${pos.symbol}: ${reason}${r.dry ? " [dry]" : ""} — ` +
-            `${nextPhase} armed, stop at ${usd((f.mcAtPartial ?? mcUsd) * (1 - cfg.callerFollowRunnerStopPct / 100))} mc`,
+          `TP1 $${pos.symbol}: ${reason}${r.dry ? " [dry]" : ""} — runner trailing ${cfg.callerFollowRunnerTrailPct}% from peak (floor ${usd(mcUsd * (1 - cfg.callerFollowRunnerStopPct / 100))})`,
         );
         // honest pnl read for the partial: compare against the SOLD share's cost
         hooks?.narrateExit(mint, pos.symbol, reason, r.solReceived ?? 0, pos.costSol * costShare);
@@ -505,8 +509,7 @@ async function watchTick(): Promise<void> {
             "trade",
             `TOOK PROFIT on $${pos.symbol}: sold ${Math.round(fraction * 100)}% at ${usd(mcUsd)} mc for ` +
               `${(r.solReceived ?? 0).toFixed(3)} SOL (${slicePct >= 0 ? "+" : ""}${slicePct.toFixed(0)}% on that slice). ` +
-              `Position still open, ${nextPhase === "moon" ? "moonbag" : "runner"} riding a stop at ` +
-              `${usd((f.mcAtPartial ?? mcUsd) * (1 - cfg.callerFollowRunnerStopPct / 100))} mc.`,
+              `Position still open, the runner trailing ${cfg.callerFollowRunnerTrailPct}% from its peak.`,
           ),
         ).catch(() => {});
       } else {
@@ -567,11 +570,10 @@ export function startCallerFollow(h: StageHooks): void {
     `caller-follow LIVE — ${cfg.callerFollowPct}% of spendable (floor ${cfg.callerFollowSol} SOL), need ${cfg.callerFollowRoom}x room to caller's median; ` +
       `anti-swarm: max ${cfg.callerFollowMaxSwarm} callers/${cfg.callerFollowSwarmWindowMin}min, entry ≤${cfg.callerFollowMaxFromFirstCall}x first call; ` +
       `vertical gate: skip >+${cfg.callerFollowMax1hPct}%/1h, and >+${cfg.callerFollowRevival1hPct}%/1h while <${cfg.callerFollowRevival24hPct}%/24h; ` +
-      `exits: TP1 sells ${Math.round(cfg.callerFollowTp1Fraction * 100)}% at the CALLER'S MEDIAN TARGET ` +
-      `(clamped to +${cfg.callerFollowTp1MinPct}%..${cfg.callerFollowTp1MaxMult}x on entry), ` +
-      `TP2 sells ${Math.round(cfg.callerFollowTp2Fraction * 100)}% of the rest at +${cfg.callerFollowTp2Pct}%, ` +
-      `moonbag (${Math.round((1 - cfg.callerFollowTp1Fraction) * (1 - cfg.callerFollowTp2Fraction) * 100)}%) rides with no target; ` +
-      `stop −${cfg.callerFollowRunnerStopPct}% from TP${cfg.callerFollowStopReanchor ? "2" : "1"}, pre-TP1 stop-loss −${cfg.callerFollowStopPct}%; max ${cfg.callerFollowMaxPerDay}/day` +
+      `exits: bank ${Math.round(cfg.callerFollowTp1Fraction * 100)}% at the CALLER'S MEDIAN TARGET ` +
+      `(clamped +${cfg.callerFollowTp1MinPct}%..${cfg.callerFollowTp1MaxMult}x on entry), then TRAIL the rest ` +
+      `−${cfg.callerFollowRunnerTrailPct}% from peak (no cap, floored −${cfg.callerFollowRunnerStopPct}% under TP1); ` +
+      `pre-TP1 stop-loss −${cfg.callerFollowStopPct}%; max ${cfg.callerFollowMaxPerDay}/day` +
       (cfg.tradeDryRun ? " [DRY RUN]" : " [REAL SOL]"),
   );
 }

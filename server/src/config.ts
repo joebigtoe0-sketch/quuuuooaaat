@@ -220,10 +220,18 @@ export const cfg = {
   // SOL. At a 2.5x cap the target is $93,750, which it held above for 7
   // straight 15s closes. Verified not to move DAC (2.02x) or 中国黑牛 (1.71x).
   callerFollowTp1MaxMult: num("CALLER_FOLLOW_TP1_MAX_MULT", 2.5),
-  callerFollowTp1Fraction: num("CALLER_FOLLOW_TP1_FRACTION", 0.6), // share of the FULL bag sold at TP1
+  callerFollowTp1Fraction: num("CALLER_FOLLOW_TP1_FRACTION", 0.4), // share of the FULL bag banked at TP1 (was 0.6 — bank less, ride more)
   callerFollowTp2Pct: num("CALLER_FOLLOW_TP2_PCT", 400), // +% on entry mc that fires TP2 (400 => 5x)
   callerFollowTp2Fraction: num("CALLER_FOLLOW_TP2_FRACTION", 0.9), // share of WHAT REMAINS sold at TP2
-  callerFollowRunnerStopPct: num("CALLER_FOLLOW_RUNNER_STOP_PCT", 20), // stop % below the anchor mc
+  callerFollowRunnerStopPct: num("CALLER_FOLLOW_RUNNER_STOP_PCT", 20), // FLOOR stop % below TP1 — the runner never gives back more than this before it has run
+  // THE RUNNER IS A TRAILING STOP NOW, not a fixed +400% cap. TP2 sold 90% of
+  // the runner at 5x, so a 77x coin ($TRUMP, 09-16) could NEVER pay above 5x —
+  // it banked 36% at 5x and the 4% dust round-tripped to a manual sell. The
+  // runner now rides its peak and exits the whole remainder TRAIL_PCT below it,
+  // no upper cap: a monster runs, a normal winner still gets caught on the
+  // pullback. Backtest on 28 real trades: +3.66 SOL vs the old ladder's +1.74,
+  // and +3.15 with TRUMP removed (so it is the mechanism, not one moonshot).
+  callerFollowRunnerTrailPct: num("CALLER_FOLLOW_RUNNER_TRAIL_PCT", 30),
   // false: the stop anchors at TP1's mc and stays there, so the moonbag can
   // actually moon. true: TP2 drags it up to its own mc (locks 5x, kills the ride).
   callerFollowStopReanchor: bool("CALLER_FOLLOW_STOP_REANCHOR", false),
