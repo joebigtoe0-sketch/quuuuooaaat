@@ -1620,6 +1620,32 @@ app.post("/admin/pump-follow", async (req, res) => {
   }
 });
 
+// the COMPLETE position history — the public decisions API caps at 200 rows,
+// which by mid-September reaches four days back; a month review needs the book
+app.get("/admin/positions-all", async (_req, res) => {
+  try {
+    const { allPositions } = await import("./chain/trader.js");
+    res.json({ ok: true, positions: allPositions() });
+  } catch (e) {
+    res.json({ ok: false, why: String(e).slice(0, 120) });
+  }
+});
+
+// the full decision log from the volume (buys/sells with tx sigs + reasons),
+// tail-limited so the response stays sane
+app.get("/admin/decisions-file", async (req, res) => {
+  try {
+    const fsx = await import("node:fs");
+    const p = path.join(cfg.dataDir, "decisions.jsonl");
+    const lines = fsx.readFileSync(p, "utf8").trim().split("
+");
+    const n = Math.min(Number(req.query.n) || 2000, 20000);
+    res.json({ ok: true, total: lines.length, rows: lines.slice(-n).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean) });
+  } catch (e) {
+    res.json({ ok: false, why: String(e).slice(0, 120) });
+  }
+});
+
 app.get("/admin/tgcalls", async (_req, res) => {
   try {
     const { stats, callerHistory } = await import("./telegram/calls.js");
